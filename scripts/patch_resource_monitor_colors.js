@@ -11,10 +11,16 @@
 //   - CPU:        0% green → ~50% yellow → 100% red (percentage-based)
 //   - RAM:        0GB green → maxRAM(64GB) red (configurable via GSettings)
 //   - Disk Space: maxSpace(405GB) green → 0 free red (inverted — full=green, empty=red)
-//   - Ethernet:   0 kbps green → maxKbps(2Gbps) red for both upload & download
+//   - Ethernet:   0 MB/s green → ETHERNET_MAX_MBPS MB/s red for both upload & download
 //   - Wi-Fi:      same as Ethernet
 //   - GPU Usage:  0% green → 100% red (percentage-based, like CPU)
 //   - GPU Memory: 0GB green → maxVRAM(nvidia-smi) red (configurable via GSettings)
+//
+// Configuration variables (change these to adjust gradients):
+//   ETHERNET_MAX_MBPS    — Ethernet/WLAN color gradient max in MB/s (default: 2000)
+//   RAM_MAX_GB           — RAM color gradient max in GB (default: 64)
+//   DISK_SPACE_MAX_GB    — Disk space color gradient max in GB (default: 405)
+//   GPU_MEMORY_MAX_GB    — GPU memory color gradient max in GB (default: 24)
 //
 // Usage:
 //   node scripts/patch_resource_monitor_colors.js <path-to-extension.js>
@@ -27,6 +33,20 @@ if (!extPath) {
   console.error("Usage: patch_resource_monitor_colors.js <path-to-extension.js>");
   process.exit(1);
 }
+
+// ── Configuration variables (adjust these to change gradient ranges) ───────────
+
+/** Maximum Ethernet/WLAN throughput for color gradient, in MB/s. */
+const ETHERNET_MAX_MBPS = 2000;
+
+/** Maximum RAM for color gradient, in GB. */
+const RAM_MAX_GB = 64;
+
+/** Maximum disk space for color gradient, in GB. */
+const DISK_SPACE_MAX_GB = 405;
+
+/** Maximum GPU memory (VRAM) for color gradient, in GB. */
+const GPU_MEMORY_MAX_GB = 24;
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
@@ -90,7 +110,7 @@ const GRADIENT_CONFIGS = {
   ram: {
     label: "RAM",
     minVal: 0,
-    maxVal: 64,              // Configurable via GSettings (default 64 GB)
+    maxVal: RAM_MAX_GB,      // Configurable via ETHERNET_MAX_MBPS variable
     startRGB: [0, 255, 0],   // Green at 0GB used
     endRGB: [255, 0, 0],     // Red at maxGB used
     inverted: false,
@@ -98,7 +118,7 @@ const GRADIENT_CONFIGS = {
   diskSpace: {
     label: "Disk Space",
     minVal: 0,
-    maxVal: 405,             // Configurable via GSettings (default 405 GB total)
+    maxVal: DISK_SPACE_MAX_GB,  // Configurable via DISK_SPACE_MAX_GB variable
     startRGB: [0, 255, 0],   // Green when full (max free space)
     endRGB: [255, 0, 0],     // Red when empty (0 free space)
     inverted: true,          // Inverted: green at max, red at min
@@ -106,17 +126,17 @@ const GRADIENT_CONFIGS = {
   eth: {
     label: "Ethernet",
     minVal: 0,
-    maxVal: 2000000,         // 2 Gbps in kbps (configurable)
-    startRGB: [0, 255, 0],   // Green at 0 kbps
-    endRGB: [255, 0, 0],     // Red at max kbps
+    maxVal: ETHERNET_MAX_MBPS,   // MB/s — configurable via ETHERNET_MAX_MBPS variable
+    startRGB: [0, 255, 0],   // Green at 0 MB/s (idle)
+    endRGB: [255, 0, 0],     // Red at max MB/s
     inverted: false,
   },
   wlan: {
     label: "Wi-Fi",
     minVal: 0,
-    maxVal: 2000000,         // 2 Gbps in kbps (configurable)
-    startRGB: [0, 255, 0],   // Green at 0 kbps
-    endRGB: [255, 0, 0],     // Red at max kbps
+    maxVal: ETHERNET_MAX_MBPS,   // MB/s — configurable via ETHERNET_MAX_MBPS variable
+    startRGB: [0, 255, 0],   // Green at 0 MB/s (idle)
+    endRGB: [255, 0, 0],     // Red at max MB/s
     inverted: false,
   },
   gpu: {
@@ -130,7 +150,7 @@ const GRADIENT_CONFIGS = {
   gpuMemory: {
     label: "GPU Memory",
     minVal: 0,
-    maxVal: 24,              // Configurable via nvidia-smi (default 24 GB VRAM)
+    maxVal: GPU_MEMORY_MAX_GB,   // GB — configurable via GPU_MEMORY_MAX_GB variable
     startRGB: [0, 255, 0],   // Green at 0GB used
     endRGB: [255, 0, 0],     // Red at maxVRAM used
     inverted: false,

@@ -117,7 +117,7 @@ configure_resource_monitor_extension() {
     --schema-dir "$ext_dir/schemas"
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netethstatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netwlanstatus false
-  resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
+  resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'mb'"
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netethdecimals 1
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor gpustatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor gpumemoryunit "'numeric'"
