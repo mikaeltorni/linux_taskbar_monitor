@@ -344,6 +344,16 @@ class TestInstallerWiring:
         assert "netwlanstatus false" in source
         assert "['cpu', 'ram', 'stats', 'space', 'eth', 'wlan', 'gpu']" in source
 
+    def test_installer_sets_ethernet_to_megabytes(self):
+        """Installer should set netunitmeasure to 'm' for MB/s display."""
+        source = Path("install.sh").read_text(encoding="utf-8")
+        assert "netunitmeasure \"'m'\"" in source
+
+    def test_installer_sets_ethernet_decimals_to_one(self):
+        """Installer should set netethdecimals to 1 for 0.1 precision."""
+        source = Path("install.sh").read_text(encoding="utf-8")
+        assert "netethdecimals 1" in source
+
 
 if __name__ == "__main__":
     import pytest

@@ -87,8 +87,15 @@ configure_resource_monitor_extension() {
   chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
   rm -rf "$tmpdir"
 
+  # Install GSettings schema so gsettings can find it without --schemadir
+  run_as_target mkdir -p "$TARGET_HOME/.local/share/glib-2.0/schemas/"
+  run_as_target cp "$ext_dir/schemas/org.gnome.shell.extensions.resource-monitor.gschema.xml" \
+    "$TARGET_HOME/.local/share/glib-2.0/schemas/"
+  run_as_target glib-compile-schemas "$TARGET_HOME/.local/share/glib-2.0/schemas/"
+
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" "$ext_dir/panel/containers.js"
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" "$ext_dir/panel/containers.js"
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" "$ext_dir/extension.js"
 
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor refreshtime 2
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
@@ -106,10 +113,12 @@ configure_resource_monitor_extension() {
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspacestatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspaceunit "'perc'"
   run_as_target python3 "$SCRIPT_DIR/scripts/configure_resource_monitor.py" \
-    --disk-space-perc-home-only \
+    --disk-space-gb \
     --schema-dir "$ext_dir/schemas"
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netethstatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netwlanstatus false
+  resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
+  resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netethdecimals 1
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor gpustatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor gpumemoryunit "'numeric'"
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor gpumemoryunitmeasure "'auto'"
