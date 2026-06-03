@@ -113,7 +113,7 @@ configure_resource_monitor_extension() {
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspacestatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspaceunit "'perc'"
   run_as_target python3 "$SCRIPT_DIR/scripts/configure_resource_monitor.py" \
-    --disk-space-gb \
+    --disk-space-perc-home-only \
     --schema-dir "$ext_dir/schemas"
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netethstatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor netwlanstatus false

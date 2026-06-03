@@ -2,7 +2,7 @@
 
 Standalone installer for the GNOME Shell Resource Monitor taskbar status setup used on Ubuntu 24.04.
 
-It installs Resource Monitor v27, patches the extension display for GPU VRAM and disk space rows, and configures the panel to show CPU, RAM, disk space/activity, ethernet, and GPU status.
+It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk space rows, and gradient colors, and configures the panel to show CPU, RAM, `/home` disk space/activity, ethernet, and GPU status.
 
 ## Technology Stack
 
@@ -42,6 +42,7 @@ bash -n install.sh
 - `scripts/report_cuda_devices.py` - emits NVIDIA GPU devices for Resource Monitor.
 - `scripts/patch_resource_monitor_disk.js` - patches disk space display and activity percentage behavior.
 - `scripts/patch_resource_monitor_vram.js` - patches GPU VRAM display formatting.
+- `scripts/patch_resource_monitor_colors.js` - patches Resource Monitor value colors with per-metric gradients.
 - `tests/` - simulation tests; no system settings are changed by tests.
 
 ## Configuration
@@ -52,7 +53,9 @@ The installer supports these environment overrides:
 - `RESOURCE_MONITOR_EXTENSION_URL`
 - `RESOURCE_MONITOR_EXTENSION_SHA256`
 
-Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`.
+Disk space is configured with `--disk-space-perc-home-only`, so the panel shows the `/home` disk row as a percentage and keeps disk throughput stats disabled.
+
+Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`. Ethernet uses `netunitmeasure 'm'`, and the color gradient reaches red at the `ETHERNET_MAX_MBPS` displayed MB/s value in `scripts/patch_resource_monitor_colors.js`.
 
 ## Troubleshooting
 

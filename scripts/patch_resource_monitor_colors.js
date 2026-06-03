@@ -28,6 +28,20 @@ if (!extPath) {
   process.exit(1);
 }
 
+// ── Configuration variables (adjust these to change gradient ranges) ─────────
+
+/** Maximum Ethernet/WLAN throughput for color gradient, in displayed MB/s. */
+const ETHERNET_MAX_MBPS = 2000;
+
+/** Maximum RAM for color gradient, in GB. */
+const RAM_MAX_GB = 64;
+
+/** Maximum disk space for color gradient, in GB. */
+const DISK_SPACE_MAX_GB = 405;
+
+/** Maximum GPU memory (VRAM) for color gradient, in GB. */
+const GPU_MEMORY_MAX_GB = 24;
+
 // ── Color helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -90,7 +104,7 @@ const GRADIENT_CONFIGS = {
   ram: {
     label: "RAM",
     minVal: 0,
-    maxVal: 64,              // Configurable via GSettings (default 64 GB)
+    maxVal: RAM_MAX_GB,
     startRGB: [0, 255, 0],   // Green at 0GB used
     endRGB: [255, 0, 0],     // Red at maxGB used
     inverted: false,
@@ -98,7 +112,7 @@ const GRADIENT_CONFIGS = {
   diskSpace: {
     label: "Disk Space",
     minVal: 0,
-    maxVal: 405,             // Configurable via GSettings (default 405 GB total)
+    maxVal: DISK_SPACE_MAX_GB,
     startRGB: [0, 255, 0],   // Green when full (max free space)
     endRGB: [255, 0, 0],     // Red when empty (0 free space)
     inverted: true,          // Inverted: green at max, red at min
@@ -106,17 +120,17 @@ const GRADIENT_CONFIGS = {
   eth: {
     label: "Ethernet",
     minVal: 0,
-    maxVal: 2000000,         // 2 Gbps in kbps (configurable)
-    startRGB: [0, 255, 0],   // Green at 0 kbps
-    endRGB: [255, 0, 0],     // Red at max kbps
+    maxVal: ETHERNET_MAX_MBPS,
+    startRGB: [0, 255, 0],   // Green at 0 MB/s
+    endRGB: [255, 0, 0],     // Red at max MB/s
     inverted: false,
   },
   wlan: {
     label: "Wi-Fi",
     minVal: 0,
-    maxVal: 2000000,         // 2 Gbps in kbps (configurable)
-    startRGB: [0, 255, 0],   // Green at 0 kbps
-    endRGB: [255, 0, 0],     // Red at max kbps
+    maxVal: ETHERNET_MAX_MBPS,
+    startRGB: [0, 255, 0],   // Green at 0 MB/s
+    endRGB: [255, 0, 0],     // Red at max MB/s
     inverted: false,
   },
   gpu: {
@@ -130,7 +144,7 @@ const GRADIENT_CONFIGS = {
   gpuMemory: {
     label: "GPU Memory",
     minVal: 0,
-    maxVal: 24,              // Configurable via nvidia-smi (default 24 GB VRAM)
+    maxVal: GPU_MEMORY_MAX_GB,
     startRGB: [0, 255, 0],   // Green at 0GB used
     endRGB: [255, 0, 0],     // Red at maxVRAM used
     inverted: false,
@@ -221,6 +235,89 @@ function patchExtensionJS(content) {
     console.log("Could not find target _getUsageColor in extension.js — skipping");
     return content;
   }
+
+  const classMarker = "export default class";
+  if (!content.includes(classMarker)) {
+    console.log("Could not find extension class marker in extension.js — skipping");
+    return content;
+  }
+
+  const supportBlock = `// ── Gradient color support (patched by patch_resource_monitor_colors.js) ──
+const ETHERNET_MAX_MBPS = ${ETHERNET_MAX_MBPS};
+const RAM_MAX_GB = ${RAM_MAX_GB};
+const DISK_SPACE_MAX_GB = ${DISK_SPACE_MAX_GB};
+const GPU_MEMORY_MAX_GB = ${GPU_MEMORY_MAX_GB};
+
+function rgbToStyle(r, g, b) {
+  const rr = Math.max(0, Math.min(255, Math.round(r)));
+  const gg = Math.max(0, Math.min(255, Math.round(g)));
+  const bb = Math.max(0, Math.min(255, Math.round(b)));
+  return \`color: rgb(\${rr}, \${gg}, \${bb});\`;
+}
+
+function getGradientColor(value, minVal, maxVal, startRGB, endRGB) {
+  if (!Number.isFinite(value)) return "";
+
+  const ratio = (value - minVal) / (maxVal - minVal);
+  const clampedRatio = Math.max(0, Math.min(1, ratio));
+  const r = startRGB[0] + (endRGB[0] - startRGB[0]) * clampedRatio;
+  const g = startRGB[1] + (endRGB[1] - startRGB[1]) * clampedRatio;
+  const b = startRGB[2] + (endRGB[2] - startRGB[2]) * clampedRatio;
+
+  return rgbToStyle(r, g, b);
+}
+
+const GRADIENT_CONFIGS = {
+  cpu: {
+    minVal: 0,
+    maxVal: 100,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+  ram: {
+    minVal: 0,
+    maxVal: RAM_MAX_GB,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+  diskSpace: {
+    minVal: 0,
+    maxVal: DISK_SPACE_MAX_GB,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: true,
+  },
+  eth: {
+    minVal: 0,
+    maxVal: ETHERNET_MAX_MBPS,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+  wlan: {
+    minVal: 0,
+    maxVal: ETHERNET_MAX_MBPS,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+  gpu: {
+    minVal: 0,
+    maxVal: 100,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+  gpuMemory: {
+    minVal: 0,
+    maxVal: GPU_MEMORY_MAX_GB,
+    startRGB: [0, 255, 0],
+    endRGB: [255, 0, 0],
+    inverted: false,
+  },
+};`;
 
   // Build the replacement: gradient-based implementation + type marker injection.
   const replacement = `    // ── Gradient-based color override (patched by patch_resource_monitor_colors.js) ──
@@ -337,7 +434,8 @@ function patchExtensionJS(content) {
       return this._gradientGetUsageColor(value, colors);
     }`;
 
-  const patched = content.replace(originalMethod, replacement);
+  const withSupportBlock = content.replace(classMarker, `${supportBlock}\n\n${classMarker}`);
+  const patched = withSupportBlock.replace(originalMethod, replacement);
   console.log("Patched extension.js with gradient-based color system");
   return patched;
 }

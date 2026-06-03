@@ -130,6 +130,18 @@ def test_patch_injects_gradient_color_functions(tmp_path):
     assert "getGradientColor" in patched
 
 
+def test_patch_injects_ethernet_gradient_max_constant(tmp_path):
+    """Should inject the configurable Ethernet MB/s gradient max into extension.js."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "const ETHERNET_MAX_MBPS = 2000;" in patched
+    assert "maxVal: ETHERNET_MAX_MBPS" in patched
+
+
 def test_patch_handles_missing_marker_gracefully(tmp_path):
     """If the original _getUsageColor is not found, should skip gracefully."""
     ext_dir = tmp_path / "extension"
