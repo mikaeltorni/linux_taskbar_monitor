@@ -82,6 +82,28 @@ sudo bash install.sh
 
 Keep installer behavior idempotent and keep GNOME Shell extension source patches covered by fixture tests. Avoid hard-coded checkout paths; resolve repository assets through `SCRIPT_DIR`.
 
+## Part of 7-Repo Desktop Setup Chain
+
+This repository is **Phase 6** in the desktop setup chain:
+
+1. `linux_installations_setup` — Base packages, hardware, apps
+2. `linux_configuration_setup` — GNOME desktop, autostart, GSettings
+3. `linux_hotkey_setup` — GNOME hotkeys and workspace bindings
+4. `agent_command_center` — Agent command center components
+5. `linux_programming_setup` — Cursor IDE, VS Code extensions
+6. **`ubuntu_2404_taskbar_system_status_monitor` (this repo)** — Taskbar system monitor extension
+7. `phrase_automation` — Phrase automation tmux service
+
+It is automatically cloned and run by the main installer (`installation_scripts/install.sh`).
+
+## Extended Features
+
+This repo now also manages:
+- **Window Rules Extension** (`app-rules@local`): Assigns apps to workspaces or makes them sticky on Wayland
+- **Auto-move-windows**: GNOME official extension for Wayland workspace placement
+- **Dash-to-Panel**: Configuration and Ubuntu Dock disabling
+- **PWA Icons**: Chrome progressive web app icon symlinks and desktop entries
+
 ## Disclaimer
 
 This software is provided under the MIT License on an **“as is”** basis, without warranties of any kind. To the maximum extent permitted by applicable law, the authors and copyright holders shall not be liable for any claims, damages, losses, or other liability arising from the use of this software.

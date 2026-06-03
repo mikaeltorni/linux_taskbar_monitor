@@ -9,6 +9,8 @@
 #   - Dash-to-Panel configuration and Ubuntu Dock disabling
 #   - PWA icon setup for Chrome progressive web apps
 #
+# Idempotent: skips already-installed extensions, detects existing desktop files.
+#
 # Usage: sudo bash install.sh
 
 set -euo pipefail
@@ -107,6 +109,8 @@ user_gsettings_set_if_key_exists() {
   if gsettings_key_exists "$schema" "$key"; then run_as_target gsettings set "$schema" "$key" "$value" || true; fi
 }
 
+apt_install() { DEBIAN_FRONTEND=noninteractive apt install -y "$@"; }
+
 # ── Source extension library modules ──────────────────────────────────────────
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
@@ -122,16 +126,20 @@ fi
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
 
-# Resource Monitor extension (core taskbar component)
+# Resource Monitor extension (core taskbar component) — idempotent via install_gnome_ext_zip
 configure_resource_monitor_extension
 
-# Window rules extension (workspace/sticky assignment for Wayland)
-configure_window_rules_extension
+# Window rules extension (workspace/sticky assignment for Wayland) — idempotent
+if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
+  msg "X11 session detected; skipping custom window-rules extension."
+else
+  configure_window_rules_extension
+fi
 
-# Auto-move-windows extension (Wayland workspace placement)
+# Auto-move-windows extension (Wayland workspace placement) — idempotent via install_auto_move_windows_extension
 configure_auto_move_windows
 
-# Dash-to-Panel configuration and PWA icons
+# Dash-to-Panel configuration and PWA icons — idempotent
 configure_dash_and_switchers
 configure_pwa_icons
 
