@@ -10,8 +10,8 @@
 // Gradient scheme:
 //   - CPU:        0% green → ~50% yellow → 100% red (percentage-based)
 //   - RAM:        0GB green → maxRAM(64GB) red (configurable via GSettings)
-//   - Disk Space: maxSpace(405GB) green → 0 free red (inverted — full=green, empty=red)
-//   - Ethernet:   0 kbps green → maxKbps(2Gbps) red for both upload & download
+//   - Disk Space: 0% used green → 100% used red
+//   - Ethernet:   0 MB/s green → ETHERNET_MAX_MBPS MB/s red for both upload & download
 //   - Wi-Fi:      same as Ethernet
 //   - GPU Usage:  0% green → 100% red (percentage-based, like CPU)
 //   - GPU Memory: 0GB green → maxVRAM(nvidia-smi) red (configurable via GSettings)
@@ -36,8 +36,8 @@ const ETHERNET_MAX_MBPS = 2000;
 /** Maximum RAM for color gradient, in GB. */
 const RAM_MAX_GB = 64;
 
-/** Maximum disk space for color gradient, in GB. */
-const DISK_SPACE_MAX_GB = 405;
+/** Maximum disk usage percentage for color gradient. */
+const DISK_USAGE_MAX_PERCENT = 100;
 
 /** Maximum GPU memory (VRAM) for color gradient, in GB. */
 const GPU_MEMORY_MAX_GB = 24;
@@ -112,10 +112,10 @@ const GRADIENT_CONFIGS = {
   diskSpace: {
     label: "Disk Space",
     minVal: 0,
-    maxVal: DISK_SPACE_MAX_GB,
-    startRGB: [0, 255, 0],   // Green when full (max free space)
-    endRGB: [255, 0, 0],     // Red when empty (0 free space)
-    inverted: true,          // Inverted: green at max, red at min
+    maxVal: DISK_USAGE_MAX_PERCENT,
+    startRGB: [0, 255, 0],   // Green at 0% used
+    endRGB: [255, 0, 0],     // Red at 100% used
+    inverted: false,
   },
   eth: {
     label: "Ethernet",
@@ -243,7 +243,7 @@ function patchExtensionJS(content) {
   const supportBlock = `// ── Gradient color support (patched by patch_resource_monitor_colors.js) ──
 const ETHERNET_MAX_MBPS = ${ETHERNET_MAX_MBPS};
 const RAM_MAX_GB = ${RAM_MAX_GB};
-const DISK_SPACE_MAX_GB = ${DISK_SPACE_MAX_GB};
+const DISK_USAGE_MAX_PERCENT = ${DISK_USAGE_MAX_PERCENT};
 const GPU_MEMORY_MAX_GB = ${GPU_MEMORY_MAX_GB};
 
 function rgbToStyle(r, g, b) {
@@ -282,10 +282,10 @@ const GRADIENT_CONFIGS = {
   },
   diskSpace: {
     minVal: 0,
-    maxVal: DISK_SPACE_MAX_GB,
+    maxVal: DISK_USAGE_MAX_PERCENT,
     startRGB: [0, 255, 0],
     endRGB: [255, 0, 0],
-    inverted: true,
+    inverted: false,
   },
   eth: {
     minVal: 0,

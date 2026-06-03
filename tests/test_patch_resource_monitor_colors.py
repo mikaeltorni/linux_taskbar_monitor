@@ -142,6 +142,33 @@ def test_patch_injects_ethernet_gradient_max_constant(tmp_path):
     assert "maxVal: ETHERNET_MAX_MBPS" in patched
 
 
+def test_patch_colors_disk_usage_percentage_from_green_to_red(tmp_path):
+    """Disk space colors should use used percentage: 0% green, 100% red."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "const DISK_USAGE_MAX_PERCENT = 100;" in patched
+    assert "maxVal: DISK_USAGE_MAX_PERCENT" in patched
+    assert "diskSpace: {\n    minVal: 0,\n    maxVal: DISK_USAGE_MAX_PERCENT" in patched
+    assert "inverted: true" not in patched
+
+
+def test_patch_colors_gpu_memory_usage_from_green_to_red(tmp_path):
+    """GPU memory colors should be green at 0GB used and red at max VRAM used."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "const GPU_MEMORY_MAX_GB = 24;" in patched
+    assert "gpuMemory: {\n    minVal: 0,\n    maxVal: GPU_MEMORY_MAX_GB" in patched
+    assert "endRGB: [255, 0, 0]" in patched
+
+
 def test_patch_colors_array_valued_network_metrics(tmp_path):
     """Ethernet and Wi-Fi values are [download, upload] arrays and must not be rejected."""
     ext_path = _write_extension_fixture(tmp_path)
