@@ -168,8 +168,6 @@ const GRADIENT_CONFIGS = {
  * @returns {string} CSS style string with the computed color.
  */
 function _gradientGetUsageColor(indicator, value, colors) {
-  if (!Number.isFinite(value)) return "";
-
   // Handle array values (e.g., ethernet [download, upload]) — take max.
   const numericValue = Array.isArray(value) ? Math.max(...value.filter(Number.isFinite)) : value;
   if (!Number.isFinite(numericValue)) return "";
@@ -392,8 +390,6 @@ const GRADIENT_CONFIGS = {
 
     // ── Gradient-based _getUsageColor implementation ──
     _gradientGetUsageColor(value, colors) {
-      if (!Number.isFinite(value)) return "";
-
       const numericValue = Array.isArray(value) ? Math.max(...value.filter(Number.isFinite)) : value;
       if (!Number.isFinite(numericValue)) return "";
 

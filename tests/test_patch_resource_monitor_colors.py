@@ -142,6 +142,18 @@ def test_patch_injects_ethernet_gradient_max_constant(tmp_path):
     assert "maxVal: ETHERNET_MAX_MBPS" in patched
 
 
+def test_patch_colors_array_valued_network_metrics(tmp_path):
+    """Ethernet and Wi-Fi values are [download, upload] arrays and must not be rejected."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "const numericValue = Array.isArray(value)" in patched
+    assert "if (!Number.isFinite(value)) return \"\";\n\n      const numericValue" not in patched
+
+
 def test_patch_handles_missing_marker_gracefully(tmp_path):
     """If the original _getUsageColor is not found, should skip gracefully."""
     ext_dir = tmp_path / "extension"
