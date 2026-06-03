@@ -466,15 +466,16 @@ class TestBuildGsettingsArgsPercHomeOnly:
         assert '"mountPoint": "/"' not in all_cmds
         assert '"mountPoint": "/home"' in all_cmds
 
-    def test_does_not_set_diskspacemonitor_for_perc_mode(self):
-        """Should not set diskspacemonitor when using percentage mode."""
+    def test_sets_diskspacemonitor_to_used_for_perc_mode(self):
+        """Should show disk percentage usage, not free percentage."""
         schema = "org.gnome.shell.extensions.resource-monitor"
         ext_dir = "/fake/path/schemas"
         result = mod.build_gsettings_args(
             schema, ext_dir, disk_space_perc_home_only=True
         )
         all_cmds = " ".join(" ".join(c) for c in result)
-        assert "diskspacemonitor" not in all_cmds
+        assert "diskspacemonitor" in all_cmds
+        assert "'used'" in all_cmds
 
 
 class TestMainPercHomeOnly:
@@ -521,10 +522,10 @@ class TestInstallerWiringPercHomeOnly:
         source = Path("install.sh").read_text(encoding="utf-8")
         assert "diskspaceunitmeasure" not in source
 
-    def test_installer_no_longer_sets_diskspacemonitor(self):
-        """Installer should not set diskspacemonitor when using percentage mode."""
+    def test_installer_sets_diskspacemonitor_to_used(self):
+        """Installer should show disk percentage usage status."""
         source = Path("install.sh").read_text(encoding="utf-8")
-        assert "diskspacemonitor" not in source
+        assert "diskspacemonitor \"'used'\"" in source
 
     def test_installer_still_configures_other_settings(self):
         """Installer should still configure other Resource Monitor settings correctly."""

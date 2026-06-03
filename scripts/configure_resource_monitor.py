@@ -342,6 +342,10 @@ def build_gsettings_args(
             "gsettings", "--schemadir", ext_dir, "set", schema,
             "diskspaceunit", "'perc'",
         ])
+        commands.append([
+            "gsettings", "--schemadir", ext_dir, "set", schema,
+            "diskspacemonitor", "'used'",
+        ])
         # Filter disk devices to /home only.
         if disk_devices is not None:
             disk_devices = filter_disk_devices_to_mount_point(disk_devices, "/home")

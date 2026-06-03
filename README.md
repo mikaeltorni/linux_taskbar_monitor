@@ -53,7 +53,7 @@ The installer supports these environment overrides:
 - `RESOURCE_MONITOR_EXTENSION_URL`
 - `RESOURCE_MONITOR_EXTENSION_SHA256`
 
-Disk space is configured with `--disk-space-perc-home-only`, so the panel shows the `/home` disk row as a percentage and keeps disk throughput stats disabled.
+Disk space is configured with `--disk-space-perc-home-only`, so the panel shows the `/home` disk row as used-space percentage and keeps disk throughput stats disabled.
 
 Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`. Ethernet uses `netunitmeasure 'm'`, and the color gradient reaches red at the `ETHERNET_MAX_MBPS` displayed MB/s value in `scripts/patch_resource_monitor_colors.js`.
 

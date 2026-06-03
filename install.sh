@@ -112,6 +112,7 @@ configure_resource_monitor_extension() {
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskstatsstatus false
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspacestatus true
   resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspaceunit "'perc'"
+  resource_monitor_gsettings set org.gnome.shell.extensions.resource-monitor diskspacemonitor "'used'"
   run_as_target python3 "$SCRIPT_DIR/scripts/configure_resource_monitor.py" \
     --disk-space-perc-home-only \
     --schema-dir "$ext_dir/schemas"
