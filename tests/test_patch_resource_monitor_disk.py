@@ -119,8 +119,8 @@ def test_patch_initializes_secondary_disk_labels(tmp_path):
     assert "cleanup_elements()" in patched
 
 
-def test_patch_uses_free_disk_gb_and_activity_percent(tmp_path):
-    """Should render remaining disk space in GB with live activity percent."""
+def test_patch_uses_disk_usage_percent_and_activity_percent(tmp_path):
+    """Should render used disk percentage with live activity percent."""
     refresh_source = (
         'import {\n'
         '  getBaseStorageUnit,\n'
@@ -153,13 +153,19 @@ def test_patch_uses_free_disk_gb_and_activity_percent(tmp_path):
     assert "_diskSpaceActivitySamples" in refreshers
     assert "ioTimeMs" in refreshers
     assert "activityPercent" in refreshers
-    assert 'monitor: "free"' in refreshers
-    assert 'unitType: "numeric"' in refreshers
-    assert 'unitMeasure: "g"' in refreshers
-    assert 'indicator._getUsageColor(entry.usedPercent, indicator._diskSpaceColors)' in refreshers
+    assert 'const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {' in refreshers
+    assert 'monitor: "used"' in refreshers
+    assert 'unitType: "perc"' in refreshers
+    assert 'unitMeasure: indicator._diskSpaceUnitMeasure' in refreshers
+    assert (
+        "indicator._getUsageColor(diskSpaceUsageDisplay.value, "
+        "indicator._diskSpaceColors)"
+    ) in refreshers
+    assert '`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`' in refreshers
     assert '`${indicator._getValueFixed(activityPercent, "diskSpace")}`' in refreshers
     assert '"%"' in refreshers
-    assert 'monitor: "used"' not in refreshers
+    assert 'unitType: "numeric"' not in refreshers
+    assert 'unitMeasure: "g"' not in refreshers
     assert "devicePath: device.device" in refreshers
     assert "filesystem: device.mountPoint || device.device" in refreshers
     assert "getDiskSpaceActivityPercent(indicator, entry.devicePath)" in refreshers
@@ -191,6 +197,111 @@ def test_patch_current_upstream_disk_refresh_shape(tmp_path):
     assert "const display = buildDiskSpaceDisplay(entry" not in refreshers
     assert "getDiskSpaceActivityPercent(indicator, entry.devicePath)" in refreshers
     assert "update_element_secondary_value" in refreshers
+
+
+def test_patch_removes_legacy_display_block_when_rendering_usage_percent(tmp_path):
+    """Should remove old upstream display code before inserting usage percentage."""
+    legacy_refresh = """          const display = buildDiskSpaceDisplay(entry, {
+            monitor: indicator._diskSpaceMonitor,
+            unitType: indicator._diskSpaceUnitType,
+            unitMeasure: indicator._diskSpaceUnitMeasure,
+            scaleBase: indicator._dataScaleBase,
+          });
+
+          indicator._diskSpaceBox.update_element_value(
+            entry.filesystem,
+            `${indicator._getValueFixed(display.value, "diskSpace")}`,
+            display.unit,
+            indicator._getUsageColor(display.value, indicator._diskSpaceColors)
+          );"""
+    refresh_source = (
+        'import GLib from "gi://GLib";\n'
+        'import { buildDiskSpaceDisplay } from "../runtime/disk.js";\n'
+        '\n'
+        'export function refreshDiskSpaceValue(indicator) {\n'
+        '  results.forEach((result) => {\n'
+        '    const entry = result.value;\n'
+        f'{legacy_refresh}\n'
+        '  });\n'
+        '}\n'
+    )
+    containers_path = _write_extension_fixture(
+        tmp_path,
+        ORIGINAL_DISK_CONTAINER,
+        refresh_source,
+    )
+
+    result = _run_patch(containers_path)
+
+    assert result.returncode == 0, result.stderr
+    refreshers = (tmp_path / "services" / "refreshers.js").read_text(encoding="utf-8")
+    assert "const display = buildDiskSpaceDisplay(entry" not in refreshers
+    assert "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {" in refreshers
+    assert 'monitor: "used"' in refreshers
+    assert 'unitType: "perc"' in refreshers
+    assert (
+        "indicator._getUsageColor(diskSpaceUsageDisplay.value, "
+        "indicator._diskSpaceColors)"
+    ) in refreshers
+
+
+def test_patch_removes_stale_display_block_from_existing_free_gb_patch(tmp_path):
+    """Should migrate already-patched free-GB output without stale display setup."""
+    stale_display = """          const display = buildDiskSpaceDisplay(entry, {
+            monitor: indicator._diskSpaceMonitor,
+            unitType: indicator._diskSpaceUnitType,
+            unitMeasure: indicator._diskSpaceUnitMeasure,
+            scaleBase: indicator._dataScaleBase,
+          });"""
+    free_gb_patch = """          const diskSpaceDisplay = buildDiskSpaceDisplay(entry, {
+            monitor: "free",
+            unitType: "numeric",
+            unitMeasure: "g",
+            scaleBase: indicator._dataScaleBase,
+          });
+          const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);
+          const primaryStyle = indicator._getUsageColor(entry.usedPercent, indicator._diskSpaceColors);
+
+          indicator._diskSpaceBox.update_element_value(
+            entry.filesystem,
+            `${indicator._getValueFixed(diskSpaceDisplay.value, "diskSpace")}`,
+            diskSpaceDisplay.unit,
+            primaryStyle
+          );
+          indicator._diskSpaceBox.update_element_secondary_value(
+            entry.filesystem,
+            `${indicator._getValueFixed(activityPercent, "diskSpace")}`,
+            "%"
+          );"""
+    refresh_source = (
+        'import GLib from "gi://GLib";\n'
+        'import { buildDiskSpaceDisplay } from "../runtime/disk.js";\n'
+        '\n'
+        'function getDiskSpaceActivityPercent(indicator, filesystem) {\n'
+        '  return 0;\n'
+        '}\n'
+        '\n'
+        'export function refreshDiskSpaceValue(indicator) {\n'
+        '  results.forEach((result) => {\n'
+        '    const entry = result.value;\n'
+        f'{stale_display}\n\n'
+        f'{free_gb_patch}\n'
+        '  });\n'
+        '}\n'
+    )
+    containers_path = _write_extension_fixture(
+        tmp_path,
+        ORIGINAL_DISK_CONTAINER,
+        refresh_source,
+    )
+
+    result = _run_patch(containers_path)
+
+    assert result.returncode == 0, result.stderr
+    refreshers = (tmp_path / "services" / "refreshers.js").read_text(encoding="utf-8")
+    assert "const display = buildDiskSpaceDisplay(entry" not in refreshers
+    assert "const diskSpaceDisplay = buildDiskSpaceDisplay(entry" not in refreshers
+    assert "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {" in refreshers
 
 
 def test_patch_keys_disk_space_rows_by_mount_point(tmp_path):

@@ -4,7 +4,7 @@
 //   - DiskContainerSpace patch: adds a secondary label for live disk activity.
 //   - extension.js patch: keys disk space rows by mount point.
 //   - getDiskSpaceActivityPercent helper: calculates per-refresh disk IO busy percentage.
-//   - refreshers.js patch: renders free GB plus live IO busy percent for each disk.
+//   - refreshers.js patch: renders used percentage plus live IO busy percent for each disk.
 //
 // Usage:
 //   node scripts/patch_resource_monitor_disk.js <path-to-containers.js>
@@ -35,10 +35,10 @@ function replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targ
   process.exit(1);
 }
 
-function replaceKnownSnippetOrPattern(
+function replaceKnownSnippetOrPatterns(
   content,
   snippets,
-  pattern,
+  patterns,
   replacement,
   alreadyMarker,
   targetName
@@ -48,16 +48,18 @@ function replaceKnownSnippetOrPattern(
     return content;
   }
 
+  for (const pattern of patterns) {
+    if (pattern.test(content)) {
+      console.log(`Patched ${targetName}`);
+      return content.replace(pattern, replacement);
+    }
+  }
+
   for (const snippet of snippets) {
     if (content.includes(snippet)) {
       console.log(`Patched ${targetName}`);
       return content.replace(snippet, replacement);
     }
-  }
-
-  if (pattern.test(content)) {
-    console.log(`Patched ${targetName}`);
-    return content.replace(pattern, replacement);
   }
 
   console.error(`Could not find target code in ${targetName}`);
@@ -406,7 +408,7 @@ const activityPercentFreeGbRefreshUpdate = [
   "          );",
 ].join("\n");
 
-const fixedRefreshUpdate = [
+const freeGbPrimaryActivityRefreshUpdate = [
   "          const diskSpaceDisplay = buildDiskSpaceDisplay(entry, {",
   '            monitor: "free",',
   '            unitType: "numeric",',
@@ -420,6 +422,29 @@ const fixedRefreshUpdate = [
   "            entry.filesystem,",
   '            `${indicator._getValueFixed(diskSpaceDisplay.value, "diskSpace")}`,',
   "            diskSpaceDisplay.unit,",
+  "            primaryStyle",
+  "          );",
+  "          indicator._diskSpaceBox.update_element_secondary_value(",
+  "            entry.filesystem,",
+  '            `${indicator._getValueFixed(activityPercent, "diskSpace")}`,',
+  '            "%"',
+  "          );",
+].join("\n");
+
+const fixedRefreshUpdate = [
+  "          const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {",
+  '            monitor: "used",',
+  '            unitType: "perc",',
+  "            unitMeasure: indicator._diskSpaceUnitMeasure,",
+  "            scaleBase: indicator._dataScaleBase,",
+  "          });",
+  "          const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);",
+  "          const primaryStyle = indicator._getUsageColor(diskSpaceUsageDisplay.value, indicator._diskSpaceColors);",
+  "",
+  "          indicator._diskSpaceBox.update_element_value(",
+  "            entry.filesystem,",
+  '            `${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`,',
+  "            diskSpaceUsageDisplay.unit,",
   "            primaryStyle",
   "          );",
   "          indicator._diskSpaceBox.update_element_secondary_value(",
@@ -454,6 +479,12 @@ const usedGbActivityRefreshUpdate = [
 
 const currentUpstreamRefreshPattern =
   /          const display = buildDiskSpaceDisplay\(entry, \{\n            monitor: indicator\._diskSpaceMonitor,\n            unitType: indicator\._diskSpaceUnitType,\n            unitMeasure: indicator\._diskSpaceUnitMeasure,\n            scaleBase: indicator\._dataScaleBase,\n          \}\);\n\n          indicator\._diskSpaceBox\.update_element_value\(\n            entry\.filesystem,\n            display\.isPercent\n              \? `\$\{display\.value\}`\n              : `\$\{indicator\._getValueFixed\(display\.value\)\}`,\n            display\.unit,\n            indicator\._getUsageColor\(display\.value, indicator\._diskSpaceColors\)\n          \);/;
+
+const legacyUpstreamRefreshPattern =
+  /          const display = buildDiskSpaceDisplay\(entry, \{\n            monitor: indicator\._diskSpaceMonitor,\n            unitType: indicator\._diskSpaceUnitType,\n            unitMeasure: indicator\._diskSpaceUnitMeasure,\n            scaleBase: indicator\._dataScaleBase,\n          \}\);\n\n          indicator\._diskSpaceBox\.update_element_value\(\n            entry\.filesystem,\n            `\$\{indicator\._getValueFixed\(display\.value, "diskSpace"\)\}`,\n            display\.unit,\n            indicator\._getUsageColor\(display\.value, indicator\._diskSpaceColors\)\n          \);/;
+
+const staleDisplayBlockBeforeUsagePatchPattern =
+  /          const display = buildDiskSpaceDisplay\(entry, \{\n            monitor: indicator\._diskSpaceMonitor,\n            unitType: indicator\._diskSpaceUnitType,\n            unitMeasure: indicator\._diskSpaceUnitMeasure,\n            scaleBase: indicator\._dataScaleBase,\n          \}\);\n\n(?=          const diskSpaceUsageDisplay = buildDiskSpaceDisplay\(entry, \{)/;
 
 const originalDiskRefreshResult = [
   "        return {",
@@ -518,6 +549,15 @@ function ensureDiskActivityHelper(content) {
   return `${diskActivityHelper}\n\n${content}`;
 }
 
+function removeStaleDiskSpaceDisplayBlock(content) {
+  if (!staleDisplayBlockBeforeUsagePatchPattern.test(content)) {
+    return content;
+  }
+
+  console.log("Removed stale refreshers.js disk space display block");
+  return content.replace(staleDisplayBlockBeforeUsagePatchPattern, "");
+}
+
 let content = fs.readFileSync(containersPath, "utf8");
 content = replaceKnownSnippet(
   content,
@@ -540,20 +580,22 @@ if (!fs.existsSync(refreshersPath)) {
 }
 
 let refreshersContent = fs.readFileSync(refreshersPath, "utf8");
-refreshersContent = replaceKnownSnippetOrPattern(
+refreshersContent = replaceKnownSnippetOrPatterns(
   refreshersContent,
   [
     originalRefreshUpdate,
     brokenPatchedRefreshUpdate,
     spaceUsedPatchedRefreshUpdate,
     activityPercentFreeGbRefreshUpdate,
+    freeGbPrimaryActivityRefreshUpdate,
     usedGbActivityRefreshUpdate,
   ],
-  currentUpstreamRefreshPattern,
+  [currentUpstreamRefreshPattern, legacyUpstreamRefreshPattern],
   fixedRefreshUpdate,
-  "const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);",
+  "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {",
   "refreshers.js disk space update"
 );
+refreshersContent = removeStaleDiskSpaceDisplayBlock(refreshersContent);
 refreshersContent = replaceKnownSnippetOptional(
   refreshersContent,
   [originalDiskRefreshResult],
