@@ -176,13 +176,13 @@ class TestBuildGsettingsArgs:
         assert "false" in all_cmds
 
     def test_builds_correct_args_for_disk_monitor(self):
-        """Should set diskspacemonitor to 'free' for remaining-space GB."""
+        """Should set diskspacemonitor to 'used' for used-space GB."""
         schema = "org.gnome.shell.extensions.resource-monitor"
         ext_dir = "/fake/path/schemas"
         result = mod.build_gsettings_args(schema, ext_dir, disk_space_gb=True)
         all_cmds = " ".join(" ".join(c) for c in result)
         assert "diskspacemonitor" in all_cmds
-        assert "'free'" in all_cmds
+        assert "'used'" in all_cmds
 
     def test_defaults_to_absolute_gpu_memory_when_neither_flag_set(self):
         """Should set GPU memory to absolute numeric mode by default."""
@@ -204,12 +204,18 @@ class TestBuildGsettingsArgs:
         assert "gpudeviceslist" in devices_cmd
 
     def test_includes_disk_devices_list(self):
-        """Should include diskdeviceslist when disk_devices is provided."""
+        """Should include only the /home disk row when disk_devices is provided."""
         schema = "org.gnome.shell.extensions.resource-monitor"
         ext_dir = "/fake/path/schemas"
-        devices = [{"device": "/dev/sda1", "mountPoint": "/"}]
+        devices = [
+            {"device": "/dev/sda1", "mountPoint": "/"},
+            {"device": "/dev/sda1", "mountPoint": "/home"},
+        ]
         result = mod.build_gsettings_args(schema, ext_dir, disk_space_gb=True, disk_devices=devices)
         assert len(result) == 6  # gpumemoryunit + disk settings + diskdeviceslist
+        all_cmds = " ".join(" ".join(c) for c in result)
+        assert '"mountPoint": "/"' not in all_cmds
+        assert '"mountPoint": "/home"' in all_cmds
 
 
 class TestFormatGsettingsList:
