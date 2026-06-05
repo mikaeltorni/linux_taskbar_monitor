@@ -156,6 +156,68 @@ def test_patch_colors_disk_usage_percentage_from_green_to_red(tmp_path):
     assert "inverted: true" not in patched
 
 
+def test_patch_detects_disk_colors_by_indicator_property_identity(tmp_path):
+    """Disk color detection should not depend only on startup marker injection."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "colors === this._diskSpaceColors" in patched
+    assert "config = GRADIENT_CONFIGS.diskSpace;" in patched
+
+
+def test_patch_migrates_existing_gradient_patch_to_identity_detection(tmp_path):
+    """Already-patched files should be upgraded when identity checks are missing."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    identity_block = '''      if (colors === this._diskSpaceColors) {
+        config = GRADIENT_CONFIGS.diskSpace;
+      } else if (colors === this._netEthColors || colorStr.includes("__eth")) {
+        config = GRADIENT_CONFIGS.eth;
+      } else if (colors === this._netWlanColors || colorStr.includes("__wlan")) {
+        config = GRADIENT_CONFIGS.wlan;
+      } else if (colors === this._gpuMemoryColors || colorStr.includes("__gpuMem")) {
+        config = GRADIENT_CONFIGS.gpuMemory;
+      } else if (colorStr.includes("__diskSpace")) {
+        config = GRADIENT_CONFIGS.diskSpace;
+      } else if (colors === this._gpuColors || colorStr.includes("__gpu")) {
+        config = GRADIENT_CONFIGS.gpu;
+      } else if (colors === this._ramColors || colorStr.includes("__ram")) {
+        config = GRADIENT_CONFIGS.ram;
+      } else if (colors === this._cpuColors || colorStr.includes("__cpu")) {
+        config = GRADIENT_CONFIGS.cpu;'''
+    marker_only_block = '''      if (colorStr.includes("__eth")) {
+        config = GRADIENT_CONFIGS.eth;
+      } else if (colorStr.includes("__wlan")) {
+        config = GRADIENT_CONFIGS.wlan;
+      } else if (colorStr.includes("__gpuMem")) {
+        config = GRADIENT_CONFIGS.gpuMemory;
+      } else if (colorStr.includes("__diskSpace")) {
+        config = GRADIENT_CONFIGS.diskSpace;
+      } else if (colorStr.includes("__gpu")) {
+        config = GRADIENT_CONFIGS.gpu;
+      } else if (colorStr.includes("__ram")) {
+        config = GRADIENT_CONFIGS.ram;
+      } else if (colorStr.includes("__cpu")) {
+        config = GRADIENT_CONFIGS.cpu;'''
+    legacy_patched = patched.replace(identity_block, marker_only_block)
+    assert "colors === this._diskSpaceColors" not in legacy_patched
+    ext_path.write_text(legacy_patched, encoding="utf-8")
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Migration failed: {result.stderr}"
+
+    migrated = ext_path.read_text(encoding="utf-8")
+    assert "colors === this._diskSpaceColors" in migrated
+    assert "colors === this._netEthColors || colorStr.includes(\"__eth\")" in migrated
+
+
 def test_patch_colors_gpu_memory_usage_from_green_to_red(tmp_path):
     """GPU memory colors should be green at 0GB used and red at max VRAM used."""
     ext_path = _write_extension_fixture(tmp_path)

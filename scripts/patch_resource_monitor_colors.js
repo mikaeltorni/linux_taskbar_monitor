@@ -177,19 +177,21 @@ function _gradientGetUsageColor(indicator, value, colors) {
   const colorStr = Array.isArray(colors) ? colors.join(" ") : String(colors || "");
 
   let config;
-  if (colorStr.includes("__eth")) {
+  if (colors === this._diskSpaceColors) {
+    config = GRADIENT_CONFIGS.diskSpace;
+  } else if (colors === this._netEthColors || colorStr.includes("__eth")) {
     config = GRADIENT_CONFIGS.eth;
-  } else if (colorStr.includes("__wlan")) {
+  } else if (colors === this._netWlanColors || colorStr.includes("__wlan")) {
     config = GRADIENT_CONFIGS.wlan;
-  } else if (colorStr.includes("__gpuMem")) {
+  } else if (colors === this._gpuMemoryColors || colorStr.includes("__gpuMem")) {
     config = GRADIENT_CONFIGS.gpuMemory;
   } else if (colorStr.includes("__diskSpace")) {
     config = GRADIENT_CONFIGS.diskSpace;
-  } else if (colorStr.includes("__gpu")) {
+  } else if (colors === this._gpuColors || colorStr.includes("__gpu")) {
     config = GRADIENT_CONFIGS.gpu;
-  } else if (colorStr.includes("__ram")) {
+  } else if (colors === this._ramColors || colorStr.includes("__ram")) {
     config = GRADIENT_CONFIGS.ram;
-  } else if (colorStr.includes("__cpu")) {
+  } else if (colors === this._cpuColors || colorStr.includes("__cpu")) {
     config = GRADIENT_CONFIGS.cpu;
   } else {
     // Fallback: CPU gradient for usage percentages.
@@ -220,6 +222,14 @@ function patchExtensionJS(content) {
   // Check if already patched (idempotent).
   const alreadyPatchedMarker = "_gradientGetUsageColor";
   if (content.includes(alreadyPatchedMarker)) {
+    if (!content.includes("colors === this._diskSpaceColors")) {
+      console.log("Migrating gradient color detection to property identity checks");
+      return content
+        .replace(
+          "      if (colorStr.includes(\"__eth\")) {\n        config = GRADIENT_CONFIGS.eth;\n      } else if (colorStr.includes(\"__wlan\")) {\n        config = GRADIENT_CONFIGS.wlan;\n      } else if (colorStr.includes(\"__gpuMem\")) {\n        config = GRADIENT_CONFIGS.gpuMemory;\n      } else if (colorStr.includes(\"__diskSpace\")) {\n        config = GRADIENT_CONFIGS.diskSpace;\n      } else if (colorStr.includes(\"__gpu\")) {\n        config = GRADIENT_CONFIGS.gpu;\n      } else if (colorStr.includes(\"__ram\")) {\n        config = GRADIENT_CONFIGS.ram;\n      } else if (colorStr.includes(\"__cpu\")) {\n        config = GRADIENT_CONFIGS.cpu;",
+          "      if (colors === this._diskSpaceColors) {\n        config = GRADIENT_CONFIGS.diskSpace;\n      } else if (colors === this._netEthColors || colorStr.includes(\"__eth\")) {\n        config = GRADIENT_CONFIGS.eth;\n      } else if (colors === this._netWlanColors || colorStr.includes(\"__wlan\")) {\n        config = GRADIENT_CONFIGS.wlan;\n      } else if (colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")) {\n        config = GRADIENT_CONFIGS.gpuMemory;\n      } else if (colorStr.includes(\"__diskSpace\")) {\n        config = GRADIENT_CONFIGS.diskSpace;\n      } else if (colors === this._gpuColors || colorStr.includes(\"__gpu\")) {\n        config = GRADIENT_CONFIGS.gpu;\n      } else if (colors === this._ramColors || colorStr.includes(\"__ram\")) {\n        config = GRADIENT_CONFIGS.ram;\n      } else if (colors === this._cpuColors || colorStr.includes(\"__cpu\")) {\n        config = GRADIENT_CONFIGS.cpu;"
+        );
+    }
     console.log("Colors already patched — skipping");
     return content;
   }
@@ -397,19 +407,21 @@ const GRADIENT_CONFIGS = {
       const colorStr = Array.isArray(colors) ? colors.join(" ") : String(colors || "");
 
       let config;
-      if (colorStr.includes("__eth")) {
+      if (colors === this._diskSpaceColors) {
+        config = GRADIENT_CONFIGS.diskSpace;
+      } else if (colors === this._netEthColors || colorStr.includes("__eth")) {
         config = GRADIENT_CONFIGS.eth;
-      } else if (colorStr.includes("__wlan")) {
+      } else if (colors === this._netWlanColors || colorStr.includes("__wlan")) {
         config = GRADIENT_CONFIGS.wlan;
-      } else if (colorStr.includes("__gpuMem")) {
+      } else if (colors === this._gpuMemoryColors || colorStr.includes("__gpuMem")) {
         config = GRADIENT_CONFIGS.gpuMemory;
       } else if (colorStr.includes("__diskSpace")) {
         config = GRADIENT_CONFIGS.diskSpace;
-      } else if (colorStr.includes("__gpu")) {
+      } else if (colors === this._gpuColors || colorStr.includes("__gpu")) {
         config = GRADIENT_CONFIGS.gpu;
-      } else if (colorStr.includes("__ram")) {
+      } else if (colors === this._ramColors || colorStr.includes("__ram")) {
         config = GRADIENT_CONFIGS.ram;
-      } else if (colorStr.includes("__cpu")) {
+      } else if (colors === this._cpuColors || colorStr.includes("__cpu")) {
         config = GRADIENT_CONFIGS.cpu;
       } else {
         config = GRADIENT_CONFIGS.cpu;
