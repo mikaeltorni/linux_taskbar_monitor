@@ -53,7 +53,7 @@ The installer supports these environment overrides:
 - `RESOURCE_MONITOR_EXTENSION_URL`
 - `RESOURCE_MONITOR_EXTENSION_SHA256`
 
-Disk space is configured in GB mode, so the panel shows the `/home` disk row as colored used-space GB and keeps disk throughput stats disabled. The disk patch renders live disk load as a secondary colored percentage next to that primary GB value.
+Disk space is configured in GB mode, so the panel shows the `/home` disk row as colored free-space GB and keeps disk throughput stats disabled. The disk patch renders live disk load as a secondary colored percentage next to that primary GB value.
 
 Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`. Ethernet uses `netunitmeasure 'm'`, and the color gradient reaches red at the `ETHERNET_MAX_MBPS` displayed MB/s value in `scripts/patch_resource_monitor_colors.js`.
 

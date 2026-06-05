@@ -301,7 +301,7 @@ def build_gsettings_args(
         ext_dir: Path to extension schemas directory.
         gpu_memory_perc: If True, set gpumemoryunit to 'perc'.
             (Default is 'numeric' — absolute VRAM values like "22.6gb".)
-        disk_space_gb: If True, show used disk space in numeric GB.
+        disk_space_gb: If True, show remaining disk space in numeric GB.
         disk_space_perc: Legacy alias for disk_space_gb retained for old callers.
         disk_space_perc_home_only: If True, show /home disk usage as percentage
             of total NVMe capacity (diskspaceunit='perc', home-only filter).
@@ -365,9 +365,9 @@ def build_gsettings_args(
         ])
         commands.append([
             "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspacemonitor", "'used'",
+            "diskspacemonitor", "'free'",
         ])
-        # Keep the panel focused on the /home row while showing used GB.
+        # Keep the panel focused on the /home row while showing free GB.
         if disk_devices is not None:
             disk_devices = filter_disk_devices_to_mount_point(disk_devices, "/home")
 

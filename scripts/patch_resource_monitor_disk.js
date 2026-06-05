@@ -552,7 +552,7 @@ const freeGbPrimaryActivityRefreshUpdate = [
 
 const fixedRefreshUpdate = [
   "          const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {",
-  '            monitor: "used",',
+  '            monitor: "free",',
   '            unitType: "numeric",',
   '            unitMeasure: "g",',
   "            scaleBase: indicator._dataScaleBase,",
@@ -710,8 +710,14 @@ function migrateDiskUsageStyleGradient(content) {
   return content.replace(muddyGradient, brightGradient);
 }
 
-function migrateDiskSpacePrimaryToGb(content) {
+function migrateDiskSpacePrimaryToFreeGb(content) {
   let migratedContent = content;
+
+  const usedMonitor = '            monitor: "used",';
+  const freeMonitor = '            monitor: "free",';
+  if (migratedContent.includes(usedMonitor)) {
+    migratedContent = migratedContent.replace(usedMonitor, freeMonitor);
+  }
 
   const percentUnitType = '            unitType: "perc",';
   const numericUnitType = '            unitType: "numeric",';
@@ -734,7 +740,7 @@ function migrateDiskSpacePrimaryToGb(content) {
   }
 
   if (migratedContent !== content) {
-    console.log("Migrated refreshers.js disk primary display to used GB");
+    console.log("Migrated refreshers.js disk primary display to free GB");
   }
 
   return migratedContent;
@@ -825,7 +831,7 @@ refreshersContent = replaceKnownSnippetOrPatterns(
 refreshersContent = migrateDiskUsageStyle(refreshersContent);
 refreshersContent = migrateDiskUsageStyleGradient(refreshersContent);
 refreshersContent = removeStaleDiskSpaceDisplayBlock(refreshersContent);
-refreshersContent = migrateDiskSpacePrimaryToGb(refreshersContent);
+refreshersContent = migrateDiskSpacePrimaryToFreeGb(refreshersContent);
 refreshersContent = migrateDiskActivityStyle(refreshersContent);
 refreshersContent = replaceKnownSnippetOptional(
   refreshersContent,
