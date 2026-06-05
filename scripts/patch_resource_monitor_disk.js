@@ -35,6 +35,42 @@ function replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targ
   process.exit(1);
 }
 
+function replaceKnownSnippetWithMigration(
+  content,
+  snippets,
+  replacement,
+  alreadyMarker,
+  migrations,
+  targetName
+) {
+  let migratedContent = content;
+  let didMigrate = false;
+  for (const migration of migrations) {
+    const requiredMarker = migration.requiredMarker || "";
+    if (
+      (!requiredMarker || migratedContent.includes(requiredMarker)) &&
+      migratedContent.includes(migration.from)
+    ) {
+      migratedContent = migration.all
+        ? migratedContent.split(migration.from).join(migration.to)
+        : migratedContent.replace(migration.from, migration.to);
+      didMigrate = true;
+    }
+  }
+
+  if (didMigrate) {
+    console.log(`Migrated ${targetName}`);
+    return migratedContent;
+  }
+
+  if (content.includes(alreadyMarker)) {
+    console.log(`${targetName} already patched`);
+    return content;
+  }
+
+  return replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targetName);
+}
+
 function replaceKnownSnippetOrPatterns(
   content,
   snippets,
@@ -81,6 +117,18 @@ function replaceKnownSnippetOptional(content, snippets, replacement, alreadyMark
 
   console.log(`${targetName} target not found; skipping`);
   return content;
+}
+
+function normalizeDiskContainerStyles(content) {
+  return content
+    .replace(
+      /(        this\._elementsUnit\[filesystem\]\.text = unit;\n)(?!        this\._elementsUnit\[filesystem\]\.style = style;\n)/g,
+      "$1        this._elementsUnit[filesystem].style = style;\n"
+    )
+    .replace(
+      /(        this\._elementsUnit\[filesystem\]\.style = style;\n){2,}/g,
+      "        this._elementsUnit[filesystem].style = style;\n"
+    );
 }
 
 const originalDiskContainer = `export const DiskContainerSpace = GObject.registerClass(
@@ -153,10 +201,12 @@ const brokenPatchedDiskContainer = `export const DiskContainerSpace = GObject.re
       }
     }
 
-    update_element_secondary_value(filesystem, value, unit) {
+    update_element_secondary_value(filesystem, value, unit, style = "") {
       if (this._elementsSecondaryValue[filesystem]) {
         this._elementsSecondaryValue[filesystem].text = value;
+        this._elementsSecondaryValue[filesystem].style = style;
         this._elementsSecondaryUnit[filesystem].text = unit;
+        this._elementsSecondaryUnit[filesystem].style = style;
       }
     }
   }
@@ -210,17 +260,58 @@ const fixedDiskContainer = `export const DiskContainerSpace = GObject.registerCl
         this._elementsValue[filesystem].text = value;
         this._elementsValue[filesystem].style = style;
         this._elementsUnit[filesystem].text = unit;
+        this._elementsUnit[filesystem].style = style;
       }
     }
 
-    update_element_secondary_value(filesystem, value, unit) {
+    update_element_secondary_value(filesystem, value, unit, style = "") {
       if (this._elementsSecondaryValue[filesystem]) {
         this._elementsSecondaryValue[filesystem].text = value;
+        this._elementsSecondaryValue[filesystem].style = style;
         this._elementsSecondaryUnit[filesystem].text = unit;
+        this._elementsSecondaryUnit[filesystem].style = style;
       }
     }
   }
 );`;
+
+const styleDiskUnitMigration = {
+  requiredMarker: "this._elementsSecondaryValue = [];",
+  all: true,
+  from: [
+    "        this._elementsValue[filesystem].text = value;",
+    "        this._elementsValue[filesystem].style = style;",
+    "        this._elementsUnit[filesystem].text = unit;",
+  ].join("\n"),
+  to: [
+    "        this._elementsValue[filesystem].text = value;",
+    "        this._elementsValue[filesystem].style = style;",
+    "        this._elementsUnit[filesystem].text = unit;",
+    "        this._elementsUnit[filesystem].style = style;",
+  ].join("\n"),
+};
+
+const styleDiskSecondaryMigration = {
+  requiredMarker: "this._elementsSecondaryValue = [];",
+  from: [
+    "    update_element_secondary_value(filesystem, value, unit) {",
+    "      if (this._elementsSecondaryValue[filesystem]) {",
+    "        this._elementsSecondaryValue[filesystem].text = value;",
+    "        this._elementsSecondaryUnit[filesystem].text = unit;",
+    "      }",
+    "    }",
+  ].join("\n"),
+  to: [
+    '    update_element_secondary_value(filesystem, value, unit, style = "") {',
+    "      if (this._elementsSecondaryValue[filesystem]) {",
+    "        this._elementsSecondaryValue[filesystem].text = value;",
+    "        this._elementsSecondaryValue[filesystem].style = style;",
+    "        this._elementsSecondaryUnit[filesystem].text = unit;",
+    "        this._elementsSecondaryUnit[filesystem].style = style;",
+    "      }",
+    "    }",
+  ].join("\n"),
+};
 
 const originalRefreshUpdate = [
   "          indicator._diskSpaceBox.update_element_value(",
@@ -287,7 +378,23 @@ const spaceUsedPatchedRefreshUpdate = [
   "          );",
 ].join("\n");
 
+const diskUsageStyleHelper = [
+  "function getDiskUsagePercentStyle(value) {",
+  "  if (!Number.isFinite(value)) {",
+  '    return "";',
+  "  }",
+  "",
+  "  const ratio = Math.max(0, Math.min(1, value / 100));",
+  "  const red = Math.round(255 * ratio);",
+  "  const green = Math.round(255 * (1 - ratio));",
+  "",
+  "  return `color: rgb(${red}, ${green}, 0);`;",
+  "}",
+].join("\n");
+
 const diskActivityHelper = [
+  diskUsageStyleHelper,
+  "",
   "function getDiskSpaceActivityPercent(indicator, filesystem) {",
   "  if (!indicator._diskSpaceActivitySamples) {",
   "    indicator._diskSpaceActivitySamples = new Map();",
@@ -439,7 +546,8 @@ const fixedRefreshUpdate = [
   "            scaleBase: indicator._dataScaleBase,",
   "          });",
   "          const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);",
-  "          const primaryStyle = indicator._getUsageColor(diskSpaceUsageDisplay.value, indicator._diskSpaceColors);",
+  "          const primaryStyle = getDiskUsagePercentStyle(diskSpaceUsageDisplay.value);",
+  "          const activityStyle = getDiskUsagePercentStyle(activityPercent);",
   "",
   "          indicator._diskSpaceBox.update_element_value(",
   "            entry.filesystem,",
@@ -450,7 +558,8 @@ const fixedRefreshUpdate = [
   "          indicator._diskSpaceBox.update_element_secondary_value(",
   "            entry.filesystem,",
   '            `${indicator._getValueFixed(activityPercent, "diskSpace")}`,',
-  '            "%"',
+  '            "%",',
+  "            activityStyle",
   "          );",
 ].join("\n");
 
@@ -531,12 +640,18 @@ const fixedExtensionDiskList = [
 ].join("\n");
 
 function ensureDiskActivityHelper(content) {
-  const marker = "function getDiskSpaceActivityPercent(indicator, filesystem)";
-  if (content.includes(marker)) {
+  const activityMarker = "function getDiskSpaceActivityPercent(indicator, filesystem)";
+  const colorMarker = "function getDiskUsagePercentStyle(value)";
+  if (content.includes(activityMarker) && content.includes(colorMarker)) {
     return content;
   }
 
   const refreshFunctionMarker = "export function refreshDiskSpaceValue(indicator) {";
+  if (content.includes(activityMarker) && !content.includes(colorMarker)) {
+    console.log("Patched refreshers.js disk usage color helper");
+    return content.replace(activityMarker, `${diskUsageStyleHelper}\n\n${activityMarker}`);
+  }
+
   if (content.includes(refreshFunctionMarker)) {
     console.log("Patched refreshers.js disk activity helper");
     return content.replace(
@@ -549,6 +664,54 @@ function ensureDiskActivityHelper(content) {
   return `${diskActivityHelper}\n\n${content}`;
 }
 
+function migrateDiskUsageStyle(content) {
+  const genericStyleLine =
+    "          const primaryStyle = indicator._getUsageColor(diskSpaceUsageDisplay.value, indicator._diskSpaceColors);";
+  const directStyleLine =
+    "          const primaryStyle = getDiskUsagePercentStyle(diskSpaceUsageDisplay.value);";
+
+  if (!content.includes(genericStyleLine)) {
+    return content;
+  }
+
+  console.log("Migrated refreshers.js disk usage color style");
+  return content.replace(genericStyleLine, directStyleLine);
+}
+
+function migrateDiskActivityStyle(content) {
+  const marker = "const activityStyle = getDiskUsagePercentStyle(activityPercent);";
+  if (content.includes(marker)) {
+    return content;
+  }
+
+  const activityLine =
+    "          const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);";
+  const secondaryCall = [
+    "          indicator._diskSpaceBox.update_element_secondary_value(",
+    "            entry.filesystem,",
+    '            `${indicator._getValueFixed(activityPercent, "diskSpace")}`,',
+    '            "%"',
+    "          );",
+  ].join("\n");
+  const styledSecondaryCall = [
+    "          indicator._diskSpaceBox.update_element_secondary_value(",
+    "            entry.filesystem,",
+    '            `${indicator._getValueFixed(activityPercent, "diskSpace")}`,',
+    '            "%",',
+    "            activityStyle",
+    "          );",
+  ].join("\n");
+
+  if (!content.includes(activityLine) || !content.includes(secondaryCall)) {
+    return content;
+  }
+
+  console.log("Migrated refreshers.js disk activity color style");
+  return content
+    .replace(activityLine, `${activityLine}\n          ${marker}`)
+    .replace(secondaryCall, styledSecondaryCall);
+}
+
 function removeStaleDiskSpaceDisplayBlock(content) {
   if (!staleDisplayBlockBeforeUsagePatchPattern.test(content)) {
     return content;
@@ -559,13 +722,15 @@ function removeStaleDiskSpaceDisplayBlock(content) {
 }
 
 let content = fs.readFileSync(containersPath, "utf8");
-content = replaceKnownSnippet(
+content = replaceKnownSnippetWithMigration(
   content,
   [originalDiskContainer, originalDiskContainerKb, brokenPatchedDiskContainer],
   fixedDiskContainer,
-  "this._elementsSecondaryValue = [];",
+  "this._elementsSecondaryUnit[filesystem].style = style;",
+  [styleDiskUnitMigration, styleDiskSecondaryMigration],
   "DiskContainerSpace"
 );
+content = normalizeDiskContainerStyles(content);
 fs.writeFileSync(containersPath, content);
 
 const refreshersPath = path.join(
@@ -595,6 +760,8 @@ refreshersContent = replaceKnownSnippetOrPatterns(
   "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {",
   "refreshers.js disk space update"
 );
+refreshersContent = migrateDiskUsageStyle(refreshersContent);
+refreshersContent = migrateDiskActivityStyle(refreshersContent);
 refreshersContent = removeStaleDiskSpaceDisplayBlock(refreshersContent);
 refreshersContent = replaceKnownSnippetOptional(
   refreshersContent,

@@ -116,6 +116,10 @@ def test_patch_initializes_secondary_disk_labels(tmp_path):
     assert "this._elementsSecondaryValue = [];" in patched
     assert "this._elementsSecondaryUnit = [];" in patched
     assert 'this._elementsSecondaryUnit[filesystem] = _createUnitLabel("%", [' in patched
+    assert "this._elementsUnit[filesystem].style = style;" in patched
+    assert "update_element_secondary_value(filesystem, value, unit, style = \"\")" in patched
+    assert "this._elementsSecondaryValue[filesystem].style = style;" in patched
+    assert "this._elementsSecondaryUnit[filesystem].style = style;" in patched
     assert "cleanup_elements()" in patched
 
 
@@ -157,10 +161,8 @@ def test_patch_uses_disk_usage_percent_and_activity_percent(tmp_path):
     assert 'monitor: "used"' in refreshers
     assert 'unitType: "perc"' in refreshers
     assert 'unitMeasure: indicator._diskSpaceUnitMeasure' in refreshers
-    assert (
-        "indicator._getUsageColor(diskSpaceUsageDisplay.value, "
-        "indicator._diskSpaceColors)"
-    ) in refreshers
+    assert "getDiskUsagePercentStyle(diskSpaceUsageDisplay.value)" in refreshers
+    assert "const activityStyle = getDiskUsagePercentStyle(activityPercent);" in refreshers
     assert '`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`' in refreshers
     assert '`${indicator._getValueFixed(activityPercent, "diskSpace")}`' in refreshers
     assert '"%"' in refreshers
@@ -239,10 +241,7 @@ def test_patch_removes_legacy_display_block_when_rendering_usage_percent(tmp_pat
     assert "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {" in refreshers
     assert 'monitor: "used"' in refreshers
     assert 'unitType: "perc"' in refreshers
-    assert (
-        "indicator._getUsageColor(diskSpaceUsageDisplay.value, "
-        "indicator._diskSpaceColors)"
-    ) in refreshers
+    assert "getDiskUsagePercentStyle(diskSpaceUsageDisplay.value)" in refreshers
 
 
 def test_patch_removes_stale_display_block_from_existing_free_gb_patch(tmp_path):
