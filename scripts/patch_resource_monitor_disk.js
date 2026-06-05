@@ -131,6 +131,18 @@ function normalizeDiskContainerStyles(content) {
     );
 }
 
+function getDiskUsagePercentStyle(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  const ratio = Math.max(0, Math.min(1, value / 100));
+  const red = ratio <= 0.5 ? Math.round(510 * ratio) : 255;
+  const green = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));
+
+  return `color: rgb(${red}, ${green}, 0);`;
+}
+
 const originalDiskContainer = `export const DiskContainerSpace = GObject.registerClass(
   class DiskContainerSpace extends DiskContainer {
     add_element(filesystem, label) {
@@ -385,8 +397,8 @@ const diskUsageStyleHelper = [
   "  }",
   "",
   "  const ratio = Math.max(0, Math.min(1, value / 100));",
-  "  const red = Math.round(255 * ratio);",
-  "  const green = Math.round(255 * (1 - ratio));",
+  "  const red = ratio <= 0.5 ? Math.round(510 * ratio) : 255;",
+  "  const green = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));",
   "",
   "  return `color: rgb(${red}, ${green}, 0);`;",
   "}",
@@ -541,12 +553,12 @@ const freeGbPrimaryActivityRefreshUpdate = [
 const fixedRefreshUpdate = [
   "          const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {",
   '            monitor: "used",',
-  '            unitType: "perc",',
-  "            unitMeasure: indicator._diskSpaceUnitMeasure,",
+  '            unitType: "numeric",',
+  '            unitMeasure: "g",',
   "            scaleBase: indicator._dataScaleBase,",
   "          });",
   "          const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);",
-  "          const primaryStyle = getDiskUsagePercentStyle(diskSpaceUsageDisplay.value);",
+  "          const primaryStyle = getDiskUsagePercentStyle(entry.usedPercent);",
   "          const activityStyle = getDiskUsagePercentStyle(activityPercent);",
   "",
   "          indicator._diskSpaceBox.update_element_value(",
@@ -678,6 +690,56 @@ function migrateDiskUsageStyle(content) {
   return content.replace(genericStyleLine, directStyleLine);
 }
 
+function migrateDiskUsageStyleGradient(content) {
+  const muddyGradient = [
+    "  const ratio = Math.max(0, Math.min(1, value / 100));",
+    "  const red = Math.round(255 * ratio);",
+    "  const green = Math.round(255 * (1 - ratio));",
+  ].join("\n");
+  const brightGradient = [
+    "  const ratio = Math.max(0, Math.min(1, value / 100));",
+    "  const red = ratio <= 0.5 ? Math.round(510 * ratio) : 255;",
+    "  const green = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));",
+  ].join("\n");
+
+  if (!content.includes(muddyGradient)) {
+    return content;
+  }
+
+  console.log("Migrated refreshers.js disk usage color gradient");
+  return content.replace(muddyGradient, brightGradient);
+}
+
+function migrateDiskSpacePrimaryToGb(content) {
+  let migratedContent = content;
+
+  const percentUnitType = '            unitType: "perc",';
+  const numericUnitType = '            unitType: "numeric",';
+  if (migratedContent.includes(percentUnitType)) {
+    migratedContent = migratedContent.replace(percentUnitType, numericUnitType);
+  }
+
+  const settingsUnitMeasure = "            unitMeasure: indicator._diskSpaceUnitMeasure,";
+  const gbUnitMeasure = '            unitMeasure: "g",';
+  if (migratedContent.includes(settingsUnitMeasure)) {
+    migratedContent = migratedContent.replace(settingsUnitMeasure, gbUnitMeasure);
+  }
+
+  const displayedValueStyle =
+    "          const primaryStyle = getDiskUsagePercentStyle(diskSpaceUsageDisplay.value);";
+  const usedPercentStyle =
+    "          const primaryStyle = getDiskUsagePercentStyle(entry.usedPercent);";
+  if (migratedContent.includes(displayedValueStyle)) {
+    migratedContent = migratedContent.replace(displayedValueStyle, usedPercentStyle);
+  }
+
+  if (migratedContent !== content) {
+    console.log("Migrated refreshers.js disk primary display to used GB");
+  }
+
+  return migratedContent;
+}
+
 function migrateDiskActivityStyle(content) {
   const marker = "const activityStyle = getDiskUsagePercentStyle(activityPercent);";
   if (content.includes(marker)) {
@@ -761,8 +823,10 @@ refreshersContent = replaceKnownSnippetOrPatterns(
   "refreshers.js disk space update"
 );
 refreshersContent = migrateDiskUsageStyle(refreshersContent);
-refreshersContent = migrateDiskActivityStyle(refreshersContent);
+refreshersContent = migrateDiskUsageStyleGradient(refreshersContent);
 refreshersContent = removeStaleDiskSpaceDisplayBlock(refreshersContent);
+refreshersContent = migrateDiskSpacePrimaryToGb(refreshersContent);
+refreshersContent = migrateDiskActivityStyle(refreshersContent);
 refreshersContent = replaceKnownSnippetOptional(
   refreshersContent,
   [originalDiskRefreshResult],

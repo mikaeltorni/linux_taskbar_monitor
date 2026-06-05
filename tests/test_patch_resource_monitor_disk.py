@@ -123,8 +123,8 @@ def test_patch_initializes_secondary_disk_labels(tmp_path):
     assert "cleanup_elements()" in patched
 
 
-def test_patch_uses_disk_usage_percent_and_activity_percent(tmp_path):
-    """Should render used disk percentage with live activity percent."""
+def test_patch_uses_disk_usage_gb_and_activity_percent(tmp_path):
+    """Should render used disk space in GB with live activity percent."""
     refresh_source = (
         'import {\n'
         '  getBaseStorageUnit,\n'
@@ -159,15 +159,15 @@ def test_patch_uses_disk_usage_percent_and_activity_percent(tmp_path):
     assert "activityPercent" in refreshers
     assert 'const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {' in refreshers
     assert 'monitor: "used"' in refreshers
-    assert 'unitType: "perc"' in refreshers
-    assert 'unitMeasure: indicator._diskSpaceUnitMeasure' in refreshers
-    assert "getDiskUsagePercentStyle(diskSpaceUsageDisplay.value)" in refreshers
+    assert 'unitType: "numeric"' in refreshers
+    assert 'unitMeasure: "g"' in refreshers
+    assert "getDiskUsagePercentStyle(entry.usedPercent)" in refreshers
     assert "const activityStyle = getDiskUsagePercentStyle(activityPercent);" in refreshers
     assert '`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`' in refreshers
     assert '`${indicator._getValueFixed(activityPercent, "diskSpace")}`' in refreshers
     assert '"%"' in refreshers
-    assert 'unitType: "numeric"' not in refreshers
-    assert 'unitMeasure: "g"' not in refreshers
+    assert 'unitType: "perc"' not in refreshers
+    assert 'unitMeasure: indicator._diskSpaceUnitMeasure' not in refreshers
     assert "devicePath: device.device" in refreshers
     assert "filesystem: device.mountPoint || device.device" in refreshers
     assert "getDiskSpaceActivityPercent(indicator, entry.devicePath)" in refreshers
@@ -240,8 +240,9 @@ def test_patch_removes_legacy_display_block_when_rendering_usage_percent(tmp_pat
     assert "const display = buildDiskSpaceDisplay(entry" not in refreshers
     assert "const diskSpaceUsageDisplay = buildDiskSpaceDisplay(entry, {" in refreshers
     assert 'monitor: "used"' in refreshers
-    assert 'unitType: "perc"' in refreshers
-    assert "getDiskUsagePercentStyle(diskSpaceUsageDisplay.value)" in refreshers
+    assert 'unitType: "numeric"' in refreshers
+    assert 'unitMeasure: "g"' in refreshers
+    assert "getDiskUsagePercentStyle(entry.usedPercent)" in refreshers
 
 
 def test_patch_removes_stale_display_block_from_existing_free_gb_patch(tmp_path):
