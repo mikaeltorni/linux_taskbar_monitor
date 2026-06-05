@@ -156,6 +156,20 @@ def test_patch_colors_disk_usage_percentage_from_green_to_red(tmp_path):
     assert "inverted: true" not in patched
 
 
+def test_patch_uses_green_yellow_red_gradient_with_255_steps(tmp_path):
+    """Gradients should hit bright yellow at 50% instead of dark olive."""
+    ext_path = _write_extension_fixture(tmp_path)
+
+    result = _run_patch(ext_path)
+    assert result.returncode == 0, f"Patch failed: {result.stderr}"
+
+    patched = ext_path.read_text(encoding="utf-8")
+    assert "function getGreenYellowRedGradientColor" in patched
+    assert "const midpointRGB = [255, 255, 0];" in patched
+    assert "return getGradientColor(value, minVal, midpoint, startRGB, midpointRGB);" in patched
+    assert "return getGradientColor(value, midpoint, maxVal, midpointRGB, endRGB);" in patched
+
+
 def test_patch_detects_disk_colors_by_indicator_property_identity(tmp_path):
     """Disk color detection should not depend only on startup marker injection."""
     ext_path = _write_extension_fixture(tmp_path)

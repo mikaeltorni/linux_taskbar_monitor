@@ -82,6 +82,17 @@ function getGradientColor(value, minVal, maxVal, startRGB, endRGB) {
   return rgbToStyle(r, g, b);
 }
 
+function getGreenYellowRedGradientColor(value, minVal, maxVal, startRGB, endRGB) {
+  const midpoint = minVal + (maxVal - minVal) / 2;
+  const midpointRGB = [255, 255, 0];
+
+  if (value <= midpoint) {
+    return getGradientColor(value, minVal, midpoint, startRGB, midpointRGB);
+  }
+
+  return getGradientColor(value, midpoint, maxVal, midpointRGB, endRGB);
+}
+
 // ── Gradient configuration per indicator type ────────────────────────────────
 
 /**
@@ -207,10 +218,68 @@ function _gradientGetUsageColor(indicator, value, colors) {
     effectiveValue = maxVal - numericValue;
   }
 
-  return getGradientColor(effectiveValue, minVal, maxVal, config.startRGB, config.endRGB);
+  return getGreenYellowRedGradientColor(
+    effectiveValue,
+    minVal,
+    maxVal,
+    config.startRGB,
+    config.endRGB
+  );
 }
 
 // ── Main patching function ───────────────────────────────────────────────────
+
+function migrateGreenYellowRedGradient(content) {
+  let migratedContent = content;
+
+  if (!migratedContent.includes("function getGreenYellowRedGradientColor")) {
+    const helperInsertionPoint = [
+      "  return rgbToStyle(r, g, b);",
+      "}",
+    ].join("\n");
+    const helperBlock = [
+      "  return rgbToStyle(r, g, b);",
+      "}",
+      "",
+      "function getGreenYellowRedGradientColor(value, minVal, maxVal, startRGB, endRGB) {",
+      "  const midpoint = minVal + (maxVal - minVal) / 2;",
+      "  const midpointRGB = [255, 255, 0];",
+      "",
+      "  if (value <= midpoint) {",
+      "    return getGradientColor(value, minVal, midpoint, startRGB, midpointRGB);",
+      "  }",
+      "",
+      "  return getGradientColor(value, midpoint, maxVal, midpointRGB, endRGB);",
+      "}",
+    ].join("\n");
+
+    if (migratedContent.includes(helperInsertionPoint)) {
+      migratedContent = migratedContent.replace(helperInsertionPoint, helperBlock);
+    }
+  }
+
+  const oldReturn =
+    "      return getGradientColor(effectiveValue, minVal, maxVal, config.startRGB, config.endRGB);";
+  const newReturn = [
+    "      return getGreenYellowRedGradientColor(",
+    "        effectiveValue,",
+    "        minVal,",
+    "        maxVal,",
+    "        config.startRGB,",
+    "        config.endRGB",
+    "      );",
+  ].join("\n");
+
+  if (migratedContent.includes(oldReturn)) {
+    migratedContent = migratedContent.replace(oldReturn, newReturn);
+  }
+
+  if (migratedContent !== content) {
+    console.log("Migrated gradient colors to green-yellow-red midpoint");
+  }
+
+  return migratedContent;
+}
 
 /**
  * Patch extension.js to override _getUsageColor with gradient-based coloring.
@@ -222,6 +291,7 @@ function patchExtensionJS(content) {
   // Check if already patched (idempotent).
   const alreadyPatchedMarker = "_gradientGetUsageColor";
   if (content.includes(alreadyPatchedMarker)) {
+    content = migrateGreenYellowRedGradient(content);
     if (!content.includes("colors === this._diskSpaceColors")) {
       console.log("Migrating gradient color detection to property identity checks");
       return content
@@ -273,6 +343,17 @@ function getGradientColor(value, minVal, maxVal, startRGB, endRGB) {
   const b = startRGB[2] + (endRGB[2] - startRGB[2]) * clampedRatio;
 
   return rgbToStyle(r, g, b);
+}
+
+function getGreenYellowRedGradientColor(value, minVal, maxVal, startRGB, endRGB) {
+  const midpoint = minVal + (maxVal - minVal) / 2;
+  const midpointRGB = [255, 255, 0];
+
+  if (value <= midpoint) {
+    return getGradientColor(value, minVal, midpoint, startRGB, midpointRGB);
+  }
+
+  return getGradientColor(value, midpoint, maxVal, midpointRGB, endRGB);
 }
 
 const GRADIENT_CONFIGS = {
@@ -435,7 +516,13 @@ const GRADIENT_CONFIGS = {
         effectiveValue = maxVal - numericValue;
       }
 
-      return getGradientColor(effectiveValue, minVal, maxVal, config.startRGB, config.endRGB);
+      return getGreenYellowRedGradientColor(
+        effectiveValue,
+        minVal,
+        maxVal,
+        config.startRGB,
+        config.endRGB
+      );
     }
 
     _getUsageColor(value, colors) {
