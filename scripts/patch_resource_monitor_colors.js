@@ -11,7 +11,7 @@
 //   - CPU:        0% green → ~50% yellow → 100% red (percentage-based)
 //   - RAM:        0GB green → maxRAM(64GB) red (configurable via GSettings)
 //   - Disk Space: 0% used green → 100% used red
-//   - Ethernet:   0 MB/s green → ETHERNET_MAX_MBPS MB/s red for both upload & download
+//   - Ethernet:   0 Mb/s green → ETHERNET_MAX_MBPS Mb/s red for both upload & download
 //   - Wi-Fi:      same as Ethernet
 //   - GPU Usage:  0% green → 100% red (percentage-based, like CPU)
 //   - GPU Memory: 0GB green → maxVRAM(nvidia-smi) red (configurable via GSettings)
@@ -30,7 +30,7 @@ if (!extPath) {
 
 // ── Configuration variables (adjust these to change gradient ranges) ─────────
 
-/** Maximum Ethernet/WLAN throughput for color gradient, in displayed MB/s. */
+/** Maximum Ethernet/WLAN throughput for color gradient, in displayed Mbps (megabits per second). */
 const ETHERNET_MAX_MBPS = 2000;
 
 /** Maximum RAM for color gradient, in GB. */
@@ -132,16 +132,16 @@ const GRADIENT_CONFIGS = {
     label: "Ethernet",
     minVal: 0,
     maxVal: ETHERNET_MAX_MBPS,
-    startRGB: [0, 255, 0],   // Green at 0 MB/s
-    endRGB: [255, 0, 0],     // Red at max MB/s
+    startRGB: [0, 255, 0],   // Green at 0 Mb/s
+    endRGB: [255, 0, 0],     // Red at max Mb/s
     inverted: false,
   },
   wlan: {
     label: "Wi-Fi",
     minVal: 0,
     maxVal: ETHERNET_MAX_MBPS,
-    startRGB: [0, 255, 0],   // Green at 0 MB/s
-    endRGB: [255, 0, 0],     // Red at max MB/s
+    startRGB: [0, 255, 0],   // Green at 0 Mb/s
+    endRGB: [255, 0, 0],     // Red at max Mb/s
     inverted: false,
   },
   gpu: {

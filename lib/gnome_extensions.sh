@@ -53,7 +53,7 @@ configure_resource_monitor_extension() {
 
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" "$ext_dir/panel/containers.js"
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" "$ext_dir/panel/containers.js"
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" "$ext_dir"
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" "$ext_dir/extension.js"
   run_as_target python3 "$SCRIPT_DIR/scripts/patch_resource_monitor_refresh.py" "$ext_dir"
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
@@ -79,6 +79,8 @@ configure_resource_monitor_extension() {
     --disk-space-gb \
     --schema-dir "$ext_dir/schemas"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethstatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netunit "'bits'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanstatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpustatus true
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunit "'numeric'"

@@ -281,14 +281,14 @@ class TestInstallerWiringColors:
 
     def test_installer_calls_color_patch_script(self):
         """Installer should call the new color patch script on extension.js."""
-        source = Path("install.sh").read_text(encoding="utf-8")
+        source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
         assert "patch_resource_monitor_colors.js" in source
         assert 'patch_resource_monitor_colors.js' in source
 
     def test_installer_patches_extension_js(self):
-        """Installer should apply color patch to extension.js, not containers.js."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        # The color patch targets extension.js (not containers.js).
+        """Installer should apply color patch to extension.js (via $ext_dir), not containers.js."""
+        source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
+        # The color patch targets the extension directory, which contains extension.js.
         assert "patch_resource_monitor_colors.js" in source
         lines = source.splitlines()
         for i, line in enumerate(lines):
@@ -297,7 +297,7 @@ class TestInstallerWiringColors:
 
     def test_installer_runs_color_patch_after_disk_and_vram(self):
         """Installer should run color patch after vram and disk patches."""
-        source = Path("install.sh").read_text(encoding="utf-8")
+        source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
         lines = [l.strip() for l in source.splitlines() if "patch_resource_monitor" in l]
         assert len(lines) >= 3, f"Expected at least 3 patch calls, found: {len(lines)}"
         # vram should be first, disk second, colors third.
