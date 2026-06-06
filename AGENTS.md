@@ -9,3 +9,53 @@ complete setup.
 
 Keep installation steps idempotent and verify the clean-install path for every
 change.
+
+## Running Without Sudo
+
+The GNOME Shell extension files live in `~/.local/share/gnome-shell/extensions/`
+and are owned by the user — no root is needed to patch or reconfigure them.
+
+### Apply a single setting change (no sudo)
+
+```bash
+gsettings set org.gnome.shell.extensions.resource-monitor netunit "'bits'"
+gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
+```
+
+### Re-apply all patches without sudo
+
+```bash
+# Disable the extension first so changes take effect on reload
+gnome-extensions disable Resource_Monitor@Ory0n
+
+# Run each patcher directly (no sudo needed — files are user-owned)
+node scripts/patch_resource_monitor_vram.js \
+  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/panel/containers.js
+node scripts/patch_resource_monitor_disk.js \
+  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/panel/containers.js
+node scripts/patch_resource_monitor_colors.js \
+  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/extension.js
+python3 scripts/patch_resource_monitor_refresh.py \
+  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
+
+# Re-enable the extension
+gnome-extensions enable Resource_Monitor@Ory0n
+```
+
+### Apply gsettings without sudo
+
+All `gsettings` commands work as the logged-in user — no `sudo` or `run_as_target`:
+
+```bash
+gsettings set org.gnome.shell.extensions.resource-monitor netunit "'bits'"
+gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
+# ... any other gsettings key
+```
+
+### When sudo IS required
+
+- Installing the extension zip to system-wide locations (`/usr/share/gnome-shell/extensions/`)
+- Modifying files owned by root (e.g., `/etc/`, `/usr/lib/`)
+- Running `apt install` or system package management
+
+For routine development and patching, **no sudo is needed**.
