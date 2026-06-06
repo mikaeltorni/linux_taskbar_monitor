@@ -26,14 +26,73 @@ ext_gsettings() {
 }
 
 configure_resource_monitor_extension() {
-  msg "Installing Resource Monitor from ubuntu_2404_taskbar_system_status_monitor"
-  if [ ! -x "$TASKBAR_SYSTEM_STATUS_MONITOR_DIR/install.sh" ]; then
-    log "warn" "Taskbar system status monitor installer not found at $TASKBAR_SYSTEM_STATUS_MONITOR_DIR/install.sh"
-    return 1
+  msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator"
+  need_cmd curl
+  need_cmd unzip
+  need_cmd node
+  need_cmd python3
+  need_cmd gsettings
+  need_cmd glib-compile-schemas
+
+  local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
+  local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
+  local tmpdir zip_file gpu_devices shell_version
+  tmpdir="$(mktemp -d)"
+  zip_file="$tmpdir/resource-monitor.zip"
+
+  curl -fL "$RESOURCE_MONITOR_EXTENSION_URL" -o "$zip_file"
+  if [ -n "$RESOURCE_MONITOR_EXTENSION_SHA256" ]; then
+    printf "%s  %s\n" "$RESOURCE_MONITOR_EXTENSION_SHA256" "$zip_file" | sha256sum -c -
   fi
 
-  RESOURCE_MONITOR_EXTENSION_ID="$RESOURCE_MONITOR_EXTENSION_ID" \
-  RESOURCE_MONITOR_EXTENSION_URL="$RESOURCE_MONITOR_EXTENSION_URL" \
-  RESOURCE_MONITOR_EXTENSION_SHA256="$RESOURCE_MONITOR_EXTENSION_SHA256" \
-    bash "$TASKBAR_SYSTEM_STATUS_MONITOR_DIR/install.sh"
+  run_as_target rm -rf "$ext_dir"
+  run_as_target mkdir -p "$ext_dir"
+  unzip -q "$zip_file" -d "$ext_dir"
+  chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+  rm -rf "$tmpdir"
+
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" "$ext_dir/panel/containers.js"
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" "$ext_dir/panel/containers.js"
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" "$ext_dir"
+  run_as_target python3 "$SCRIPT_DIR/scripts/patch_resource_monitor_refresh.py" "$ext_dir"
+
+  shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
+  if [ -n "$shell_version" ]; then
+    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" || true
+  fi
+
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime 0.5
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor itemsposition "['cpu', 'ram', 'stats', 'space', 'eth', 'wlan', 'gpu']"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpustatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpufrequencystatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuloadaveragestatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramstatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramunit "'numeric'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor rammonitor "'used'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor swapstatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskstatsstatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacestatus true
+  run_as_target python3 "$SCRIPT_DIR/scripts/configure_resource_monitor.py" \
+    --disk-space-gb \
+    --schema-dir "$ext_dir/schemas"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethstatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanstatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpustatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunit "'numeric'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunitmeasure "'auto'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemorymonitor "'used'"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudisplaydevicename false
+
+  gpu_devices="$(run_as_target python3 "$SCRIPT_DIR/scripts/report_cuda_devices.py")"
+  if [ -n "$gpu_devices" ]; then
+    ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "$gpu_devices"
+  else
+    msg "No NVIDIA GPU reported by nvidia-smi; Resource Monitor GPU list left empty."
+  fi
+
+  enable_shell_extension "$ext_id"
+  msg "Resource Monitor installed with a 0.5-second refresh interval."
 }

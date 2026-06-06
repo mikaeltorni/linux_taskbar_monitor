@@ -2,7 +2,7 @@
 
 Standalone installer for the GNOME Shell Resource Monitor taskbar status setup used on Ubuntu 24.04.
 
-It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, and gradient colors, and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
+It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, gradient colors, and 500 ms refreshes, and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
 
 ## Technology Stack
 
@@ -43,6 +43,7 @@ bash -n install.sh
 - `scripts/patch_resource_monitor_disk.js` - patches disk space display and activity percentage behavior.
 - `scripts/patch_resource_monitor_vram.js` - patches GPU VRAM display formatting.
 - `scripts/patch_resource_monitor_colors.js` - patches Resource Monitor value colors with per-metric gradients.
+- `scripts/patch_resource_monitor_refresh.py` - adds sub-second timer/schema support and a 500 ms refresh interval.
 - `tests/` - simulation tests; no system settings are changed by tests.
 
 ## Configuration
@@ -56,6 +57,10 @@ The installer supports these environment overrides:
 Disk space is configured in GB mode, so the panel shows the `/home` disk row as colored free-space GB and keeps disk throughput stats disabled. The disk patch renders live disk load as a secondary colored percentage next to that primary GB value.
 
 Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`. Ethernet uses `netunitmeasure 'm'`, and the color gradient reaches red at the `ETHERNET_MAX_MBPS` displayed MB/s value in `scripts/patch_resource_monitor_colors.js`.
+
+Resource values refresh every 0.5 seconds. This is implemented inside the
+extension because upstream v27 stores whole seconds and uses
+`GLib.timeout_add_seconds`; no Ubuntu system-wide configuration is required.
 
 ## Troubleshooting
 
