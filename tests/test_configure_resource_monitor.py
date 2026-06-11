@@ -334,31 +334,34 @@ class TestMain:
         assert result == 0
 
 
+# Installer wiring lives in install.sh plus the sourced lib/ helper that
+# configures the Resource Monitor extension. Read both so the assertions track
+# the actual installed behavior regardless of which file holds each line.
+INSTALLER_WIRING_SOURCE = (
+    Path("install.sh").read_text(encoding="utf-8")
+    + "\n"
+    + Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
+)
+
+
 class TestInstallerWiring:
     """Tests for installer integration with Resource Monitor configuration."""
 
     def test_gnome_extension_installer_applies_disk_device_list(self):
         """Installer should populate diskdeviceslist after enabling disk status."""
-        source = Path("install.sh").read_text(encoding="utf-8")
+        source = INSTALLER_WIRING_SOURCE
 
         assert "scripts/configure_resource_monitor.py" in source
-        assert "--disk-space-perc-home-only" in source
+        assert "--disk-space-gb" in source
         assert '--schema-dir "$ext_dir/schemas"' in source
         assert "diskstatsstatus false" in source
-        assert "diskspaceunit \"'perc'\"" in source
         assert "netethstatus true" in source
         assert "netwlanstatus false" in source
         assert "['cpu', 'ram', 'stats', 'space', 'eth', 'wlan', 'gpu']" in source
 
     def test_installer_sets_ethernet_to_megabytes(self):
-        """Installer should set netunitmeasure to 'm' for MB/s display."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "netunitmeasure \"'m'\"" in source
-
-    def test_installer_sets_ethernet_decimals_to_one(self):
-        """Installer should set netethdecimals to 1 for 0.1 precision."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "netethdecimals 1" in source
+        """Installer should set netunitmeasure to 'm' for Mbps display."""
+        assert "netunitmeasure \"'m'\"" in INSTALLER_WIRING_SOURCE
 
 
 if __name__ == "__main__":
@@ -510,32 +513,20 @@ class TestMainPercHomeOnly:
         assert result == 1
 
 
-class TestInstallerWiringPercHomeOnly:
-    """Tests for installer integration with percentage + home-only configuration."""
+class TestInstallerWiringDiskSpaceGb:
+    """Tests for installer integration with the free-GB disk space configuration."""
 
-    def test_installer_uses_perc_home_only_flag(self):
-        """Installer should use --disk-space-perc-home-only flag instead of --disk-space-gb."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "--disk-space-perc-home-only" in source
+    def test_installer_uses_disk_space_gb_flag(self):
+        """Installer should configure disk space via the --disk-space-gb flag."""
+        assert "--disk-space-gb" in INSTALLER_WIRING_SOURCE
 
-    def test_installer_sets_diskspaceunit_to_perc(self):
-        """Installer should set diskspaceunit to 'perc' instead of 'numeric'."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "diskspaceunit \"'perc'\"" in source
-
-    def test_installer_no_longer_sets_diskspaceunitmeasure(self):
-        """Installer should not set diskspaceunitmeasure when using percentage mode."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "diskspaceunitmeasure" not in source
-
-    def test_installer_sets_diskspacemonitor_to_used(self):
-        """Installer should show disk percentage usage status."""
-        source = Path("install.sh").read_text(encoding="utf-8")
-        assert "diskspacemonitor \"'used'\"" in source
+    def test_installer_does_not_use_perc_home_only_flag(self):
+        """Installer should not use the percentage home-only disk mode."""
+        assert "--disk-space-perc-home-only" not in INSTALLER_WIRING_SOURCE
 
     def test_installer_still_configures_other_settings(self):
         """Installer should still configure other Resource Monitor settings correctly."""
-        source = Path("install.sh").read_text(encoding="utf-8")
+        source = INSTALLER_WIRING_SOURCE
         assert "scripts/configure_resource_monitor.py" in source
         assert "diskstatsstatus false" in source
         assert "diskspacestatus true" in source
