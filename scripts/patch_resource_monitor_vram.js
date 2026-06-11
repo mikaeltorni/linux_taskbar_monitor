@@ -1,6 +1,5 @@
 // Patch Resource Monitor extension to show VRAM right next to GPU usage % (no brackets)
 const fs = require('fs');
-const path = require('path');
 
 const containersPath = process.argv[2];
 if (!containersPath) {

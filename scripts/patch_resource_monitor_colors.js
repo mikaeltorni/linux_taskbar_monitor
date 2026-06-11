@@ -20,7 +20,6 @@
 //   node scripts/patch_resource_monitor_colors.js <path-to-extension.js>
 
 const fs = require("fs");
-const path = require("path");
 
 const extPath = process.argv[2];
 if (!extPath) {
