@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Add sub-second refresh interval support to Resource Monitor."""
+"""
+patch_resource_monitor_refresh.py — Add sub-second refresh interval support to
+the Resource Monitor extension.
+
+Upstream Resource Monitor only allows whole-second refresh intervals and
+throttles GPU polling to a 5-second floor. This script rewrites the relevant
+source files so the panel can refresh every 0.5 seconds (including GPU
+usage/VRAM), then recompiles the GSettings schemas.
+
+Components:
+  - REPLACEMENTS: Mapping of extension-relative file paths to the (old, new)
+    source substitutions applied to each file.
+  - patch_extension(extension_dir): Apply all replacements and recompile schemas.
+  - main(): CLI entry point — patches the extension directory given as argv[1].
+
+Usage (called from bash):
+  python3 scripts/patch_resource_monitor_refresh.py <extension-directory>
+"""
 
 from pathlib import Path
 import subprocess
@@ -55,6 +72,25 @@ REPLACEMENTS = {
 
 
 def patch_extension(extension_dir: str | Path) -> None:
+    """Apply the sub-second refresh patches and recompile the schemas.
+
+    Each file in REPLACEMENTS is read, its (old, new) substitutions are applied
+    (skipping any already present so the patch is idempotent), and written back.
+    Finally ``glib-compile-schemas`` is run so the modified gschema takes effect.
+
+    Args:
+        extension_dir: Path to the installed Resource Monitor extension directory
+            (the folder containing extension.js, prefs.js, schemas/, etc.).
+
+    Returns:
+        None.
+
+    Raises:
+        RuntimeError: If a target file does not contain the expected upstream
+            source to patch.
+        OSError: If a source file cannot be read or written.
+        subprocess.CalledProcessError: If schema compilation fails.
+    """
     root = Path(extension_dir)
     for relative_path, replacements in REPLACEMENTS.items():
         path = root / relative_path
@@ -74,6 +110,14 @@ def patch_extension(extension_dir: str | Path) -> None:
 
 
 def main() -> int:
+    """CLI entry point for patch_resource_monitor_refresh.py.
+
+    Expects exactly one positional argument: the path to the installed
+    Resource Monitor extension directory.
+
+    Returns:
+        0 on success, 1 on a usage error or when patching fails.
+    """
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <extension-directory>", file=sys.stderr)
         return 1

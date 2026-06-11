@@ -18,6 +18,16 @@ if (!containersPath) {
   process.exit(1);
 }
 
+/**
+ * Replace the first matching known snippet in a file's content with a replacement.
+ * Exits the process if none of the snippets are found (and the patch is not already applied).
+ * @param {string} content - Current file content.
+ * @param {string[]} snippets - Candidate upstream snippets to look for, in priority order.
+ * @param {string} replacement - Text to substitute for the matched snippet.
+ * @param {string} alreadyMarker - Substring whose presence means the patch is already applied.
+ * @param {string} targetName - Human-readable name used in log messages.
+ * @returns {string} Patched content (or unchanged content when already patched).
+ */
 function replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targetName) {
   if (content.includes(alreadyMarker)) {
     console.log(`${targetName} already patched`);
@@ -35,6 +45,19 @@ function replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targ
   process.exit(1);
 }
 
+/**
+ * Apply in-place migrations to older patched output before falling back to a
+ * fresh snippet replacement. Lets the script upgrade content it patched in a
+ * previous run without re-matching the pristine upstream snippet.
+ * @param {string} content - Current file content.
+ * @param {string[]} snippets - Pristine upstream snippets for first-time patching.
+ * @param {string} replacement - Replacement text for first-time patching.
+ * @param {string} alreadyMarker - Substring meaning the patch is already current.
+ * @param {Array<{from: string, to: string, all?: boolean, requiredMarker?: string}>} migrations
+ *   - Ordered migrations from older patched output to the current form.
+ * @param {string} targetName - Human-readable name used in log messages.
+ * @returns {string} Patched, migrated, or unchanged content.
+ */
 function replaceKnownSnippetWithMigration(
   content,
   snippets,
@@ -71,6 +94,17 @@ function replaceKnownSnippetWithMigration(
   return replaceKnownSnippet(content, snippets, replacement, alreadyMarker, targetName);
 }
 
+/**
+ * Patch content by trying regex patterns first, then literal snippets.
+ * Exits the process if neither matches (and the patch is not already applied).
+ * @param {string} content - Current file content.
+ * @param {string[]} snippets - Literal fallback snippets to look for.
+ * @param {RegExp[]} patterns - Regex patterns tried before the literal snippets.
+ * @param {string} replacement - Replacement text for the matched pattern/snippet.
+ * @param {string} alreadyMarker - Substring meaning the patch is already applied.
+ * @param {string} targetName - Human-readable name used in log messages.
+ * @returns {string} Patched content (or unchanged content when already patched).
+ */
 function replaceKnownSnippetOrPatterns(
   content,
   snippets,
@@ -102,6 +136,17 @@ function replaceKnownSnippetOrPatterns(
   process.exit(1);
 }
 
+/**
+ * Like replaceKnownSnippet, but tolerant: when no snippet matches it logs and
+ * returns the content unchanged instead of exiting. Use for optional patches
+ * whose target may legitimately be absent in some extension versions.
+ * @param {string} content - Current file content.
+ * @param {string[]} snippets - Candidate upstream snippets to look for.
+ * @param {string} replacement - Replacement text for the matched snippet.
+ * @param {string} alreadyMarker - Substring meaning the patch is already applied.
+ * @param {string} targetName - Human-readable name used in log messages.
+ * @returns {string} Patched content, or unchanged content when no target is found.
+ */
 function replaceKnownSnippetOptional(content, snippets, replacement, alreadyMarker, targetName) {
   if (content.includes(alreadyMarker)) {
     console.log(`${targetName} already patched`);
@@ -119,6 +164,13 @@ function replaceKnownSnippetOptional(content, snippets, replacement, alreadyMark
   return content;
 }
 
+/**
+ * Ensure each disk unit label gets its style applied exactly once.
+ * Inserts a missing `.style = style;` assignment after the unit-text line and
+ * collapses any accidental duplicate assignments produced by re-running the patch.
+ * @param {string} content - containers.js content after the main patch.
+ * @returns {string} Content with normalized, de-duplicated unit style assignments.
+ */
 function normalizeDiskContainerStyles(content) {
   return content
     .replace(
@@ -131,6 +183,11 @@ function normalizeDiskContainerStyles(content) {
     );
 }
 
+/**
+ * Build a green→yellow→red CSS color style for a disk usage percentage.
+ * @param {number} value - Usage percentage (0–100). Non-finite values yield "".
+ * @returns {string} A `color: rgb(r, g, 0);` style string, or "" when value is invalid.
+ */
 function getDiskUsagePercentStyle(value) {
   if (!Number.isFinite(value)) {
     return "";
@@ -651,6 +708,13 @@ const fixedExtensionDiskList = [
   "      });",
 ].join("\n");
 
+/**
+ * Ensure refreshers.js contains both the disk-activity and disk-usage-color
+ * helper functions, injecting whichever is missing at the appropriate anchor
+ * (or prepending them when no anchor exists).
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Content guaranteed to define both helper functions.
+ */
 function ensureDiskActivityHelper(content) {
   const activityMarker = "function getDiskSpaceActivityPercent(indicator, filesystem)";
   const colorMarker = "function getDiskUsagePercentStyle(value)";
@@ -676,6 +740,12 @@ function ensureDiskActivityHelper(content) {
   return `${diskActivityHelper}\n\n${content}`;
 }
 
+/**
+ * Switch the primary disk style from the generic gradient helper to the
+ * dedicated getDiskUsagePercentStyle helper. No-op if already migrated.
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Migrated or unchanged content.
+ */
 function migrateDiskUsageStyle(content) {
   const genericStyleLine =
     "          const primaryStyle = indicator._getUsageColor(diskSpaceUsageDisplay.value, indicator._diskSpaceColors);";
@@ -690,6 +760,12 @@ function migrateDiskUsageStyle(content) {
   return content.replace(genericStyleLine, directStyleLine);
 }
 
+/**
+ * Upgrade an older "muddy" disk usage gradient to the brighter
+ * green→yellow→red gradient. No-op if the old gradient is absent.
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Migrated or unchanged content.
+ */
 function migrateDiskUsageStyleGradient(content) {
   const muddyGradient = [
     "  const ratio = Math.max(0, Math.min(1, value / 100));",
@@ -710,6 +786,13 @@ function migrateDiskUsageStyleGradient(content) {
   return content.replace(muddyGradient, brightGradient);
 }
 
+/**
+ * Migrate the primary disk display from "used percent" to "free GB": switches
+ * the monitor/unit-type/unit-measure settings and recolors using usedPercent.
+ * Each substitution is applied only when its source form is present.
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Migrated or unchanged content.
+ */
 function migrateDiskSpacePrimaryToFreeGb(content) {
   let migratedContent = content;
 
@@ -746,6 +829,13 @@ function migrateDiskSpacePrimaryToFreeGb(content) {
   return migratedContent;
 }
 
+/**
+ * Add a color style to the secondary disk-activity (live IO %) label by
+ * computing activityStyle and passing it to update_element_secondary_value.
+ * No-op if already migrated or the expected anchors are missing.
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Migrated or unchanged content.
+ */
 function migrateDiskActivityStyle(content) {
   const marker = "const activityStyle = getDiskUsagePercentStyle(activityPercent);";
   if (content.includes(marker)) {
@@ -780,6 +870,12 @@ function migrateDiskActivityStyle(content) {
     .replace(secondaryCall, styledSecondaryCall);
 }
 
+/**
+ * Remove a stale disk-space display block left by earlier patch revisions that
+ * would otherwise sit before the current usage patch. No-op if not present.
+ * @param {string} content - refreshers.js content.
+ * @returns {string} Content with the stale block removed, or unchanged.
+ */
 function removeStaleDiskSpaceDisplayBlock(content) {
   if (!staleDisplayBlockBeforeUsagePatchPattern.test(content)) {
     return content;
