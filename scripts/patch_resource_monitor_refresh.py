@@ -11,6 +11,13 @@ REPLACEMENTS = {
         ("this._settings.get_int(REFRESH_TIME)", "this._settings.get_double(REFRESH_TIME)"),
         ("GLib.timeout_add_seconds(", "GLib.timeout_add("),
         ("        this._refreshTime,\n", "        Math.round(this._refreshTime * 1000),\n"),
+        # Upstream throttles GPU polling to a 5-second minimum, which keeps the
+        # GPU usage/VRAM values from refreshing at the configured 0.5 s rate the
+        # way CPU, RAM, and ethernet do. Lower the floor so GPU follows suit.
+        (
+            "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;",
+            "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;",
+        ),
     ),
     "services/settings.js": (
         (

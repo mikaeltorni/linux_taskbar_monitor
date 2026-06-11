@@ -14,6 +14,7 @@ def write_extension_fixture(tmp_path: Path) -> None:
             "GLib.timeout_add_seconds(\n"
             "        GLib.PRIORITY_DEFAULT,\n"
             "        this._refreshTime,\n"
+            "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;\n"
         ),
         "services/settings.js": "indicator._settings.get_int(keys.REFRESH_TIME);\n",
         "prefs.js": (
@@ -45,6 +46,7 @@ def test_patches_refresh_interval_to_half_second(tmp_path: Path):
     assert "get_double(REFRESH_TIME)" in extension
     assert extension.count("GLib.timeout_add(") == 2
     assert extension.count("Math.round(this._refreshTime * 1000)") == 2
+    assert "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;" in extension
     assert "get_double(keys.REFRESH_TIME)" in (
         tmp_path / "services/settings.js"
     ).read_text(encoding="utf-8")
