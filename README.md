@@ -1,6 +1,6 @@
 # Ubuntu 24.04 Taskbar System Status Monitor
 
-> Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more).
+> Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more). Tested on Ubuntu 24.04.4 LTS.
 
 Standalone installer for the GNOME Shell Resource Monitor taskbar status setup used on Ubuntu 24.04.
 
