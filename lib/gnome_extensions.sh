@@ -48,7 +48,9 @@ configure_resource_monitor_extension() {
   run_as_target rm -rf "$ext_dir"
   run_as_target mkdir -p "$ext_dir"
   unzip -q "$zip_file" -d "$ext_dir"
-  chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+  if [ "$(id -u)" -eq 0 ]; then
+    chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+  fi
   rm -rf "$tmpdir"
 
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" "$ext_dir/panel/containers.js"

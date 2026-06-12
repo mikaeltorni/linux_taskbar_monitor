@@ -11,7 +11,8 @@
 #
 # Idempotent: skips already-installed extensions, detects existing desktop files.
 #
-# Usage: sudo bash install.sh
+# Usage: bash install.sh        # user-level setup; apt steps skipped and reported
+#        sudo bash install.sh   # full setup including apt packages
 
 set -euo pipefail
 
@@ -38,10 +39,31 @@ CHROME_PWAS=(
 msg() { printf '[%(%Y-%m-%dT%H:%M:%S%z)T] %s\n' -1 "$*"; }
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-run_as_target() { sudo -H -u "$TARGET_USER" env \
-  HOME="$TARGET_HOME" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
-  XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" \
-  DISPLAY="$DISPLAY_VAL" "$@"; }
+run_as_target() {
+  if [ "$(id -un)" = "$TARGET_USER" ]; then
+    env HOME="$TARGET_HOME" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
+      XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" \
+      DISPLAY="$DISPLAY_VAL" "$@"
+  else
+    sudo -H -u "$TARGET_USER" env \
+      HOME="$TARGET_HOME" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
+      XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" \
+      DISPLAY="$DISPLAY_VAL" "$@"
+  fi
+}
+
+# is_root: Return success when running with root privileges.
+is_root() { [ "$(id -u)" -eq 0 ]; }
+
+# Root-only steps skipped during a non-root run; reported at the end.
+SUDO_REQUIRED_STEPS=()
+note_sudo_required() { SUDO_REQUIRED_STEPS+=("$1"); msg "SKIP (requires sudo): $1"; }
+report_sudo_required() {
+  [ "${#SUDO_REQUIRED_STEPS[@]}" -eq 0 ] && return 0
+  msg "The following steps still require root and were skipped:"
+  printf '    - %s\n' "${SUDO_REQUIRED_STEPS[@]}"
+  msg "Apply them with: sudo bash install.sh"
+}
 
 DESKTOP_DIRS=(/usr/share/applications /var/lib/snapd/desktop/applications "$TARGET_HOME/.local/share/applications")
 
@@ -109,7 +131,13 @@ user_gsettings_set_if_key_exists() {
   if gsettings_key_exists "$schema" "$key"; then run_as_target gsettings set "$schema" "$key" "$value" || true; fi
 }
 
-apt_install() { DEBIAN_FRONTEND=noninteractive apt install -y "$@"; }
+apt_install() {
+  local missing=() pkg
+  for pkg in "$@"; do dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg"); done
+  [ "${#missing[@]}" -eq 0 ] && return 0
+  if ! is_root; then note_sudo_required "apt install ${missing[*]}"; return 0; fi
+  DEBIAN_FRONTEND=noninteractive apt install -y "${missing[@]}"
+}
 
 # ── Source extension library modules ──────────────────────────────────────────
 source "$SCRIPT_DIR/lib/extension_installation.sh"
@@ -119,11 +147,6 @@ source "$SCRIPT_DIR/lib/gnome_extensions.sh"
 source "$SCRIPT_DIR/lib/extension_features.sh"
 
 # ── Main installer logic ─────────────────────────────────────────────────────
-if [ "$(id -u)" -ne 0 ]; then
-  msg "Run this installer with sudo: sudo bash install.sh"
-  exit 1
-fi
-
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
 
 # Resource Monitor extension (core taskbar component) — idempotent via install_gnome_ext_zip
@@ -143,5 +166,6 @@ configure_auto_move_windows
 configure_dash_and_switchers
 configure_pwa_icons
 
+report_sudo_required
 msg "=== Taskbar Setup Complete ==="
 msg "Log out and back in before testing GNOME Shell extension changes."

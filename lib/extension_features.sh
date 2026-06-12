@@ -35,8 +35,12 @@ install_pwa_icons() {
   local icons_owner
   icons_owner="$(stat -c '%U' "$icon_base" 2>/dev/null || echo unknown)"
   if [ "$icons_owner" = "root" ]; then
-    msg "Fixing ownership of $icon_base to $TARGET_USER"
-    chown "$TARGET_USER:$TARGET_USER" "$icon_base"
+    if [ "$(id -u)" -eq 0 ]; then
+      msg "Fixing ownership of $icon_base to $TARGET_USER"
+      chown "$TARGET_USER:$TARGET_USER" "$icon_base"
+    else
+      msg "WARN: $icon_base is root-owned; run with sudo once to fix ownership"
+    fi
   fi
 
   # Collect all icon sizes from Chrome PWA folders, then create directories for them
