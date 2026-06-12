@@ -1,5 +1,7 @@
 # Ubuntu 24.04 Taskbar System Status Monitor
 
+> Part of [installation_scripts](https://github.com/mikaeltorni/installation_scripts) — the master installer that orchestrates a productivity-focused Ubuntu 24.04 desktop setup (workspaces, hotkeys, window tiling, programming tools, and more).
+
 Standalone installer for the GNOME Shell Resource Monitor taskbar status setup used on Ubuntu 24.04.
 
 It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, gradient colors, and 500 ms refreshes, and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
