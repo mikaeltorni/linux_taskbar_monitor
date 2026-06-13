@@ -20,6 +20,14 @@
 //   node scripts/patch_resource_monitor_colors.js <path-to-extension.js>
 
 const fs = require("fs");
+// Gradient ranges are sourced from the tested gradient_colors module so the
+// values interpolated into the injected support block have a single definition.
+const {
+  ETHERNET_MAX_MBPS,
+  RAM_MAX_GB,
+  DISK_USAGE_MAX_PERCENT,
+  GPU_MEMORY_MAX_GB,
+} = require("./lib/gradient_colors");
 
 const extPath = process.argv[2];
 if (!extPath) {
@@ -27,204 +35,9 @@ if (!extPath) {
   process.exit(1);
 }
 
-// ── Configuration variables (adjust these to change gradient ranges) ─────────
-
-/** Maximum Ethernet/WLAN throughput for color gradient, in displayed Mbps (megabits per second). */
-const ETHERNET_MAX_MBPS = 2000;
-
-/** Maximum RAM for color gradient, in GB. */
-const RAM_MAX_GB = 64;
-
-/** Maximum disk usage percentage for color gradient. */
-const DISK_USAGE_MAX_PERCENT = 100;
-
-/** Maximum GPU memory (VRAM) for color gradient, in GB. */
-const GPU_MEMORY_MAX_GB = 24;
-
-// ── Color helpers ────────────────────────────────────────────────────────────
-
-/**
- * Convert RGB values to a CSS color string.
- * @param {number} r - Red (0-255)
- * @param {number} g - Green (0-255)
- * @param {number} b - Blue (0-255)
- * @returns {string} CSS style string with color property.
- */
-function rgbToStyle(r, g, b) {
-  const rr = Math.max(0, Math.min(255, Math.round(r)));
-  const gg = Math.max(0, Math.min(255, Math.round(g)));
-  const bb = Math.max(0, Math.min(255, Math.round(b)));
-  return `color: rgb(${rr}, ${gg}, ${bb});`;
-}
-
-/**
- * Compute a gradient color between two RGB endpoints.
- * Uses linear interpolation for smooth transitions across the value range.
- * @param {number} value - Current value (within minVal..maxVal).
- * @param {number} minVal - Minimum threshold value.
- * @param {number} maxVal - Maximum threshold value.
- * @param {number[]} startRGB - Start RGB [r, g, b].
- * @param {number[]} endRGB - End RGB [r, g, b].
- * @returns {string} CSS color style string.
- */
-function getGradientColor(value, minVal, maxVal, startRGB, endRGB) {
-  if (!Number.isFinite(value)) return "";
-
-  const ratio = (value - minVal) / (maxVal - minVal);
-  const clampedRatio = Math.max(0, Math.min(1, ratio));
-
-  // Linear interpolation across the gradient.
-  const r = startRGB[0] + (endRGB[0] - startRGB[0]) * clampedRatio;
-  const g = startRGB[1] + (endRGB[1] - startRGB[1]) * clampedRatio;
-  const b = startRGB[2] + (endRGB[2] - startRGB[2]) * clampedRatio;
-
-  return rgbToStyle(r, g, b);
-}
-
-function getGreenYellowRedGradientColor(value, minVal, maxVal, startRGB, endRGB) {
-  const midpoint = minVal + (maxVal - minVal) / 2;
-  const midpointRGB = [255, 255, 0];
-
-  if (value <= midpoint) {
-    return getGradientColor(value, minVal, midpoint, startRGB, midpointRGB);
-  }
-
-  return getGradientColor(value, midpoint, maxVal, midpointRGB, endRGB);
-}
-
-// ── Gradient configuration per indicator type ────────────────────────────────
-
-/**
- * Configuration for each indicator's color gradient.
- * Each entry defines:
- *   - minVal / maxVal: The value range (e.g., 0-100 for CPU, 0-64GB for RAM).
- *   - startRGB: Color at minimum (green = healthy).
- *   - endRGB: Color at maximum (red = critical).
- *   - inverted: If true, green at max and red at min (for disk space free).
- */
-const GRADIENT_CONFIGS = {
-  cpu: {
-    label: "CPU",
-    minVal: 0,
-    maxVal: 100,
-    startRGB: [0, 255, 0],   // Green at 0% usage
-    endRGB: [255, 0, 0],     // Red at 100% usage
-    inverted: false,
-  },
-  ram: {
-    label: "RAM",
-    minVal: 0,
-    maxVal: RAM_MAX_GB,
-    startRGB: [0, 255, 0],   // Green at 0GB used
-    endRGB: [255, 0, 0],     // Red at maxGB used
-    inverted: false,
-  },
-  diskSpace: {
-    label: "Disk Space",
-    minVal: 0,
-    maxVal: DISK_USAGE_MAX_PERCENT,
-    startRGB: [0, 255, 0],   // Green at 0% used
-    endRGB: [255, 0, 0],     // Red at 100% used
-    inverted: false,
-  },
-  eth: {
-    label: "Ethernet",
-    minVal: 0,
-    maxVal: ETHERNET_MAX_MBPS,
-    startRGB: [0, 255, 0],   // Green at 0 Mb/s
-    endRGB: [255, 0, 0],     // Red at max Mb/s
-    inverted: false,
-  },
-  wlan: {
-    label: "Wi-Fi",
-    minVal: 0,
-    maxVal: ETHERNET_MAX_MBPS,
-    startRGB: [0, 255, 0],   // Green at 0 Mb/s
-    endRGB: [255, 0, 0],     // Red at max Mb/s
-    inverted: false,
-  },
-  gpu: {
-    label: "GPU",
-    minVal: 0,
-    maxVal: 100,             // GPU usage percentage (configurable via nvidia-smi)
-    startRGB: [0, 255, 0],   // Green at 0%
-    endRGB: [255, 0, 0],     // Red at max%
-    inverted: false,
-  },
-  gpuMemory: {
-    label: "GPU Memory",
-    minVal: 0,
-    maxVal: GPU_MEMORY_MAX_GB,
-    startRGB: [0, 255, 0],   // Green at 0GB used
-    endRGB: [255, 0, 0],     // Red at maxVRAM used
-    inverted: false,
-  },
-};
-
-// ── Gradient-based _getUsageColor override ────────────────────────────────────
-
-/**
- * Override for the extension's _getUsageColor method.
- * Uses configurable RGB gradients instead of threshold-based coloring.
- *
- * Detection strategy: Each indicator's colors array is augmented with a type marker
- * (e.g., "__cpu", "__ram") during initialization. This function parses those markers
- * to reliably identify which metric is being colored, then applies the appropriate
- * gradient from GRADIENT_CONFIGS.
- *
- * @param {Object} indicator - The Resource Monitor indicator object.
- * @param {*} value - The metric value (number or array).
- * @param {string[]} colors - Original color thresholds with type markers appended.
- * @returns {string} CSS style string with the computed color.
- */
-function _gradientGetUsageColor(indicator, value, colors) {
-  // Handle array values (e.g., ethernet [download, upload]) — take max.
-  const numericValue = Array.isArray(value) ? Math.max(...value.filter(Number.isFinite)) : value;
-  if (!Number.isFinite(numericValue)) return "";
-
-  // Detect indicator type from the colors parameter's type markers.
-  // Each color entry is like "0% green" — we look for __type markers appended by init.
-  const colorStr = Array.isArray(colors) ? colors.join(" ") : String(colors || "");
-
-  let config;
-  if (colors === this._diskSpaceColors) {
-    config = GRADIENT_CONFIGS.diskSpace;
-  } else if (colors === this._netEthColors || colorStr.includes("__eth")) {
-    config = GRADIENT_CONFIGS.eth;
-  } else if (colors === this._netWlanColors || colorStr.includes("__wlan")) {
-    config = GRADIENT_CONFIGS.wlan;
-  } else if (colors === this._gpuMemoryColors || colorStr.includes("__gpuMem")) {
-    config = GRADIENT_CONFIGS.gpuMemory;
-  } else if (colorStr.includes("__diskSpace")) {
-    config = GRADIENT_CONFIGS.diskSpace;
-  } else if (colors === this._gpuColors || colorStr.includes("__gpu")) {
-    config = GRADIENT_CONFIGS.gpu;
-  } else if (colors === this._ramColors || colorStr.includes("__ram")) {
-    config = GRADIENT_CONFIGS.ram;
-  } else if (colors === this._cpuColors || colorStr.includes("__cpu")) {
-    config = GRADIENT_CONFIGS.cpu;
-  } else {
-    // Fallback: CPU gradient for usage percentages.
-    config = GRADIENT_CONFIGS.cpu;
-  }
-
-  let effectiveValue = numericValue;
-  let minVal = config.minVal;
-  let maxVal = config.maxVal;
-
-  // Apply inverted logic (e.g., disk space: green when full, red when empty).
-  if (config.inverted) {
-    effectiveValue = maxVal - numericValue;
-  }
-
-  return getGreenYellowRedGradientColor(
-    effectiveValue,
-    minVal,
-    maxVal,
-    config.startRGB,
-    config.endRGB
-  );
-}
+// The gradient color math lives in scripts/lib/gradient_colors.js (with tests).
+// The patcher injects a self-contained copy into extension.js below, since GNOME
+// Shell (GJS) cannot require Node modules at runtime.
 
 // ── Main patching function ───────────────────────────────────────────────────
 
