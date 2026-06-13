@@ -4,7 +4,7 @@ configure_resource_monitor.py — Configure Resource Monitor extension settings.
 
 Components:
   - log(level, msg): Timestamped logging helper (prints to stderr).
-  - detect_gpu_devices(): Query nvidia-smi and return structured GPU info.
+  - detect_gpu_devices(): Shared GPU discovery imported from report_cuda_devices.
   - Disk discovery helpers imported from resource_monitor_disks.
   - format_gsettings_list(devices): Format device list as GSettings string array.
   - build_gsettings_args(schema, ext_dir, ...): Build gsettings command arguments.
@@ -21,11 +21,10 @@ Usage:
 import argparse
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
 
+from report_cuda_devices import get_gpu_devices as detect_gpu_devices
 from resource_monitor_disks import (
     append_home_directory_entry,
     build_disk_device_entry,
@@ -46,56 +45,6 @@ def log(level: str, msg: str) -> None:
         msg: Message text.
     """
     print(f"[{level.upper()}] {msg}", file=sys.stderr)
-
-
-# ── GPU detection ────────────────────────────────────────────────────────────
-
-def detect_gpu_devices() -> list[dict]:
-    """Query nvidia-smi and return structured GPU device information.
-
-    Returns:
-        List of GPU device dicts with keys: version, type, device, name,
-        usage, memory, displayName. Empty list if nvidia-smi is unavailable.
-
-    Example:
-        >>> detect_gpu_devices()
-        [{'version': 2, 'type': 'gpu', 'device': 'GPU-abc123', ...}]
-    """
-    nvidia_smi = shutil.which("nvidia-smi")
-    if nvidia_smi is None:
-        log("info", "nvidia-smi not found — no GPUs detected")
-        return []
-
-    try:
-        output = subprocess.check_output(
-            [nvidia_smi, "-L"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as exc:
-        log("warn", f"nvidia-smi -L failed: {exc}")
-        return []
-
-    entries = []
-    for line in output.splitlines():
-        match = re.search(
-            r"GPU\s+\d+:\s+(.*?)\s+\(UUID:\s+([^)]+)\)",
-            line.strip(),
-        )
-        if not match:
-            continue
-        name, uuid = match.groups()
-        entries.append({
-            "version": 2,
-            "type": "gpu",
-            "device": uuid,
-            "name": name,
-            "usage": True,
-            "memory": True,
-            "displayName": "",
-        })
-
-    return entries
 
 
 # ── GSettings helpers ────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path("scripts").resolve()))
 from importlib.util import spec_from_file_location, module_from_spec
@@ -41,6 +42,30 @@ GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-789xyz000)"""
     assert entries[0]["name"] == "NVIDIA GeForce RTX 4090"
     assert entries[0]["device"] == "GPU-abc123def456"
     assert entries[1]["device"] == "GPU-789xyz000"
+
+
+def test_parsed_device_matches_resource_monitor_v2_schema():
+    """Parsed GPUs should include every field required by Resource Monitor."""
+    devices = mod.parse_gpu_output(
+        "GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-abc123)"
+    )
+
+    assert devices == [{
+        "version": 2,
+        "type": "gpu",
+        "device": "GPU-abc123",
+        "name": "NVIDIA GeForce RTX 4090",
+        "usage": True,
+        "memory": True,
+        "displayName": "",
+    }]
+
+
+def test_returns_empty_when_nvidia_smi_command_fails():
+    """GPU discovery should fail closed when nvidia-smi cannot be queried."""
+    with patch.object(mod, "detect_nvidia_smi", return_value="/usr/bin/nvidia-smi"), \
+         patch.object(mod.subprocess, "check_output", side_effect=OSError("failed")):
+        assert mod.get_gpu_devices() == []
 
 
 def test_formats_devices_as_gsettings_string_array():

@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path("scripts").resolve()))
 from importlib.util import spec_from_file_location, module_from_spec
+from report_cuda_devices import get_gpu_devices
 
 crm = spec_from_file_location(
     "configure_resource_monitor",
@@ -23,6 +24,10 @@ crm.loader.exec_module(mod)
 
 class TestDetectGpuDevices:
     """Tests for detect_gpu_devices function."""
+
+    def test_uses_shared_gpu_detector(self):
+        """Configurator should expose the shared GPU discovery implementation."""
+        assert mod.detect_gpu_devices is get_gpu_devices
 
     def test_returns_empty_when_nvidia_smi_missing(self):
         """Should return empty list when nvidia-smi is not available."""
