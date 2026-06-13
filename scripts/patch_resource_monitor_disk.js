@@ -43,22 +43,9 @@ function normalizeDiskContainerStyles(content) {
     );
 }
 
-/**
- * Build a green→yellow→red CSS color style for a disk usage percentage.
- * @param {number} value - Usage percentage (0–100). Non-finite values yield "".
- * @returns {string} A `color: rgb(r, g, 0);` style string, or "" when value is invalid.
- */
-function getDiskUsagePercentStyle(value) {
-  if (!Number.isFinite(value)) {
-    return "";
-  }
-
-  const ratio = Math.max(0, Math.min(1, value / 100));
-  const red = ratio <= 0.5 ? Math.round(510 * ratio) : 255;
-  const green = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));
-
-  return `color: rgb(${red}, ${green}, 0);`;
-}
+// The getDiskUsagePercentStyle helper lives in scripts/lib/gradient_colors.js
+// (with tests). It is injected into refreshers.js as the diskUsageStyleHelper
+// string below, since GNOME Shell (GJS) cannot require Node modules at runtime.
 
 const originalDiskContainer = `export const DiskContainerSpace = GObject.registerClass(
   class DiskContainerSpace extends DiskContainer {

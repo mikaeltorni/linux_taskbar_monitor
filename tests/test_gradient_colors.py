@@ -97,6 +97,26 @@ def test_usage_color_falls_back_to_cpu():
     assert _eval("g.gradientGetUsageColor({}, 0, [])") == "color: rgb(0, 255, 0);"
 
 
+def test_disk_usage_percent_style_non_finite_returns_empty():
+    assert _eval("g.getDiskUsagePercentStyle(NaN)") == ""
+
+
+def test_disk_usage_percent_style_zero_is_green():
+    assert _eval("g.getDiskUsagePercentStyle(0)") == "color: rgb(0, 255, 0);"
+
+
+def test_disk_usage_percent_style_full_is_red():
+    assert _eval("g.getDiskUsagePercentStyle(100)") == "color: rgb(255, 0, 0);"
+
+
+def test_disk_usage_percent_style_midpoint_is_yellow():
+    assert _eval("g.getDiskUsagePercentStyle(50)") == "color: rgb(255, 255, 0);"
+
+
+def test_disk_usage_percent_style_quarter_interpolates():
+    assert _eval("g.getDiskUsagePercentStyle(25)") == "color: rgb(128, 255, 0);"
+
+
 if __name__ == "__main__":
     import pytest
 

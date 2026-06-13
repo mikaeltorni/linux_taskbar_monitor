@@ -162,6 +162,26 @@ function gradientGetUsageColor(indicator, value, colors) {
   );
 }
 
+/**
+ * Build a green → yellow → red CSS color style for a disk usage percentage.
+ * Unlike getGreenYellowRedGradientColor this is a fixed 0-100 percentage scale
+ * with a `color: rgb(r, g, 0);` form. Mirrors the helper injected into
+ * refreshers.js by patch_resource_monitor_disk.js.
+ * @param {number} value - Usage percentage (0-100). Non-finite values yield "".
+ * @returns {string} A `color: rgb(r, g, 0);` style string, or "" when invalid.
+ */
+function getDiskUsagePercentStyle(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+
+  const ratio = Math.max(0, Math.min(1, value / 100));
+  const red = ratio <= 0.5 ? Math.round(510 * ratio) : 255;
+  const green = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));
+
+  return `color: rgb(${red}, ${green}, 0);`;
+}
+
 module.exports = {
   ETHERNET_MAX_MBPS,
   RAM_MAX_GB,
@@ -172,4 +192,5 @@ module.exports = {
   getGreenYellowRedGradientColor,
   GRADIENT_CONFIGS,
   gradientGetUsageColor,
+  getDiskUsagePercentStyle,
 };
