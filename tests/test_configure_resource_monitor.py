@@ -59,6 +59,40 @@ class TestDetectGpuDevices:
 class TestDetectDiskDevices:
     """Tests for detect_disk_devices function."""
 
+    def test_builds_resource_monitor_v2_entry(self):
+        """Should build the complete schema expected by Resource Monitor."""
+        assert mod.build_disk_device_entry("/dev/sda1", "/home") == {
+            "version": 2,
+            "type": "disk",
+            "device": "/dev/sda1",
+            "stableId": "",
+            "mountPoint": "/home",
+            "stats": False,
+            "space": True,
+            "displayName": "/home",
+        }
+
+    def test_parse_df_output_ignores_header_only_and_malformed_rows(self):
+        """Should return no entries when df has no valid device rows."""
+        output = (
+            "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
+            "malformed row\n"
+            "tmpfs 100 1 99 1% /run\n"
+        )
+
+        assert mod.parse_df_output(output) == []
+
+    def test_append_home_entry_keeps_existing_home_row_unchanged(self):
+        """Should avoid querying df or duplicating an existing /home row."""
+        entries = [mod.build_disk_device_entry("/dev/sda2", "/home")]
+
+        with patch("subprocess.check_output") as check_output:
+            result = mod.append_home_directory_entry(entries)
+
+        assert result is entries
+        assert result == entries
+        check_output.assert_not_called()
+
     def test_returns_empty_when_df_fails(self):
         """Should return empty list when df command fails."""
         with patch("subprocess.check_output", side_effect=Exception("df failed")):

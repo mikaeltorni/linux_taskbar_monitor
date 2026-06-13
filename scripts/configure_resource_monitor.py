@@ -5,12 +5,7 @@ configure_resource_monitor.py — Configure Resource Monitor extension settings.
 Components:
   - log(level, msg): Timestamped logging helper (prints to stderr).
   - detect_gpu_devices(): Query nvidia-smi and return structured GPU info.
-  - build_disk_device_entry(filesystem, mount_point): Build a Resource Monitor disk entry.
-  - parse_df_output(output): Parse POSIX df output into Resource Monitor disk entries.
-  - append_home_directory_entry(entries): Ensure /home has its own row.
-  - detect_disk_devices(): Query df and return mounted filesystem info.
-  - filter_disk_devices_to_mount_point(devices, mount_point): Filter devices by mount point.
-  - detect_disk_devices_home_only(): Detect only the /home disk entry.
+  - Disk discovery helpers imported from resource_monitor_disks.
   - format_gsettings_list(devices): Format device list as GSettings string array.
   - build_gsettings_args(schema, ext_dir, ...): Build gsettings command arguments.
   - apply_settings(args): Execute a gsettings set command.
@@ -30,6 +25,15 @@ import re
 import shutil
 import subprocess
 import sys
+
+from resource_monitor_disks import (
+    append_home_directory_entry,
+    build_disk_device_entry,
+    detect_disk_devices,
+    detect_disk_devices_home_only,
+    filter_disk_devices_to_mount_point,
+    parse_df_output,
+)
 
 
 # ── Logging helper ───────────────────────────────────────────────────────────
@@ -92,172 +96,6 @@ def detect_gpu_devices() -> list[dict]:
         })
 
     return entries
-
-
-# ── Disk detection ───────────────────────────────────────────────────────────
-
-def build_disk_device_entry(filesystem: str, mount_point: str) -> dict:
-    """Build a Resource Monitor v2 disk device entry.
-
-    Resource Monitor stores disk configuration as JSON strings parsed by its
-    GJS parseDiskEntry helper. The entry must include the version/type fields
-    or the extension rejects it and renders no disk rows.
-
-    Args:
-        filesystem: Block device path reported by df, such as /dev/nvme0n1p2.
-        mount_point: Mount point path used for filesystem space queries.
-
-    Returns:
-        Dictionary ready for format_gsettings_list().
-
-    Example:
-        >>> build_disk_device_entry("/dev/sda1", "/")
-        {'version': 2, 'type': 'disk', 'device': '/dev/sda1', ...}
-    """
-    return {
-        "version": 2,
-        "type": "disk",
-        "device": filesystem,
-        "stableId": "",
-        "mountPoint": mount_point,
-        "stats": False,
-        "space": True,
-        "displayName": mount_point,
-    }
-
-
-def parse_df_output(output: str) -> list[dict]:
-    """Parse POSIX df output into Resource Monitor disk entries.
-
-    Args:
-        output: Text emitted by ``df -P`` or ``df -P <path>``.
-
-    Returns:
-        List of disk device dictionaries for real block-device filesystems.
-    """
-    entries = []
-    lines = output.strip().splitlines()
-    if len(lines) < 2:
-        return entries
-
-    for line in lines[1:]:
-        parts = line.split()
-        if len(parts) < 6:
-            continue
-
-        filesystem = parts[0]
-        mount_point = parts[5]
-
-        if not filesystem.startswith("/dev/"):
-            continue
-
-        entries.append(build_disk_device_entry(filesystem, mount_point))
-
-    return entries
-
-
-def append_home_directory_entry(entries: list[dict]) -> list[dict]:
-    """Ensure /home has its own Resource Monitor row.
-
-    Args:
-        entries: Disk entries detected from mounted filesystems.
-
-    Returns:
-        Entries with a /home row appended when /home resolves to a block device
-        and is not already present as its own mount point.
-    """
-    if any(entry.get("mountPoint") == "/home" for entry in entries):
-        return entries
-
-    try:
-        output = subprocess.check_output(
-            ["df", "-P", "/home"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as exc:
-        log("warn", f"df /home command failed: {exc}")
-        return entries
-
-    home_entries = parse_df_output(output)
-    if not home_entries:
-        return entries
-
-    home_entry = home_entries[0]
-    home_entry["mountPoint"] = "/home"
-    home_entry["displayName"] = "/home"
-    entries.append(home_entry)
-    return entries
-
-
-def detect_disk_devices() -> list[dict]:
-    """Query df and return mounted filesystem information.
-
-    Returns:
-        List of Resource Monitor v2 disk device dicts. Only includes real
-        mounted block devices (not tmpfs, devtmpfs, snap loops, etc.).
-
-    Example:
-        >>> detect_disk_devices()
-        [{'version': 2, 'type': 'disk', 'device': '/dev/nvme1n1p5', ...}]
-    """
-    try:
-        output = subprocess.check_output(
-            ["df", "-P"],  # POSIX output format for consistent parsing
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as exc:
-        log("warn", f"df command failed: {exc}")
-        return []
-
-    return append_home_directory_entry(parse_df_output(output))
-
-
-def filter_disk_devices_to_mount_point(
-    devices: list[dict], mount_point: str | None,
-) -> list[dict]:
-    """Filter disk device entries to only those matching a given mount point.
-
-    Args:
-        devices: List of disk device dicts (as returned by detect_disk_devices).
-        mount_point: Mount point string to filter on (e.g., "/home").
-            Pass ``None`` to return all entries unfiltered.
-
-    Returns:
-        Filtered list containing only entries whose ``mountPoint`` matches
-        *mount_point*.  Returns the full list when *mount_point* is ``None``.
-    """
-    if mount_point is None:
-        return devices
-    return [d for d in devices if d.get("mountPoint") == mount_point]
-
-
-def detect_disk_devices_home_only() -> list[dict]:
-    """Detect only the /home disk entry.
-
-    Queries ``df -P`` on root, appends a /home row (if it shares the same
-    device), then filters to return only the /home entry.  This is useful
-    when the Resource Monitor extension should display only /home usage as
-    a percentage of total NVMe capacity.
-
-    Returns:
-        List containing at most one disk device dict for ``/home``, or an
-        empty list if no suitable entry was found.
-    """
-    try:
-        output = subprocess.check_output(
-            ["df", "-P"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as exc:
-        log("warn", f"df command failed: {exc}")
-        return []
-
-    entries = parse_df_output(output)
-    entries = append_home_directory_entry(entries)
-    return filter_disk_devices_to_mount_point(entries, "/home")
 
 
 # ── GSettings helpers ────────────────────────────────────────────────────────
