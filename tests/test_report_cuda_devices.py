@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path("scripts").resolve()))
 from importlib.util import spec_from_file_location, module_from_spec
+from resource_monitor_settings import format_gsettings_list
 
 rc = spec_from_file_location("report_cuda_devices", "scripts/report_cuda_devices.py")
 mod = module_from_spec(rc)
@@ -77,6 +78,11 @@ def test_formats_devices_as_gsettings_string_array():
     assert value.endswith("}']")
     parsed = [json.loads(item) for item in eval(value, {"__builtins__": {}})]
     assert parsed[0]["device"] == "GPU-abc123"
+
+
+def test_uses_shared_gsettings_serializer():
+    """GPU reporting should expose the common device-list serializer."""
+    assert mod.format_gsettings_list is format_gsettings_list
 
 
 def test_handles_empty_output():

@@ -3,10 +3,9 @@
 report_cuda_devices — Query nvidia-smi and print a GSettings GPU device list.
 
 Components:
-  - log(level, msg): Timestamped logging helper (prints to stderr).
   - detect_nvidia_smi(): Check if nvidia-smi is available. Returns path or None.
   - parse_gpu_output(output): Parse nvidia-smi -L output into a list of device dicts.
-  - format_gsettings_list(devices): Format GPU dicts for Resource Monitor's as schema.
+  - Shared serialization and logging imported from resource_monitor_settings.
   - get_gpu_devices(): Query nvidia-smi and return structured GPU info.
   - main(): CLI entry point — prints a GSettings string array to stdout.
 
@@ -14,23 +13,11 @@ Called via stdin heredoc from bash:
   gpu_devices="$(python3 scripts/report_cuda_devices.py)"
 """
 
-import json
 import re
 import shutil
 import subprocess
-import sys
 
-
-# ── Logging helper ───────────────────────────────────────────────────────────
-
-def log(level: str, msg: str) -> None:
-    """Print a timestamped log message to stderr.
-
-    Args:
-        level: Log level string (info, warn, error).
-        msg: Message text.
-    """
-    print(f"[{level.upper()}] {msg}", file=sys.stderr)
+from resource_monitor_settings import format_gsettings_list, log
 
 
 # ── GPU detection ────────────────────────────────────────────────────────────
@@ -105,28 +92,6 @@ def get_gpu_devices() -> list[dict]:
         return []
 
     return parse_gpu_output(output)
-
-
-def format_gsettings_list(devices: list[dict]) -> str:
-    """Format GPU devices as a GSettings string array of JSON objects.
-
-    Resource Monitor stores ``gpudeviceslist`` as ``as``: an array of strings.
-    Each string is a JSON object. Printing Python dict reprs looks close, but
-    GSettings rejects it because the array elements are not strings.
-
-    Args:
-        devices: GPU device dictionaries from ``parse_gpu_output``.
-
-    Returns:
-        GSettings-formatted string array, e.g. ``['{"device": "GPU-abc"}']``.
-
-    Example:
-        >>> format_gsettings_list([{"device": "GPU-abc"}])
-        '[\'{"device": "GPU-abc"}\']'
-    """
-    if not devices:
-        return "[]"
-    return "[" + ", ".join(repr(json.dumps(device)) for device in devices) + "]"
 
 
 # ── CLI entry point ─────────────────────────────────────────────────────────

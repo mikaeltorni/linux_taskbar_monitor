@@ -3,12 +3,9 @@
 configure_resource_monitor.py — Configure Resource Monitor extension settings.
 
 Components:
-  - log(level, msg): Timestamped logging helper (prints to stderr).
   - detect_gpu_devices(): Shared GPU discovery imported from report_cuda_devices.
   - Disk discovery helpers imported from resource_monitor_disks.
-  - format_gsettings_list(devices): Format device list as GSettings string array.
-  - build_gsettings_args(schema, ext_dir, ...): Build gsettings command arguments.
-  - apply_settings(args): Execute a gsettings set command.
+  - Settings helpers imported from resource_monitor_settings.
   - main(argv): CLI entry point — configures display settings.
 
 Usage:
@@ -19,10 +16,7 @@ Usage:
 """
 
 import argparse
-import json
 import os
-import subprocess
-import sys
 
 from report_cuda_devices import get_gpu_devices as detect_gpu_devices
 from resource_monitor_disks import (
@@ -33,174 +27,12 @@ from resource_monitor_disks import (
     filter_disk_devices_to_mount_point,
     parse_df_output,
 )
-
-
-# ── Logging helper ───────────────────────────────────────────────────────────
-
-def log(level: str, msg: str) -> None:
-    """Print a timestamped log message to stderr.
-
-    Args:
-        level: Log level string (info, warn, error).
-        msg: Message text.
-    """
-    print(f"[{level.upper()}] {msg}", file=sys.stderr)
-
-
-# ── GSettings helpers ────────────────────────────────────────────────────────
-
-def format_gsettings_list(devices: list[dict]) -> str:
-    """Format a list of device dicts as a GSettings string array.
-
-    Converts each device dict to its JSON repr and wraps in GSettings array syntax.
-    Uses double-quoted strings for GSettings compatibility.
-
-    Args:
-        devices: List of device dicts (GPU or disk).
-
-    Returns:
-        GSettings-formatted string array, e.g.:
-        "['{\"version\": 2, ...}', '{\"version\": 2, ...}']"
-
-    Example:
-        >>> format_gsettings_list([{"device": "GPU-abc"}])
-        "['{\"device\": \"GPU-abc\"}']"
-    """
-    if not devices:
-        return "[]"
-    return "[" + ", ".join(repr(json.dumps(device)) for device in devices) + "]"
-
-
-def build_gsettings_args(
-    schema: str,
-    ext_dir: str,
-    gpu_memory_perc: bool = False,
-    disk_space_gb: bool = False,
-    disk_space_perc: bool = False,
-    disk_space_perc_home_only: bool = False,
-    gpu_devices: list[dict] | None = None,
-    disk_devices: list[dict] | None = None,
-) -> list[list[str]]:
-    """Build gsettings set commands for Resource Monitor configuration.
-
-    Args:
-        schema: GSettings schema ID.
-        ext_dir: Path to extension schemas directory.
-        gpu_memory_perc: If True, set gpumemoryunit to 'perc'.
-            (Default is 'numeric' — absolute VRAM values like "22.6gb".)
-        disk_space_gb: If True, show remaining disk space in numeric GB.
-        disk_space_perc: Legacy alias for disk_space_gb retained for old callers.
-        disk_space_perc_home_only: If True, show /home disk usage as percentage
-            of total NVMe capacity (diskspaceunit='perc', home-only filter).
-        gpu_devices: Optional list of GPU device dicts for gpudeviceslist.
-        disk_devices: Optional list of disk device dicts for diskdeviceslist.
-
-    Returns:
-        List of gsettings command argument lists, each ready for subprocess.run().
-
-    Example:
-        >>> build_gsettings_args("org.gnome.shell.extensions.resource-monitor",
-        ...                      "/path/to/schemas", gpu_memory_perc=True)
-        [['gsettings', '--schemadir', '/path/to/schemas', 'set', ..., 'gpumemoryunit', "'perc'"]]
-    """
-    commands = []
-    configure_disk_space = disk_space_gb or disk_space_perc
-
-    # Always set gpumemoryunit to 'numeric' (absolute VRAM values) unless
-    # the caller explicitly requests percentage mode.
-    if gpu_memory_perc:
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "gpumemoryunit", "'perc'",
-        ])
-    else:
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "gpumemoryunit", "'numeric'",
-        ])
-
-    if disk_space_perc_home_only:
-        # Percentage mode — show /home usage as % of total NVMe capacity.
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskstatsstatus", "false",
-        ])
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspaceunit", "'perc'",
-        ])
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspacemonitor", "'used'",
-        ])
-        # Filter disk devices to /home only.
-        if disk_devices is not None:
-            disk_devices = filter_disk_devices_to_mount_point(disk_devices, "/home")
-
-    elif configure_disk_space:
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskstatsstatus", "false",
-        ])
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspaceunit", "'numeric'",
-        ])
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspaceunitmeasure", "'g'",
-        ])
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskspacemonitor", "'free'",
-        ])
-        # Keep the panel focused on the /home row while showing free GB.
-        if disk_devices is not None:
-            disk_devices = filter_disk_devices_to_mount_point(disk_devices, "/home")
-
-    if gpu_devices is not None and len(gpu_devices) > 0:
-        devices_list = format_gsettings_list(gpu_devices)
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "gpudeviceslist", devices_list,
-        ])
-
-    if disk_devices is not None and len(disk_devices) > 0:
-        devices_list = format_gsettings_list(disk_devices)
-        commands.append([
-            "gsettings", "--schemadir", ext_dir, "set", schema,
-            "diskdeviceslist", devices_list,
-        ])
-
-    return commands
-
-
-def apply_settings(args: list[str]) -> bool:
-    """Execute a single gsettings set command.
-
-    Args:
-        args: Command arguments (e.g., ['gsettings', '--schemadir=...', 'set', ...]).
-
-    Returns:
-        True if the command succeeded, False otherwise.
-    """
-    try:
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            log("error", f"gsettings failed: {result.stderr.strip()}")
-            return False
-        return True
-    except subprocess.TimeoutExpired:
-        log("error", "gsettings command timed out")
-        return False
-    except Exception as exc:
-        log("error", f"Unexpected error running gsettings: {exc}")
-        return False
+from resource_monitor_settings import (
+    apply_settings,
+    build_gsettings_args,
+    format_gsettings_list,
+    log,
+)
 
 
 # ── CLI entry point ─────────────────────────────────────────────────────────

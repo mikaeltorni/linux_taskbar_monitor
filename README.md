@@ -41,6 +41,7 @@ bash -n install.sh
 
 - `install.sh` - downloads, patches, configures, and enables Resource Monitor.
 - `scripts/configure_resource_monitor.py` - builds and applies Resource Monitor GSettings device lists using the shared disk and GPU discovery modules.
+- `scripts/resource_monitor_settings.py` - serializes device lists and builds and applies Resource Monitor GSettings commands.
 - `scripts/resource_monitor_disks.py` - detects, parses, and filters Resource Monitor disk entries.
 - `scripts/report_cuda_devices.py` - emits NVIDIA GPU devices for Resource Monitor.
 - `scripts/patch_resource_monitor_disk.js` - patches disk space display and activity percentage behavior.

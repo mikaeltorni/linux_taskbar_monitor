@@ -13,6 +13,11 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, str(Path("scripts").resolve()))
 from importlib.util import spec_from_file_location, module_from_spec
 from report_cuda_devices import get_gpu_devices
+from resource_monitor_settings import (
+    apply_settings,
+    build_gsettings_args,
+    format_gsettings_list,
+)
 
 crm = spec_from_file_location(
     "configure_resource_monitor",
@@ -172,6 +177,10 @@ class TestDetectDiskDevices:
 class TestBuildGsettingsArgs:
     """Tests for build_gsettings_args function."""
 
+    def test_uses_shared_settings_builder(self):
+        """Configurator should expose the shared command builder."""
+        assert mod.build_gsettings_args is build_gsettings_args
+
     def test_builds_correct_args_for_gpu_memory(self):
         """Should build correct gsettings args for GPU memory percentage mode."""
         schema = "org.gnome.shell.extensions.resource-monitor"
@@ -260,6 +269,10 @@ class TestBuildGsettingsArgs:
 class TestFormatGsettingsList:
     """Tests for format_gsettings_list function."""
 
+    def test_uses_shared_settings_serializer(self):
+        """Configurator should expose the shared device serializer."""
+        assert mod.format_gsettings_list is format_gsettings_list
+
     def test_formats_gpu_devices_list(self):
         """Should format GPU devices as a GSettings string array with JSON."""
         devices = [
@@ -299,6 +312,10 @@ class TestFormatGsettingsList:
 
 class TestApplySettings:
     """Tests for apply_settings function."""
+
+    def test_uses_shared_settings_executor(self):
+        """Configurator should expose the shared command executor."""
+        assert mod.apply_settings is apply_settings
 
     def test_success_returns_true(self):
         """Should return True when gsettings succeeds."""
