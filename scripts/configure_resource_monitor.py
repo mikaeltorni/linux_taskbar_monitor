@@ -222,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--gpu-memory-perc",
         action="store_true",
-        help="Set GPU memory to percentage mode (used/total %).",
+        help="Set GPU memory to percentage mode (used/total %%).",
     )
     parser.add_argument(
         "--disk-space-gb",
