@@ -141,7 +141,7 @@ configure_auto_move_windows
 
 # Dash-to-Panel configuration and PWA icons — idempotent
 configure_dash_and_switchers
-configure_pwa_icons
+install_pwa_icons
 
 report_sudo_required
 msg "=== Taskbar Setup Complete ==="
