@@ -65,24 +65,6 @@ report_sudo_required() {
   msg "Apply them with: sudo bash install.sh"
 }
 
-DESKTOP_DIRS=(/usr/share/applications /var/lib/snapd/desktop/applications "$TARGET_HOME/.local/share/applications")
-
-find_desktop_file_path() {
-  local name="$1" dir path="${1}.desktop"
-  [[ "$name" == *.desktop ]] && path="$name"
-  for dir in "${DESKTOP_DIRS[@]}"; do [ -f "${dir}/${path}" ] && { printf '%s\n' "${dir}/${path}"; return 0; }; done
-  return 1
-}
-
-find_desktop_entry() {
-  local c; for c in "$@"; do find_desktop_file_path "$c" >/dev/null && { [[ "$c" == *.desktop ]] && printf '%s\n' "$c" || printf '%s\n' "${c}.desktop"; return 0; }; done
-  return 1
-}
-
-join_as_gsettings_array() {
-  local out="[" first=1 v; for v in "$@"; do [ -n "$v" ] || continue; [ "$first" -eq 0 ] && out+=", "; out+="'$v'"; first=0; done; out+="]"; printf "%s" "$out"
-}
-
 append_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
   current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
