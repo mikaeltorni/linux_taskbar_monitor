@@ -108,11 +108,6 @@ gsettings_key_exists() {
   run_as_target gsettings list-keys "$schema" 2>/dev/null | grep -qx "$key"
 }
 
-user_gsettings_set_if_key_exists() {
-  local schema="$1" key="$2" value="$3"
-  if gsettings_key_exists "$schema" "$key"; then run_as_target gsettings set "$schema" "$key" "$value" || true; fi
-}
-
 apt_install() {
   local missing=() pkg
   for pkg in "$@"; do dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg"); done
