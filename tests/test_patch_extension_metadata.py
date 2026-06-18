@@ -69,6 +69,39 @@ def test_patch_shell_version_file_not_found():
         pass  # Expected
 
 
+def test_pin_version_raises_lower_version():
+    """pin_version should raise a lower version up to the pin value."""
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        json.dump({"uuid": "test@ext", "version": 27}, f)
+        path = Path(f.name)
+
+    result = mod.pin_version(path, 9999)
+    assert result is True
+    assert json.loads(path.read_text())["version"] == 9999
+
+
+def test_pin_version_noop_when_already_high():
+    """pin_version should not modify a version already at or above the pin."""
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        json.dump({"uuid": "test@ext", "version": 9999}, f)
+        path = Path(f.name)
+
+    result = mod.pin_version(path, 9999)
+    assert result is False
+    assert json.loads(path.read_text())["version"] == 9999
+
+
+def test_pin_version_adds_missing_version():
+    """pin_version should set version when the field is absent."""
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+        json.dump({"uuid": "test@ext"}, f)
+        path = Path(f.name)
+
+    result = mod.pin_version(path, 9999)
+    assert result is True
+    assert json.loads(path.read_text())["version"] == 9999
+
+
 if __name__ == "__main__":
     tests = [t for name, t in sorted(globals().items()) if name.startswith("test_") and callable(t)]
     passed = failed = 0
