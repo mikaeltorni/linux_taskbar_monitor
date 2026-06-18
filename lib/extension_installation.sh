@@ -79,16 +79,19 @@ install_gnome_ext_from_src() {
   fi
 }
 
-# patch_extension_metadata EXT_DIR [METADATA_FILE] SHELL_VER — Patch extension metadata.json.
-#   Runs the Python patcher script to update shell-version compatibility.
+# patch_extension_metadata EXT_DIR [METADATA_FILE] SHELL_VER [PIN_VERSION] — Patch extension metadata.json.
+#   Runs the Python patcher script to update shell-version compatibility and,
+#   when PIN_VERSION is given, raise the "version" field above upstream so
+#   GNOME never auto-updates over the local patches on shell reload.
 #   Args:
 #     $1: Extension directory containing metadata.json
 #     $2: Optional metadata filename (default: metadata.json)
 #     $3: GNOME Shell version string
+#     $4: Optional version-pin integer (e.g. 9999)
 #   Returns:
 #     0 on success, 1 on failure or missing file.
 patch_extension_metadata() {
-  local ext_dir="$1" meta_file="${2:-metadata.json}" shell_ver="$3"
+  local ext_dir="$1" meta_file="${2:-metadata.json}" shell_ver="$3" pin_ver="${4:-}"
 
   if [ ! -f "$ext_dir/$meta_file" ]; then
     msg "WARNING: metadata.json not found at $ext_dir/$meta_file; skipping patch."
@@ -96,7 +99,7 @@ patch_extension_metadata() {
   fi
 
   if python3 "$SCRIPT_DIR/scripts/patch_extension_metadata.py" \
-     "$ext_dir/$meta_file" "$shell_ver"; then
+     "$ext_dir/$meta_file" "$shell_ver" ${pin_ver:+"$pin_ver"}; then
     msg "Patched extension metadata for GNOME Shell ${shell_ver}"
     return 0
   else
