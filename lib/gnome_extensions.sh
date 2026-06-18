@@ -60,7 +60,10 @@ configure_resource_monitor_extension() {
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
   if [ -n "$shell_version" ]; then
-    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" || true
+    # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
+    # extension over the local patches on shell reload, which previously
+    # reverted the gradient colors back to upstream's threshold coloring.
+    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999 || true
   fi
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime 0.5
