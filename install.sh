@@ -123,26 +123,30 @@ source "$SCRIPT_DIR/lib/window_manager.sh"
 source "$SCRIPT_DIR/lib/gnome_extensions.sh"
 source "$SCRIPT_DIR/lib/extension_features.sh"
 
+# ── Component selection runtime and manifest ─────────────────────────────────
+# The manifest maps each component id to a configure_*/install_* function from
+# the lib files sourced above.
+# Load the shared installer component framework. Its single source of truth is
+# the linux_installation_scripts_functions repository (cloned as a sibling by
+# installation_scripts, or downloaded on demand) -- no per-repo vendored copy.
+for __isc_d in "${ISC_FUNCTIONS_DIR:-}" \
+               "$SCRIPT_DIR/../linux_installation_scripts_functions" \
+               "$HOME/projects/linux_installation_scripts_functions"; do
+  [ -n "$__isc_d" ] && [ -f "$__isc_d/component_loader.sh" ] && { source "$__isc_d/component_loader.sh"; break; }
+done
+declare -F isc_activate_components >/dev/null 2>&1 || \
+  source <(curl -fsSL "https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${ISC_FUNCTIONS_REF:-master}/component_loader.sh")
+isc_activate_components
+source "$SCRIPT_DIR/installer/components.sh"
+
 # ── Main installer logic ─────────────────────────────────────────────────────
+# Listing/help must print only their own output (the master installer parses
+# --list-components); bypass the surrounding messages for those.
+case "${1:-}" in
+  --list-components|--help|-h) component_main "$@"; exit $? ;;
+esac
+
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
-
-# Resource Monitor extension (core taskbar component) — idempotent via install_gnome_ext_zip
-configure_resource_monitor_extension
-
-# Window rules extension (workspace/sticky assignment for Wayland) — idempotent
-if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
-  msg "X11 session detected; skipping custom window-rules extension."
-else
-  configure_window_rules_extension
-fi
-
-# Auto-move-windows extension (Wayland workspace placement) — idempotent via install_auto_move_windows_extension
-configure_auto_move_windows
-
-# Dash-to-Panel configuration and PWA icons — idempotent
-configure_dash_and_switchers
-install_pwa_icons
-
-report_sudo_required
+component_main "$@"
 msg "=== Taskbar Setup Complete ==="
 msg "Log out and back in before testing GNOME Shell extension changes."
