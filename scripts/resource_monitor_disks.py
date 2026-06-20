@@ -2,12 +2,9 @@
 """Detect and format disk devices for the Resource Monitor extension."""
 
 import subprocess
-import sys
 
 
-def log(level: str, message: str) -> None:
-    """Write a disk-discovery message using the installer's log format."""
-    print(f"[{level.upper()}] {message}", file=sys.stderr)
+from rm_logging import log
 
 
 def build_disk_device_entry(filesystem: str, mount_point: str) -> dict:

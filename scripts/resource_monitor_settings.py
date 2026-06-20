@@ -7,19 +7,19 @@ construction, and execution of individual ``gsettings set`` commands.
 
 import json
 import subprocess
-import sys
 
 from resource_monitor_disks import filter_disk_devices_to_mount_point
 
+# Re-export the centralized logger so existing callers can keep importing ``log``
+# from this module (``from resource_monitor_settings import log``).
+from rm_logging import log
 
-def log(level: str, message: str) -> None:
-    """Write a message using the command-line tools' stderr format.
-
-    Args:
-        level: Log level string such as ``info``, ``warn``, or ``error``.
-        message: Message text to write.
-    """
-    print(f"[{level.upper()}] {message}", file=sys.stderr)
+__all__ = [
+    "log",
+    "format_gsettings_list",
+    "build_gsettings_args",
+    "apply_settings",
+]
 
 
 def format_gsettings_list(devices: list[dict]) -> str:
