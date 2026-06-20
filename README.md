@@ -6,6 +6,19 @@ Standalone installer for the GNOME Shell Resource Monitor taskbar status setup u
 
 It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, gradient colors, and 500 ms refreshes, and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
 
+## Repository dependencies
+
+This repository installs and runs **standalone** — it has no hard dependency on
+any sibling setup repository.
+
+- **Build-time (soft):** the shared installer component framework
+  [`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions) —
+  loaded from a sibling checkout when present, otherwise downloaded on demand,
+  so a missing checkout never blocks installation.
+
+See the full cross-repository map in
+[installation_scripts/DEPENDENCIES.md](https://github.com/mikaeltorni/installation_scripts/blob/master/DEPENDENCIES.md).
+
 ## Technology Stack
 
 - Bash installer for system and GNOME Shell integration.
