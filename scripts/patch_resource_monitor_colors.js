@@ -41,6 +41,17 @@ if (!extPath) {
 
 // ── Main patching function ───────────────────────────────────────────────────
 
+/**
+ * Upgrade a previously patched extension.js from the older two-stop gradient to
+ * the green → yellow → red midpoint gradient.
+ *
+ * Injects the getGreenYellowRedGradientColor helper when it is missing and
+ * rewrites the _getUsageColor return statement to call it. Each substitution is
+ * applied only when its source form is present, so the function is idempotent
+ * and a no-op on content that is already current.
+ * @param {string} content - Current extension.js content.
+ * @returns {string} Migrated content, or unchanged content when already current.
+ */
 function migrateGreenYellowRedGradient(content) {
   let migratedContent = content;
 

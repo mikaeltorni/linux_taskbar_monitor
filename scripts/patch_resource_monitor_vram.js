@@ -1,4 +1,14 @@
-// Patch Resource Monitor extension to show VRAM right next to GPU usage % (no brackets)
+// patch_resource_monitor_vram.js — Show VRAM next to GPU usage % without brackets.
+//
+// The upstream Resource Monitor wraps the GPU memory (VRAM) value in "[ ]"
+// bracket labels. This patch replaces those brackets with a plain two-space
+// separator so VRAM sits directly beside the GPU usage percentage. The edit is
+// fail-fast: if the expected upstream snippet is absent (already patched or an
+// unsupported version) the script exits non-zero.
+//
+// Usage:
+//   node scripts/patch_resource_monitor_vram.js <path-to-containers.js>
+
 const fs = require('fs');
 
 const containersPath = process.argv[2];
