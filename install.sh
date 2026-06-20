@@ -68,38 +68,14 @@ report_sudo_required() {
 append_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
   current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(VAL="$value" CURRENT="$current" python3 - <<'PY'
-import ast, os
-cur_raw = os.environ.get("CURRENT", "").strip()
-if cur_raw.startswith("@as "): cur_raw = cur_raw[4:].strip()
-try: cur = ast.literal_eval(cur_raw) if cur_raw else []
-except Exception: cur = []
-if not isinstance(cur, list): cur = []
-cur = list(dict.fromkeys(str(item) for item in cur))
-val = os.environ.get("VAL", "")
-if val and val not in cur: cur.append(val)
-print("[" + ", ".join(repr(str(item)) for item in cur) + "]")
-PY
-)"
+  newlist="$(CURRENT="$current" python3 "$SCRIPT_DIR/scripts/gsettings_strv.py" append "$value")"
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
 remove_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
   current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(VAL="$value" CURRENT="$current" python3 - <<'PY'
-import ast, os
-cur_raw = os.environ.get("CURRENT", "").strip()
-if cur_raw.startswith("@as "): cur_raw = cur_raw[4:].strip()
-try: cur = ast.literal_eval(cur_raw) if cur_raw else []
-except Exception: cur = []
-if not isinstance(cur, list): cur = []
-val = os.environ.get("VAL", "")
-cur = [str(item) for item in cur if str(item) != val]
-cur = list(dict.fromkeys(cur))
-print("[" + ", ".join(repr(str(item)) for item in cur) + "]")
-PY
-)"
+  newlist="$(CURRENT="$current" python3 "$SCRIPT_DIR/scripts/gsettings_strv.py" remove "$value")"
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
