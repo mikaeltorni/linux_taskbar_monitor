@@ -22,6 +22,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from rm_logging import LOGGER, log_call
+
 
 REPLACEMENTS = {
     "extension.js": (
@@ -71,6 +73,7 @@ REPLACEMENTS = {
 }
 
 
+@log_call(LOGGER)
 def patch_extension(extension_dir: str | Path) -> None:
     """Apply the sub-second refresh patches and recompile the schemas.
 
@@ -103,12 +106,14 @@ def patch_extension(extension_dir: str | Path) -> None:
             content = content.replace(old, new)
         path.write_text(content, encoding="utf-8")
 
+    LOGGER.info("Compiling Resource Monitor schemas in %s", root / "schemas")
     subprocess.run(
         ["glib-compile-schemas", str(root / "schemas")],
         check=True,
     )
 
 
+@log_call(LOGGER)
 def main() -> int:
     """CLI entry point for patch_resource_monitor_refresh.py.
 
@@ -119,11 +124,13 @@ def main() -> int:
         0 on success, 1 on a usage error or when patching fails.
     """
     if len(sys.argv) != 2:
+        LOGGER.error("Invalid refresh patcher usage: %r", sys.argv)
         print(f"Usage: {sys.argv[0]} <extension-directory>", file=sys.stderr)
         return 1
     try:
         patch_extension(sys.argv[1])
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        LOGGER.error("Failed to patch Resource Monitor refresh interval: %s", exc)
         print(f"Failed to patch Resource Monitor refresh interval: {exc}", file=sys.stderr)
         return 1
     print("Patched Resource Monitor for a 0.5-second refresh interval")

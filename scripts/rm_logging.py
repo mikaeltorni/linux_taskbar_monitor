@@ -1,44 +1,94 @@
 #!/usr/bin/env python3
-"""rm_logging.py — Centralized logging utility for the Resource Monitor scripts.
+"""Centralized logging for Resource Monitor helper scripts.
 
-This is the single definition of the installer-compatible ``log`` helper shared
-by every Python script under ``scripts/``. Centralizing it keeps the on-screen
-format identical to the bash installer's ``msg`` output and avoids duplicating
-the same function in each module.
-
-Components:
-  - LOG_LEVELS: Recognized severity names, ordered from most to least verbose.
-  - log(level, message): Write a single ``[LEVEL] message`` line to stderr.
-
-Usage:
-  from rm_logging import log
-  log("warn", "df command failed")
+Every Python script in this repository imports ``LOGGER``, ``get_logger``, and
+``log_call`` from here. The file sink lives under repository ``.log/`` so helper
+and command-substitution output remains reserved for the caller's real data.
+Logging is best-effort and never aborts the program.
 """
 
 from __future__ import annotations
 
-import sys
+import functools
+import inspect
+import logging
+from pathlib import Path
+from typing import Any, Callable, TypeVar
 
-# Severity names recognized by :func:`log`, ordered from most to least verbose.
-# The format mirrors the bash installer's output so CLI logs read consistently
-# whether they originate from shell or Python.
-LOG_LEVELS = ("verbose", "debug", "info", "warn", "error")
+LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+DEFAULT_LOG_FILE = "resource-monitor.log"
+F = TypeVar("F", bound=Callable[..., Any])
 
 
-def log(level: str, message: str) -> None:
-    """Write a single log line to stderr in the installer-compatible format.
+def _repo_root() -> Path:
+    """Return the repository root relative to this module."""
+    return Path(__file__).resolve().parents[1]
 
-    The output format is ``[LEVEL] message`` followed by a newline, matching the
-    bash installer's ``msg`` style so mixed shell/Python logs stay uniform. The
-    level is upper-cased for display but is not otherwise validated, so callers
-    may pass any of :data:`LOG_LEVELS`.
+
+def get_logger(name: str, log_file: str = DEFAULT_LOG_FILE) -> logging.Logger:
+    """Return an idempotent project logger writing under repository ``.log/``.
 
     Args:
-        level: Severity name such as ``verbose``, ``debug``, ``info``, ``warn``,
-            or ``error`` (see :data:`LOG_LEVELS`). Rendered in upper case.
-        message: Human-readable message text to write.
+        name: Logger name shown in every record.
+        log_file: File name inside the repository ``.log/`` directory.
 
     Returns:
-        None. The line is written to ``sys.stderr`` as a side effect.
+        A configured logger. If the file sink cannot be created, the logger
+        falls back to a null handler so callers never crash on logging.
     """
-    print(f"[{level.upper()}] {message}", file=sys.stderr)
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    if logger.handlers:
+        return logger
+    try:
+        log_dir = _repo_root() / ".log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = logging.FileHandler(
+            log_dir / log_file,
+            encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    except OSError:
+        handler = logging.NullHandler()
+    logger.addHandler(handler)
+    return logger
+
+
+def log_call(logger: logging.Logger, level: int = logging.DEBUG) -> Callable[[F], F]:
+    """Trace a function by logging every argument on entry and the return value.
+
+    Each record carries the wrapped function's ``file:qualname`` so logs are
+    searchable without manual context. The wrapper emits no timing or
+    intermediate-state records.
+
+    Args:
+        logger: Centralized logger obtained from :func:`get_logger`.
+        level: Logging level for the entry and exit records.
+
+    Returns:
+        A decorator that wraps the target callable.
+    """
+
+    def decorator(func: F) -> F:
+        location = f"{Path(func.__code__.co_filename).name}:{func.__qualname__}"
+        signature = inspect.signature(func)
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            rendered = ", ".join(
+                f"{name}={value!r}" for name, value in bound.arguments.items()
+            )
+            logger.log(level, "ENTER %s(%s)", location, rendered)
+            result = func(*args, **kwargs)
+            logger.log(level, "EXIT %s -> %r", location, result)
+            return result
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator
+
+
+LOGGER = get_logger("resource-monitor", DEFAULT_LOG_FILE)

@@ -28,15 +28,17 @@ from resource_monitor_disks import (
     parse_df_output,
 )
 from resource_monitor_settings import (
+    LOGGER,
     apply_settings,
     build_gsettings_args,
     format_gsettings_list,
-    log,
 )
+from rm_logging import log_call
 
 
 # ── CLI entry point ─────────────────────────────────────────────────────────
 
+@log_call(LOGGER)
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for configure_resource_monitor.py.
 
@@ -81,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Mutual exclusion: cannot use both GB and perc-home-only modes.
     if args.disk_space_gb and args.disk_space_perc_home_only:
-        log("error", "--disk-space-gb and --disk-space-perc-home-only are mutually exclusive.")
+        LOGGER.error("--disk-space-gb and --disk-space-perc-home-only are mutually exclusive.")
         return 1
 
     configure_disk_space = (
@@ -89,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if not args.gpu_memory_perc and not configure_disk_space:
-        log("error", "No options specified. Use --gpu-memory-perc and/or --disk-space-gb.")
+        LOGGER.error("No options specified. Use --gpu-memory-perc and/or --disk-space-gb.")
         return 1
 
     # Auto-detect schema directory
@@ -100,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         if os.path.isdir(candidate):
             ext_dir = candidate
         else:
-            log("error", f"Could not auto-detect schema directory at {candidate}. Use --schema-dir.")
+            LOGGER.error("Could not auto-detect schema directory at %s. Use --schema-dir.", candidate)
             return 1
 
     schema = "org.gnome.shell.extensions.resource-monitor"
@@ -124,12 +126,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if not commands:
-        log("info", "No settings to apply.")
+        LOGGER.info("No settings to apply.")
         return 0
 
     success = True
     for cmd_args in commands:
-        log("info", f"Running: {' '.join(cmd_args)}")
+        LOGGER.info("Running: %s", " ".join(cmd_args))
         if not apply_settings(cmd_args):
             success = False
 

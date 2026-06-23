@@ -14,7 +14,7 @@ Logging is provided by the centralized :mod:`rm_logging` module.
 
 import subprocess
 
-from rm_logging import log
+from rm_logging import LOGGER, log_call
 
 
 def build_disk_device_entry(filesystem: str, mount_point: str) -> dict:
@@ -73,6 +73,7 @@ def parse_df_output(output: str) -> list[dict]:
     return entries
 
 
+@log_call(LOGGER)
 def append_home_directory_entry(entries: list[dict]) -> list[dict]:
     """Append a ``/home`` row when it is not already a separate mount.
 
@@ -98,7 +99,7 @@ def append_home_directory_entry(entries: list[dict]) -> list[dict]:
             stderr=subprocess.DEVNULL,
         )
     except Exception as exc:
-        log("warn", f"df /home command failed: {exc}")
+        LOGGER.warning("df /home command failed: %s", exc)
         return entries
 
     home_entries = parse_df_output(output)
@@ -112,6 +113,7 @@ def append_home_directory_entry(entries: list[dict]) -> list[dict]:
     return entries
 
 
+@log_call(LOGGER)
 def detect_disk_devices() -> list[dict]:
     """Query ``df`` and return mounted block devices plus a ``/home`` row.
 
@@ -127,7 +129,7 @@ def detect_disk_devices() -> list[dict]:
             stderr=subprocess.DEVNULL,
         )
     except Exception as exc:
-        log("warn", f"df command failed: {exc}")
+        LOGGER.warning("df command failed: %s", exc)
         return []
 
     return append_home_directory_entry(parse_df_output(output))
@@ -153,6 +155,7 @@ def filter_disk_devices_to_mount_point(
     return [device for device in devices if device.get("mountPoint") == mount_point]
 
 
+@log_call(LOGGER)
 def detect_disk_devices_home_only() -> list[dict]:
     """Detect and return only the Resource Monitor entry for ``/home``.
 
@@ -167,7 +170,7 @@ def detect_disk_devices_home_only() -> list[dict]:
             stderr=subprocess.DEVNULL,
         )
     except Exception as exc:
-        log("warn", f"df command failed: {exc}")
+        LOGGER.warning("df command failed: %s", exc)
         return []
 
     entries = append_home_directory_entry(parse_df_output(output))

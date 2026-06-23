@@ -13,6 +13,8 @@ import ast
 import os
 import sys
 
+from rm_logging import LOGGER, log_call
+
 
 def parse_strv(raw: str | None) -> list[str]:
     """Parse gsettings string-array output into normalized string values.
@@ -55,6 +57,7 @@ def unique_values(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
+@log_call(LOGGER)
 def append_strv(raw: str | None, value: str) -> list[str]:
     """Return normalized values with ``value`` appended if it is not present.
 
@@ -72,6 +75,7 @@ def append_strv(raw: str | None, value: str) -> list[str]:
     return current
 
 
+@log_call(LOGGER)
 def remove_strv(raw: str | None, value: str) -> list[str]:
     """Return normalized values with every occurrence of ``value`` removed.
 
@@ -98,6 +102,7 @@ def format_strv(values: list[str]) -> str:
     return "[" + ", ".join(repr(str(item)) for item in values) + "]"
 
 
+@log_call(LOGGER)
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint used by ``install.sh``.
 
@@ -115,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 2 or args[0] not in {"append", "remove"}:
+        LOGGER.error("Invalid gsettings_strv usage: %r", args)
         print("Usage: gsettings_strv.py append|remove <value>", file=sys.stderr)
         return 2
 

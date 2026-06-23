@@ -18,13 +18,6 @@ SCHEMA = "org.gnome.shell.extensions.resource-monitor"
 SCHEMA_DIR = "/tmp/resource-monitor/schemas"
 
 
-def test_log_writes_uppercase_level_to_stderr(capsys):
-    """Logging should retain the existing installer-compatible format."""
-    mod.log("warn", "configuration failed")
-
-    assert capsys.readouterr().err == "[WARN] configuration failed\n"
-
-
 def test_format_gsettings_list_serializes_json_strings():
     """Device dictionaries should become a GSettings array of JSON strings."""
     devices = [{"device": "GPU-abc", "name": "RTX 4090"}]
@@ -142,34 +135,37 @@ def test_apply_settings_returns_true_for_success():
     )
 
 
-def test_apply_settings_logs_process_failure(capsys):
-    """A nonzero gsettings process should return false and report stderr."""
+def test_apply_settings_logs_process_failure(caplog, monkeypatch):
+    """A nonzero gsettings process should return false and log stderr."""
     result = MagicMock(returncode=1, stderr="invalid value\n")
 
+    monkeypatch.setattr(mod.LOGGER, "propagate", True)
     with patch.object(mod.subprocess, "run", return_value=result):
-        assert mod.apply_settings(["gsettings"]) is False
+        with caplog.at_level("ERROR", logger=mod.LOGGER.name):
+            assert mod.apply_settings(["gsettings"]) is False
 
-    assert capsys.readouterr().err == "[ERROR] gsettings failed: invalid value\n"
+    assert "gsettings failed: invalid value" in caplog.text
 
 
-def test_apply_settings_logs_timeout(capsys):
+def test_apply_settings_logs_timeout(caplog, monkeypatch):
     """A timed-out gsettings process should return false."""
+    monkeypatch.setattr(mod.LOGGER, "propagate", True)
     with patch.object(
         mod.subprocess,
         "run",
         side_effect=subprocess.TimeoutExpired("gsettings", 10),
     ):
-        assert mod.apply_settings(["gsettings"]) is False
+        with caplog.at_level("ERROR", logger=mod.LOGGER.name):
+            assert mod.apply_settings(["gsettings"]) is False
 
-    assert capsys.readouterr().err == "[ERROR] gsettings command timed out\n"
+    assert "gsettings command timed out" in caplog.text
 
 
-def test_apply_settings_logs_unexpected_error(capsys):
+def test_apply_settings_logs_unexpected_error(caplog, monkeypatch):
     """Unexpected process errors should remain non-fatal to the caller."""
+    monkeypatch.setattr(mod.LOGGER, "propagate", True)
     with patch.object(mod.subprocess, "run", side_effect=OSError("missing")):
-        assert mod.apply_settings(["gsettings"]) is False
+        with caplog.at_level("ERROR", logger=mod.LOGGER.name):
+            assert mod.apply_settings(["gsettings"]) is False
 
-    assert (
-        capsys.readouterr().err
-        == "[ERROR] Unexpected error running gsettings: missing\n"
-    )
+    assert "Unexpected error running gsettings: missing" in caplog.text

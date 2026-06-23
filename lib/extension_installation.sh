@@ -103,7 +103,7 @@ patch_extension_metadata() {
     msg "Patched extension metadata for GNOME Shell ${shell_ver}"
     return 0
   else
-    echo "WARNING: failed to patch $meta_file in $ext_dir" >&2
+    msg "WARNING: failed to patch $meta_file in $ext_dir"
     return 1
   fi
 }

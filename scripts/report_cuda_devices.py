@@ -5,7 +5,7 @@ report_cuda_devices — Query nvidia-smi and print a GSettings GPU device list.
 Components:
   - detect_nvidia_smi(): Check if nvidia-smi is available. Returns path or None.
   - parse_gpu_output(output): Parse nvidia-smi -L output into a list of device dicts.
-  - Shared serialization and logging imported from resource_monitor_settings.
+  - Shared serialization imported from resource_monitor_settings.
   - get_gpu_devices(): Query nvidia-smi and return structured GPU info.
   - main(): CLI entry point — prints a GSettings string array to stdout.
 
@@ -17,7 +17,8 @@ import re
 import shutil
 import subprocess
 
-from resource_monitor_settings import format_gsettings_list, log
+from resource_monitor_settings import format_gsettings_list
+from rm_logging import LOGGER, log_call
 
 
 # ── GPU detection ────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ def parse_gpu_output(output: str) -> list[dict]:
     return entries
 
 
+@log_call(LOGGER)
 def get_gpu_devices() -> list[dict]:
     """Query nvidia-smi and return structured GPU device information.
 
@@ -78,7 +80,7 @@ def get_gpu_devices() -> list[dict]:
     """
     nvidia_smi = detect_nvidia_smi()
     if nvidia_smi is None:
-        log("info", "nvidia-smi not found — no GPUs detected")
+        LOGGER.info("nvidia-smi not found; no GPUs detected")
         return []
 
     try:
@@ -88,7 +90,7 @@ def get_gpu_devices() -> list[dict]:
             stderr=subprocess.DEVNULL,
         )
     except Exception as exc:
-        log("warn", f"nvidia-smi -L failed: {exc}")
+        LOGGER.warning("nvidia-smi -L failed: %s", exc)
         return []
 
     return parse_gpu_output(output)
@@ -96,6 +98,7 @@ def get_gpu_devices() -> list[dict]:
 
 # ── CLI entry point ─────────────────────────────────────────────────────────
 
+@log_call(LOGGER)
 def main() -> int:
     """CLI entry point for report_cuda_devices.py.
 
@@ -110,7 +113,7 @@ def main() -> int:
         print(format_gsettings_list(devices))
         return 0
     except Exception as exc:
-        log("error", f"Unexpected error: {exc}")
+        LOGGER.error("Unexpected error: %s", exc)
         return 1
 
 

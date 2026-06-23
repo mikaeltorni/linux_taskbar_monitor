@@ -9,13 +9,10 @@ import json
 import subprocess
 
 from resource_monitor_disks import filter_disk_devices_to_mount_point
-
-# Re-export the centralized logger so existing callers can keep importing ``log``
-# from this module (``from resource_monitor_settings import log``).
-from rm_logging import log
+from rm_logging import LOGGER, log_call
 
 __all__ = [
-    "log",
+    "LOGGER",
     "format_gsettings_list",
     "build_gsettings_args",
     "apply_settings",
@@ -36,6 +33,7 @@ def format_gsettings_list(devices: list[dict]) -> str:
     return "[" + ", ".join(repr(json.dumps(device)) for device in devices) + "]"
 
 
+@log_call(LOGGER)
 def build_gsettings_args(
     schema: str,
     ext_dir: str,
@@ -131,6 +129,7 @@ def build_gsettings_args(
     return commands
 
 
+@log_call(LOGGER)
 def apply_settings(args: list[str]) -> bool:
     """Execute one ``gsettings set`` command.
 
@@ -148,12 +147,12 @@ def apply_settings(args: list[str]) -> bool:
             timeout=10,
         )
         if result.returncode != 0:
-            log("error", f"gsettings failed: {result.stderr.strip()}")
+            LOGGER.error("gsettings failed: %s", result.stderr.strip())
             return False
         return True
     except subprocess.TimeoutExpired:
-        log("error", "gsettings command timed out")
+        LOGGER.error("gsettings command timed out")
         return False
     except Exception as exc:
-        log("error", f"Unexpected error running gsettings: {exc}")
+        LOGGER.error("Unexpected error running gsettings: %s", exc)
         return False
