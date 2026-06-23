@@ -57,14 +57,13 @@ install_pwa_icons() {
     done
   done
 
-  # Build directory list from collected sizes
-  local dir_list=()
-  for sz in "${!needed_sizes[@]}"; do
-    dir_list+=("${sz}x${sz}")
-  done
-
-  if [ ${#dir_list[@]} -gt 0 ]; then
-    run_as_target mkdir -p "${icon_theme}/${dir_list[*]}/apps"
+  if [ ${#needed_sizes[@]} -gt 0 ]; then
+    local created_dirs=0
+    for sz in "${!needed_sizes[@]}"; do
+      run_as_target mkdir -p "${icon_theme}/${sz}x${sz}/apps"
+      created_dirs=$((created_dirs + 1))
+    done
+    msg "  prepared $created_dirs icon theme size directories"
   fi
 
   # Create symlinks for each PWA icon
@@ -94,6 +93,7 @@ install_pwa_icons() {
     # Create desktop entry if it doesn't exist yet
     local desktop_path="$TARGET_HOME/.local/share/applications/chrome-${app_id}-Default.desktop"
     if [ ! -f "$desktop_path" ]; then
+      run_as_target mkdir -p "$(dirname "$desktop_path")"
       run_as_target tee "$desktop_path" >/dev/null <<DESKTOP
 [Desktop Entry]
 Version=1.0
