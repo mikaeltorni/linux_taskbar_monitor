@@ -286,21 +286,17 @@ class TestInstallerWiringColors:
         assert 'patch_resource_monitor_colors.js' in source
 
     def test_installer_patches_extension_js(self):
-        """Installer should apply color patch to extension.js (via $ext_dir), not containers.js."""
+        """Color patch component should target extension.js, not containers.js."""
         source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
-        # The color patch targets the extension directory, which contains extension.js.
-        assert "patch_resource_monitor_colors.js" in source
-        lines = source.splitlines()
-        for i, line in enumerate(lines):
+        # Collapse line continuations so the multi-line patch invocation reads as
+        # one logical command before asserting on its target file.
+        joined = source.replace("\\\n", " ")
+        assert "patch_resource_monitor_colors.js" in joined
+        for line in joined.splitlines():
             if "patch_resource_monitor_colors.js" in line:
                 assert "extension.js" in line, f"Color patch should target extension.js: {line}"
 
-    def test_installer_runs_color_patch_after_disk_and_vram(self):
-        """Installer should run color patch after vram and disk patches."""
-        source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
-        lines = [l.strip() for l in source.splitlines() if "patch_resource_monitor" in l]
-        assert len(lines) >= 3, f"Expected at least 3 patch calls, found: {len(lines)}"
-        # vram should be first, disk second, colors third.
-        assert "vram.js" in lines[0]
-        assert "disk.js" in lines[1]
-        assert "colors.js" in lines[2]
+    def test_vram_runs_before_per_disk(self):
+        """Both containers.js patches are separate components; VRAM must precede per-disk."""
+        components = Path("installer/components.sh").read_text(encoding="utf-8")
+        assert components.index("rm_vram|") < components.index("rm_per_disk|")

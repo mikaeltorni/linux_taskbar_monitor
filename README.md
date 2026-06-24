@@ -144,13 +144,29 @@ bash install.sh --list-components  # print: id<TAB>label<TAB>default
 In the interactive menu, **space** toggles a component, `a`/`n` select all
 or none, and **Enter** installs the selection. Components:
 
+The **Resource Monitor extension is the mandatory core**: `install.sh` installs
+it unconditionally before the component selection runs, so the taskbar indicator
+works no matter which components you pick. The components below are all optional
+(default-on) and layer on top of the core:
+
 | Component id | Description | Default |
 |---|---|---|
-| `resource_monitor` | Resource Monitor (CPU/RAM/disk/GPU) extension | on |
+| `rm_gradient_colors` | Resource Monitor gradient indicator colors | on |
+| `rm_vram` | Resource Monitor GPU VRAM display | on |
+| `rm_per_disk` | Resource Monitor per-disk display | on |
 | `window_rules` | App window-rules extension (Wayland) | on |
 | `auto_move_windows` | Auto-move-windows workspace placement | on |
 | `dash_to_panel` | Dash-to-Panel and Ubuntu Dock configuration | on |
 | `pwa_icons` | Chrome PWA icons and desktop entries | on |
+
+### Customizing the core
+
+The core widens the extension to accept sub-second refresh intervals; `0.5` is
+only the default. Override it (and other defaults) via environment variables:
+
+```bash
+RESOURCE_MONITOR_REFRESH_TIME=1 bash install.sh   # 1-second refresh instead of 0.5
+```
 
 
 ## Disclaimer

@@ -2,8 +2,13 @@
 # install.sh - Install and configure the Ubuntu 24.04 taskbar system status monitor
 #              and related GNOME Shell extensions.
 #
-# Components:
+# Mandatory core (always installed):
 #   - Resource Monitor extension (CPU/RAM/disk/GPU indicator)
+#
+# Optional components (selectable; all default-on):
+#   - Resource Monitor gradient indicator colors
+#   - Resource Monitor GPU VRAM display
+#   - Resource Monitor per-disk display
 #   - Window Rules extension (app-rules@local — workspace/sticky rules)
 #   - Auto-move-windows extension (Wayland workspace placement)
 #   - Dash-to-Panel configuration and Ubuntu Dock disabling
@@ -28,6 +33,9 @@ SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
 RESOURCE_MONITOR_EXTENSION_ID="${RESOURCE_MONITOR_EXTENSION_ID:-Resource_Monitor@Ory0n}"
 RESOURCE_MONITOR_EXTENSION_URL="${RESOURCE_MONITOR_EXTENSION_URL:-https://extensions.gnome.org/extension-data/Resource_MonitorOry0n.v27.shell-extension.zip}"
 RESOURCE_MONITOR_EXTENSION_SHA256="${RESOURCE_MONITOR_EXTENSION_SHA256:-761f422933ed8e76b0c4653ae7bce5862902920cb7e9f4de2cec23b899d6d170}"
+# Panel refresh interval in seconds. The core widens the extension to accept
+# sub-second values; 0.5 is the default but the user can override it freely.
+RESOURCE_MONITOR_REFRESH_TIME="${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
 
 # ── Chrome PWA definitions — app-id|name|desktop_file|workspace ───────────────
 CHROME_PWAS=(
@@ -123,6 +131,9 @@ case "${1:-}" in
 esac
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
+# Mandatory core: the Resource Monitor indicator always installs so the program
+# works regardless of which optional components the user selects below.
+install_resource_monitor_core
 component_main "$@"
 msg "=== Taskbar Setup Complete ==="
 msg "Log out and back in before testing GNOME Shell extension changes."

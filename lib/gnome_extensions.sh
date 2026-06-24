@@ -25,11 +25,32 @@ ext_gsettings() {
   run_as_target gsettings --schemadir "$ext_dir/schemas" "$@"
 }
 
-configure_resource_monitor_extension() {
-  msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator"
+# RESOURCE_MONITOR_EXT_DIR is published by install_resource_monitor_core so the
+# optional patch components (gradient colors, VRAM, per-disk) can locate the
+# extracted extension after the mandatory core has installed it.
+RESOURCE_MONITOR_EXT_DIR=""
+
+# resource_monitor_ext_dir - Echo the installed Resource Monitor extension dir.
+# Falls back to the canonical path derived from the extension id when the core
+# has not exported it yet (e.g. a patch component invoked in isolation).
+resource_monitor_ext_dir() {
+  if [ -n "$RESOURCE_MONITOR_EXT_DIR" ]; then
+    printf '%s\n' "$RESOURCE_MONITOR_EXT_DIR"
+  else
+    printf '%s\n' "$TARGET_HOME/.local/share/gnome-shell/extensions/$RESOURCE_MONITOR_EXTENSION_ID"
+  fi
+}
+
+# install_resource_monitor_core - Mandatory core: download, verify, extract and
+# configure the Resource Monitor extension so the taskbar indicator works on its
+# own regardless of which optional components the user selects. The sub-second
+# refresh *capability* patch lives here; the refresh *value* is configurable via
+# RESOURCE_MONITOR_REFRESH_TIME (default 0.5). The visual/VRAM/per-disk tweaks
+# are split into separately selectable components below.
+install_resource_monitor_core() {
+  msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator (core)"
   need_cmd curl
   need_cmd unzip
-  need_cmd node
   need_cmd python3
   need_cmd gsettings
   need_cmd glib-compile-schemas
@@ -53,9 +74,8 @@ configure_resource_monitor_extension() {
   fi
   rm -rf "$tmpdir"
 
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" "$ext_dir/panel/containers.js"
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" "$ext_dir/panel/containers.js"
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" "$ext_dir/extension.js"
+  # Sub-second refresh capability (schema/type widening + GPU poll floor). The
+  # actual interval is applied below from RESOURCE_MONITOR_REFRESH_TIME.
   run_as_target python3 "$SCRIPT_DIR/scripts/patch_resource_monitor_refresh.py" "$ext_dir"
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
@@ -66,7 +86,7 @@ configure_resource_monitor_extension() {
     patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999 || true
   fi
 
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime 0.5
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
@@ -101,5 +121,37 @@ configure_resource_monitor_extension() {
   fi
 
   enable_shell_extension "$ext_id"
-  msg "Resource Monitor installed with a 0.5-second refresh interval."
+  RESOURCE_MONITOR_EXT_DIR="$ext_dir"
+  msg "Resource Monitor core installed with a ${RESOURCE_MONITOR_REFRESH_TIME:-0.5}-second refresh interval."
+}
+
+# ── Optional Resource Monitor tweaks (selectable components) ──────────────────
+# Each patcher edits the extension files extracted by install_resource_monitor_core.
+# The core re-extracts a clean copy on every run, so deselecting a tweak on a
+# later run reverts it. Re-running with the tweak selected is idempotent (the
+# patch scripts skip already-applied edits).
+
+# patch_resource_monitor_gradient_colors - Replace upstream threshold coloring
+# with a smooth value-proportional gradient on the panel indicators.
+patch_resource_monitor_gradient_colors() {
+  msg "Applying Resource Monitor gradient colors patch"
+  need_cmd node
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" \
+    "$(resource_monitor_ext_dir)/extension.js"
+}
+
+# patch_resource_monitor_vram - Show GPU VRAM usage in the panel.
+patch_resource_monitor_vram() {
+  msg "Applying Resource Monitor VRAM display patch"
+  need_cmd node
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" \
+    "$(resource_monitor_ext_dir)/panel/containers.js"
+}
+
+# patch_resource_monitor_per_disk - Show each disk device separately in the panel.
+patch_resource_monitor_per_disk() {
+  msg "Applying Resource Monitor per-disk display patch"
+  need_cmd node
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
+    "$(resource_monitor_ext_dir)/panel/containers.js"
 }
