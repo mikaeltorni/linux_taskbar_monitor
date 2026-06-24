@@ -130,8 +130,13 @@ configure_dash_and_switchers() {
     return 0
   fi
   msg "dash-to-panel found, enabling and disabling ubuntu-dock"
-  run_as_target gnome-extensions disable ubuntu-dock@ubuntu.com || true
-  run_as_target gnome-extensions enable "$ext_id" || true
+  # These are synchronous D-Bus calls into GNOME Shell that can hang for minutes
+  # on a fresh install or an unresponsive session (the `|| true` only catches an
+  # error exit, not a hang), so dispatch each in the BACKGROUND, time-boxed and
+  # with stdio detached, so they can never block the installer. Persistent state
+  # is handled by enable_shell_extension (gsettings) below.
+  run_as_target sh -c 'timeout 5 gnome-extensions disable ubuntu-dock@ubuntu.com >/dev/null 2>&1 </dev/null &' || true
+  run_as_target sh -c 'timeout 5 gnome-extensions enable "$1" >/dev/null 2>&1 </dev/null &' _ "$ext_id" || true
   enable_shell_extension "$ext_id"
   run_as_target dconf write /org/gnome/shell/extensions/dash-to-panel/show-favorites true || true
   run_as_target dconf write /org/gnome/shell/extensions/dash-to-panel/isolate-workspaces true || true
