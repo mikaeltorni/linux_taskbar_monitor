@@ -120,11 +120,14 @@ It is automatically cloned and run by the main installer (`installation_scripts/
 
 ## Extended Features
 
-This repo now also manages:
+This repo also manages:
 - **Window Rules Extension** (`app-rules@local`): Assigns apps to workspaces or makes them sticky on Wayland
-- **Auto-move-windows**: GNOME official extension for Wayland workspace placement
-- **Dash-to-Panel**: Configuration and Ubuntu Dock disabling
-- **PWA Icons**: Chrome progressive web app icon symlinks and desktop entries
+
+> Previously this repo also bundled auto-move-windows placement, Dash-to-Panel,
+> and Chrome PWA icons. Those are desktop-wide behaviors owned by other
+> repositories and were moved there to avoid duplication: auto-move-windows →
+> [`linux_workspaces_setup`](https://github.com/mikaeltorni/linux_workspaces_setup),
+> Dash-to-Panel and PWA icons → [`linux_configuration_setup`](https://github.com/mikaeltorni/linux_configuration_setup).
 
 ## Component selection
 
@@ -155,9 +158,6 @@ works no matter which components you pick. The components below are all optional
 | `rm_vram` | Resource Monitor GPU VRAM display | on |
 | `rm_per_disk` | Resource Monitor per-disk display | on |
 | `window_rules` | App window-rules extension (Wayland) | on |
-| `auto_move_windows` | Auto-move-windows workspace placement | on |
-| `dash_to_panel` | Dash-to-Panel and Ubuntu Dock configuration | on |
-| `pwa_icons` | Chrome PWA icons and desktop entries | on |
 
 ### Customizing the core
 
@@ -168,6 +168,25 @@ only the default. Override it (and other defaults) via environment variables:
 RESOURCE_MONITOR_REFRESH_TIME=1 bash install.sh   # 1-second refresh instead of 0.5
 ```
 
+
+## Detect, reconfigure, and uninstall
+
+This installer tracks what it has installed and can re-apply or remove it, so you
+can refresh configuration after a repo update or cleanly back a feature out.
+
+```bash
+bash install.sh --detect            # show each component as installed|absent
+bash install.sh --reconfigure a,b   # re-apply (idempotent) these component ids
+bash install.sh --uninstall a,b     # uninstall these component ids
+```
+
+In the interactive menu (run `bash install.sh` on a terminal, or via the master
+installer), already-installed components show a green `✓`. Select one with
+**space** to **reconfigure** it (`~`), press **`u`** to mark it for **uninstall**
+(`✗`), or press **`r`** to reconfigure every installed component at once. Detection
+uses a live check where deterministic and otherwise an install receipt under
+`${XDG_STATE_HOME:-~/.local/state}/isc/receipts/`; a component without a reversal
+step simply clears that receipt on uninstall.
 
 ## Disclaimer
 
