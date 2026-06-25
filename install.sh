@@ -37,6 +37,15 @@ RESOURCE_MONITOR_EXTENSION_SHA256="${RESOURCE_MONITOR_EXTENSION_SHA256:-761f4229
 # sub-second values; 0.5 is the default but the user can override it freely.
 RESOURCE_MONITOR_REFRESH_TIME="${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
 
+# ── Dash to Panel extension settings ──────────────────────────────────────────
+# dash-to-panel is not packaged in Ubuntu 24.04's apt sources, so the dash_to_panel
+# component downloads the pinned EGO build and installs it under the target user's
+# extensions directory (mirroring the Resource Monitor core flow). v73 advertises
+# shell-version 46–50, covering Ubuntu 24.04's GNOME 46.
+DASH_TO_PANEL_EXTENSION_ID="${DASH_TO_PANEL_EXTENSION_ID:-dash-to-panel@jderose9.github.com}"
+DASH_TO_PANEL_EXTENSION_URL="${DASH_TO_PANEL_EXTENSION_URL:-https://extensions.gnome.org/extension-data/dash-to-paneljderose9.github.com.v73.shell-extension.zip}"
+DASH_TO_PANEL_EXTENSION_SHA256="${DASH_TO_PANEL_EXTENSION_SHA256:-944ee1408d6f5b6e1cf646bc81dd7af4f9a7bb880b3d88dbb0d90ada8c000410}"
+
 # ── Chrome PWA definitions — app-id|name|desktop_file|workspace ───────────────
 CHROME_PWAS=(
   "chatgpt|ChatGPT|chatgpt.desktop|0"
@@ -127,7 +136,7 @@ source "$SCRIPT_DIR/installer/components.sh"
 # Listing/help must print only their own output (the master installer parses
 # --list-components); bypass the surrounding messages for those.
 case "${1:-}" in
-  --list-components|--help|-h) component_main "$@"; exit $? ;;
+  --list-components|--detect|--help|-h|--uninstall|--uninstall=*) component_main "$@"; exit $? ;;
 esac
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="

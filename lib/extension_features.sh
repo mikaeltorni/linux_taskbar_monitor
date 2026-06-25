@@ -6,8 +6,10 @@
 #   - configure_dash_and_switchers(): Configure dash-to-panel extension settings.
 #
 # Sourced after lib/helpers.sh, lib/gsettings_helpers.sh, and lib/extension_installation.sh.
-# Depends on: msg, run_as_target, enable_shell_extension, remove_gsettings_list, need_cmd, apt_install
-# Requires variables: CHROME_PWAS
+# Depends on: msg, run_as_target, enable_shell_extension, remove_gsettings_list,
+#   need_cmd, apt_install, install_gnome_ext_zip, patch_extension_metadata
+# Requires variables: CHROME_PWAS, DASH_TO_PANEL_EXTENSION_URL,
+#   DASH_TO_PANEL_EXTENSION_SHA256
 
 # ── install_pwa_icons ────────────────────────────────────────────────────────
 # Set up Chrome PWA (Progressive Web App) icons and desktop entries.
@@ -112,6 +114,40 @@ DESKTOP
   run_as_target gtk-update-icon-cache --force "${icon_theme}" 2>/dev/null || true
 }
 
+# ── dash_to_panel_installed ──────────────────────────────────────────────────
+# True when the dash-to-panel extension is present on disk (target user's local
+# extensions dir or a system-wide dir). Presence is checked on disk rather than
+# via `gnome-extensions list`, because a freshly installed extension does not
+# appear in the live list until GNOME Shell is reloaded — which deployment must
+# never force.
+dash_to_panel_installed() {
+  local ext_id="$1"
+  [ -f "$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id/metadata.json" ] && return 0
+  [ -f "/usr/share/gnome-shell/extensions/$ext_id/metadata.json" ] && return 0
+  return 1
+}
+
+# ── install_dash_to_panel ─────────────────────────────────────────────────────
+# Download and install the pinned dash-to-panel EGO build into the target user's
+# local extensions directory, patching its metadata for the running GNOME Shell
+# and pinning the version high so a shell reload never auto-updates over it.
+install_dash_to_panel() {
+  local ext_id="$1"
+  local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
+  local shell_version
+
+  msg "dash-to-panel not installed; downloading pinned EGO build"
+  install_gnome_ext_zip \
+    "$DASH_TO_PANEL_EXTENSION_URL" "$ext_dir" \
+    "$DASH_TO_PANEL_EXTENSION_SHA256" "$ext_id"
+
+  shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
+  if [ -n "$shell_version" ]; then
+    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999 || true
+  fi
+  msg "dash-to-panel installed at $ext_dir"
+}
+
 # ── configure_dash_and_switchers ─────────────────────────────────────────────
 # Configure dash-to-panel extension and disable ubuntu-dock.
 #
@@ -121,15 +157,14 @@ DESKTOP
 configure_dash_and_switchers() {
   msg "Configuring dash tweaks"
   local ext_id="dash-to-panel@jderose9.github.com"
-  if ! run_as_target bash -lc 'command -v gnome-extensions >/dev/null 2>&1'; then
-    msg "gnome-extensions CLI not found; cannot configure dash-to-panel."
+  if ! dash_to_panel_installed "$ext_id"; then
+    install_dash_to_panel "$ext_id"
+  fi
+  if ! dash_to_panel_installed "$ext_id"; then
+    msg "dash-to-panel install failed; leaving ubuntu-dock enabled."
     return 0
   fi
-  if ! run_as_target bash -lc 'gnome-extensions list | grep -Fxq "$1"' _ "$ext_id"; then
-    msg "dash-to-panel NOT installed or GNOME thinks it is incompatible; leaving ubuntu-dock enabled."
-    return 0
-  fi
-  msg "dash-to-panel found, enabling and disabling ubuntu-dock"
+  msg "dash-to-panel present, enabling and disabling ubuntu-dock"
   # These are synchronous D-Bus calls into GNOME Shell that can hang for minutes
   # on a fresh install or an unresponsive session (the `|| true` only catches an
   # error exit, not a hang), so dispatch each in the BACKGROUND, time-boxed and
