@@ -42,33 +42,14 @@ def test_optional_resource_monitor_tweaks_are_separate_components():
     assert "resource_monitor|" not in components
 
 
-def test_dash_to_panel_is_installed_when_absent():
-    """The dash_to_panel component must download/install dash-to-panel when it is
-    not already present, rather than silently bailing. dash-to-panel is not in
-    Ubuntu 24.04's apt sources, so the install goes through the pinned EGO build.
-    Presence is checked on disk (metadata.json), never via the live
-    `gnome-extensions list`, which omits a freshly installed extension until a
-    Shell reload that deployment must not force."""
-    features = (ROOT_DIR / "lib" / "extension_features.sh").read_text(encoding="utf-8")
+def test_dash_to_panel_is_not_owned_by_system_monitor_repo():
+    """Dash-to-Panel layout belongs to linux_configuration_setup, not here."""
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
     install = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
 
-    # The pinned EGO build is configured in install.sh.
-    assert "DASH_TO_PANEL_EXTENSION_URL" in install
-    assert "DASH_TO_PANEL_EXTENSION_SHA256" in install
-
-    # Missing dash-to-panel triggers an install instead of an early return.
-    assert "install_dash_to_panel" in features
-    assert "install_gnome_ext_zip" in features
-    assert "$DASH_TO_PANEL_EXTENSION_URL" in features
-    assert "$DASH_TO_PANEL_EXTENSION_SHA256" in features
-
-    # Presence is detected on disk, not from the live extension list.
-    assert "dash_to_panel_installed()" in features
-    assert "metadata.json" in features
-    assert "gnome-extensions list | grep -Fxq" not in features
-
-    # Enablement is persisted via gsettings regardless of the live list.
-    assert 'enable_shell_extension "$ext_id"' in features
+    assert "dash_to_panel|" not in components
+    assert "DASH_TO_PANEL_EXTENSION_URL" not in install
+    assert "layout -> linux_configuration_setup" in components
 
 
 def test_install_runs_core_before_component_selection():

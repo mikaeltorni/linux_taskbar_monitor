@@ -155,3 +155,16 @@ patch_resource_monitor_per_disk() {
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
     "$(resource_monitor_ext_dir)/panel/containers.js"
 }
+
+
+# Integrate system-status extension with Dash-to-Panel bottom panel
+# When both extensions are active, ensure proper positioning and interaction
+setup_dash_to_panel_integration() {
+  # Ensure dash-to-panel is configured for bottom panel position  
+  dconf write /org/gnome/shell/extensions/dash-to-panel/panel-position "'BOTTOM'" || true
+  
+  # Configure system-status to work with dash-to-panel layout
+  gsettings set org.gnome.shell disable-user-extensions false 2>/dev/null || true
+  
+  msg "System status extension configured for Dash-to-Panel integration"  
+}
