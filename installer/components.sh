@@ -20,13 +20,15 @@ ISC_POSTFLIGHT="report_sudo_required"
 # user can mix and match -- the three rm_* tweaks layer on top of the core.
 ISC_COMPONENTS=(
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors"
-  "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram"
-  "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk"
-  "window_rules|App window-rules extension (Wayland)|on|monitor_configure_window_rules"
-  "auto_move_windows|Auto-move-windows workspace placement|on|configure_auto_move_windows"
-  "dash_to_panel|Dash-to-Panel and Ubuntu Dock configuration|on|configure_dash_and_switchers"
-  "pwa_icons|Chrome PWA icons and desktop entries|on|install_pwa_icons"
+  "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
+  "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk|uninstall_rm_per_disk"
+  "window_rules|App window-rules extension (Wayland)|on|monitor_configure_window_rules|detect_window_rules|uninstall_window_rules"
 )
+# Note: this repo owns only the Resource Monitor system-status extension and its
+# window-rules helper. Features that are desktop-wide behavior were moved to their
+# owning repositories to avoid cross-repo duplication: auto-move-windows placement
+# -> linux_workspaces_setup, Chrome PWA icons/desktop entries and the Dash-to-Panel
+# layout -> linux_configuration_setup.
 
 # monitor_configure_window_rules - install the window-rules extension, skipping
 # it on X11 sessions where it does not apply (matches the original guard).

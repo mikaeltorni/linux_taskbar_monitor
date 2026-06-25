@@ -15,7 +15,7 @@
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 # Also sources lib/window_rules_extension.sh for window rules extension config.
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
-# Also sources lib/extension_features.sh for PWA icons, monitor hotkeys, workspace popup, and dash config.
+# Also sources lib/extension_features.sh (Resource Monitor feature helpers).
 source "$SCRIPT_DIR/lib/extension_features.sh"
 
 # ── Enable GNOME Shell extension (idempotent) ────────────────────────────────

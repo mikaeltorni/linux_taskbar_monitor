@@ -10,9 +10,11 @@
 #   - Resource Monitor GPU VRAM display
 #   - Resource Monitor per-disk display
 #   - Window Rules extension (app-rules@local — workspace/sticky rules)
-#   - Auto-move-windows extension (Wayland workspace placement)
 #   - Dash-to-Panel configuration and Ubuntu Dock disabling
-#   - PWA icon setup for Chrome progressive web apps
+#
+# Auto-move-windows placement (linux_workspaces_setup) and Chrome PWA icons
+# (linux_configuration_setup) used to be selectable here too; they were removed
+# to avoid duplicating components owned by those repositories.
 #
 # Idempotent: skips already-installed extensions, detects existing desktop files.
 #
@@ -37,20 +39,10 @@ RESOURCE_MONITOR_EXTENSION_SHA256="${RESOURCE_MONITOR_EXTENSION_SHA256:-761f4229
 # sub-second values; 0.5 is the default but the user can override it freely.
 RESOURCE_MONITOR_REFRESH_TIME="${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
 
-# ── Dash to Panel extension settings ──────────────────────────────────────────
-# dash-to-panel is not packaged in Ubuntu 24.04's apt sources, so the dash_to_panel
-# component downloads the pinned EGO build and installs it under the target user's
-# extensions directory (mirroring the Resource Monitor core flow). v73 advertises
-# shell-version 46–50, covering Ubuntu 24.04's GNOME 46.
-DASH_TO_PANEL_EXTENSION_ID="${DASH_TO_PANEL_EXTENSION_ID:-dash-to-panel@jderose9.github.com}"
-DASH_TO_PANEL_EXTENSION_URL="${DASH_TO_PANEL_EXTENSION_URL:-https://extensions.gnome.org/extension-data/dash-to-paneljderose9.github.com.v73.shell-extension.zip}"
-DASH_TO_PANEL_EXTENSION_SHA256="${DASH_TO_PANEL_EXTENSION_SHA256:-944ee1408d6f5b6e1cf646bc81dd7af4f9a7bb880b3d88dbb0d90ada8c000410}"
+# Dash-to-Panel now lives in linux_configuration_setup (lib/dash_to_panel.sh),
+# which owns desktop layout/panel behavior; its EGO download settings moved with
+# it, so this system-monitor repo no longer defines them.
 
-# ── Chrome PWA definitions — app-id|name|desktop_file|workspace ───────────────
-CHROME_PWAS=(
-  "chatgpt|ChatGPT|chatgpt.desktop|0"
-  "monkeytype|Monkeytype|monkeytype.desktop|7"
-)
 
 # ── Core helpers (inline to avoid cross-repo sourcing issues) ─────────────────
 msg() { printf '[%(%Y-%m-%dT%H:%M:%S%z)T] %s\n' -1 "$*"; }
@@ -112,7 +104,6 @@ apt_install() {
 # ── Source extension library modules ──────────────────────────────────────────
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
-source "$SCRIPT_DIR/lib/window_manager.sh"
 source "$SCRIPT_DIR/lib/gnome_extensions.sh"
 source "$SCRIPT_DIR/lib/extension_features.sh"
 source "$SCRIPT_DIR/lib/lifecycle.sh"
