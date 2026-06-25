@@ -115,6 +115,7 @@ source "$SCRIPT_DIR/lib/window_rules_extension.sh"
 source "$SCRIPT_DIR/lib/window_manager.sh"
 source "$SCRIPT_DIR/lib/gnome_extensions.sh"
 source "$SCRIPT_DIR/lib/extension_features.sh"
+source "$SCRIPT_DIR/lib/lifecycle.sh"
 
 # ── Component selection runtime and manifest ─────────────────────────────────
 # The manifest maps each component id to a configure_*/install_* function from
