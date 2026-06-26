@@ -138,6 +138,7 @@ patch_resource_monitor_gradient_colors() {
   need_cmd node
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" \
     "$(resource_monitor_ext_dir)/extension.js"
+  _isc_mark_installed "rm_gradient_colors" || true
 }
 
 # patch_resource_monitor_vram - Show GPU VRAM usage in the panel.
@@ -154,6 +155,7 @@ patch_resource_monitor_per_disk() {
   need_cmd node
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
     "$(resource_monitor_ext_dir)/panel/containers.js"
+  _isc_mark_installed "rm_per_disk" || true
 }
 
 

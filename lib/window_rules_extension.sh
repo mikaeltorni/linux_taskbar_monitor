@@ -131,4 +131,5 @@ export default class AppRulesExtension extends Extension {
 EOF
 
   enable_shell_extension "$ext_id"
+  _isc_mark_installed "window_rules" || true
 }
