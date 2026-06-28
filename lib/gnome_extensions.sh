@@ -135,7 +135,7 @@ install_resource_monitor_core() {
 # with a smooth value-proportional gradient on the panel indicators.
 patch_resource_monitor_gradient_colors() {
   msg "Applying Resource Monitor gradient colors patch"
-  need_cmd node
+  ensure_node || { msg "Node.js unavailable; skipping gradient colors patch (install nodejs and re-run)"; return 1; }
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" \
     "$(resource_monitor_ext_dir)/extension.js"
   _isc_mark_installed "rm_gradient_colors" || true
@@ -144,7 +144,7 @@ patch_resource_monitor_gradient_colors() {
 # patch_resource_monitor_vram - Show GPU VRAM usage in the panel.
 patch_resource_monitor_vram() {
   msg "Applying Resource Monitor VRAM display patch"
-  need_cmd node
+  ensure_node || { msg "Node.js unavailable; skipping VRAM display patch (install nodejs and re-run)"; return 1; }
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" \
     "$(resource_monitor_ext_dir)/panel/containers.js"
 }
@@ -152,7 +152,7 @@ patch_resource_monitor_vram() {
 # patch_resource_monitor_per_disk - Show each disk device separately in the panel.
 patch_resource_monitor_per_disk() {
   msg "Applying Resource Monitor per-disk display patch"
-  need_cmd node
+  ensure_node || { msg "Node.js unavailable; skipping per-disk display patch (install nodejs and re-run)"; return 1; }
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
     "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_per_disk" || true

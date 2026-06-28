@@ -101,6 +101,22 @@ apt_install() {
   DEBIAN_FRONTEND=noninteractive apt install -y "${missing[@]}"
 }
 
+# ensure_node: Guarantee the `node` interpreter used by the Resource Monitor JS
+# patch scripts is available. The gradient/VRAM/per-disk patches transform the
+# extension's JavaScript with Node and have no GJS-runtime equivalent, so a
+# clean machine needs Node.js installed before they can run. Installs the Ubuntu
+# `nodejs` package (which ships /usr/bin/node) when missing and root is present;
+# under a non-root run it records the skipped apt step and reports failure so the
+# dependent component is not falsely marked installed.
+#
+# Returns:
+#   0 when `node` is available, 1 when it could not be provided.
+ensure_node() {
+  need_cmd node && return 0
+  apt_install nodejs
+  need_cmd node
+}
+
 # ── Source extension library modules ──────────────────────────────────────────
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
