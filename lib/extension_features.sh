@@ -2,11 +2,12 @@
 # extension_features.sh — GNOME Shell extension feature configurations  
 #
 # This repo owns only the Resource Monitor system-status extension and its
-# window-rules helper. Two features that used to live here moved to their owning
-# repositories:
-#   - Chrome PWA icons/desktop entries -> linux_configuration_setup (lib/pwa_icons.sh)
-#   - Dash-to-Panel layout             -> linux_configuration_setup (lib/dash_to_panel.sh)  
+# window-rules helper. A feature that used to live here moved to its owning
+# repository:
+#   - Dash-to-Panel layout             -> linux_configuration_setup (lib/dash_to_panel.sh)
 #   - Taskbar system status indicators -> this repo (system-status extension)
+# Chrome PWA setup is no longer automated by any repo; PWAs are installed
+# manually.
 #
 # Shutdown/Date Controls Configuration:
 # These are now handled by dash_to_panel.sh in bottom panel position with
