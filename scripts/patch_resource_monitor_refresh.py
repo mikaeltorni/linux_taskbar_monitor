@@ -5,7 +5,7 @@ the Resource Monitor extension.
 
 Upstream Resource Monitor only allows whole-second refresh intervals and
 throttles GPU polling to a 5-second floor. This script rewrites the relevant
-source files so the panel can refresh every 0.5 seconds (including GPU
+source files so the panel can refresh every 0.1 seconds (including GPU
 usage/VRAM), then recompiles the GSettings schemas.
 
 Components:
@@ -31,11 +31,11 @@ REPLACEMENTS = {
         ("GLib.timeout_add_seconds(", "GLib.timeout_add("),
         ("        this._refreshTime,\n", "        Math.round(this._refreshTime * 1000),\n"),
         # Upstream throttles GPU polling to a 5-second minimum, which keeps the
-        # GPU usage/VRAM values from refreshing at the configured 0.5 s rate the
+        # GPU usage/VRAM values from refreshing at the configured sub-second rate the
         # way CPU, RAM, and ethernet do. Lower the floor so GPU follows suit.
         (
             "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;",
-            "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;",
+            "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.1;",
         ),
     ),
     "services/settings.js": (
@@ -52,9 +52,9 @@ REPLACEMENTS = {
             "        page: 1,\n"
             "      });",
             "this._secondsSpinbutton = this._createSpinButton({\n"
-            "        lower: 0.5,\n"
+            "        lower: 0.1,\n"
             "        upper: 60,\n"
-            "        step: 0.5,\n"
+            "        step: 0.1,\n"
             "        page: 1,\n"
             "        digits: 1,\n"
             "      });",
@@ -67,9 +67,26 @@ REPLACEMENTS = {
             '            <range min="1" max="60"/>',
             '<key name="refreshtime" type="d">\n'
             "            <default>0.5</default>\n"
-            '            <range min="0.5" max="60"/>',
+            '            <range min="0.1" max="60"/>',
         ),
     ),
+}
+
+# Upgrade files produced by the earlier 500 ms patch before applying the
+# canonical replacements. This keeps reconfiguration idempotent across versions.
+LEGACY_MINIMUM_REPLACEMENTS = {
+    "extension.js": ((
+        "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;",
+        "const GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.1;",
+    ),),
+    "prefs.js": (
+        ("        lower: 0.5,", "        lower: 0.1,"),
+        ("        step: 0.5,", "        step: 0.1,"),
+    ),
+    "schemas/org.gnome.shell.extensions.resource-monitor.gschema.xml": ((
+        '            <range min="0.5" max="60"/>',
+        '            <range min="0.1" max="60"/>',
+    ),),
 }
 
 
@@ -98,6 +115,9 @@ def patch_extension(extension_dir: str | Path) -> None:
     for relative_path, replacements in REPLACEMENTS.items():
         path = root / relative_path
         content = path.read_text(encoding="utf-8")
+        if relative_path in LEGACY_MINIMUM_REPLACEMENTS:
+            for legacy, current in LEGACY_MINIMUM_REPLACEMENTS[relative_path]:
+                content = content.replace(legacy, current)
         for old, new in replacements:
             if new in content:
                 continue
@@ -133,7 +153,7 @@ def main() -> int:
         LOGGER.error("Failed to patch Resource Monitor refresh interval: %s", exc)
         print(f"Failed to patch Resource Monitor refresh interval: {exc}", file=sys.stderr)
         return 1
-    print("Patched Resource Monitor for a 0.5-second refresh interval")
+    print("Patched Resource Monitor for configurable 0.1–60 second refresh intervals")
     return 0
 
 

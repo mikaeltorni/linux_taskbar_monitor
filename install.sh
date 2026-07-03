@@ -35,9 +35,10 @@ SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
 RESOURCE_MONITOR_EXTENSION_ID="${RESOURCE_MONITOR_EXTENSION_ID:-Resource_Monitor@Ory0n}"
 RESOURCE_MONITOR_EXTENSION_URL="${RESOURCE_MONITOR_EXTENSION_URL:-https://extensions.gnome.org/extension-data/Resource_MonitorOry0n.v27.shell-extension.zip}"
 RESOURCE_MONITOR_EXTENSION_SHA256="${RESOURCE_MONITOR_EXTENSION_SHA256:-761f422933ed8e76b0c4653ae7bce5862902920cb7e9f4de2cec23b899d6d170}"
-# Panel refresh interval in seconds. The core widens the extension to accept
-# sub-second values; 0.5 is the default but the user can override it freely.
-RESOURCE_MONITOR_REFRESH_TIME="${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
+# Panel refresh interval in milliseconds. The repository-owned configurator
+# persists the selected value; this environment variable supports scripted
+# clean installs and defaults to 500 ms.
+RESOURCE_MONITOR_REFRESH_INTERVAL_MS="${RESOURCE_MONITOR_REFRESH_INTERVAL_MS:-500}"
 
 # Dash-to-Panel now lives in linux_configuration_setup (lib/dash_to_panel.sh),
 # which owns desktop layout/panel behavior; its EGO download settings moved with
@@ -144,7 +145,7 @@ source "$SCRIPT_DIR/installer/components.sh"
 # Listing/help must print only their own output (the master installer parses
 # --list-components); bypass the surrounding messages for those.
 case "${1:-}" in
-  --list-components|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*) component_main "$@"; exit $? ;;
+  --list-components|--list-configurable-components|--list-component-config-values|--configure-component|--configure-component=*|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*) component_main "$@"; exit $? ;;
 esac
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="

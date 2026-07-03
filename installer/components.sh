@@ -16,9 +16,10 @@ ISC_POSTFLIGHT="report_sudo_required"
 # The Resource Monitor extension is the program's mandatory core: install.sh
 # installs it unconditionally (install_resource_monitor_core) before this
 # component selection runs, so the taskbar indicator works no matter which
-# components the user picks. The entries below are the fully optional tweaks the
-# user can mix and match -- the three rm_* tweaks layer on top of the core.
+# components the user picks. The refresh row exposes core configuration; the
+# remaining entries are optional tweaks that layer on top of the core.
 ISC_COMPONENTS=(
+  "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|||||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk"

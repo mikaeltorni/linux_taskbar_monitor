@@ -4,7 +4,7 @@
 
 Standalone installer for the GNOME Shell Resource Monitor taskbar status setup used on Ubuntu 24.04.
 
-It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, gradient colors, and 500 ms refreshes, and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
+It installs Resource Monitor v27, patches the extension display for GPU VRAM, disk usage rows, gradient colors, and configurable 100–2000 ms refreshes (500 ms by default), and configures the panel to show CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
 
 ## Repository dependencies
 
@@ -60,7 +60,7 @@ bash -n install.sh
 - `scripts/patch_resource_monitor_disk.js` - patches disk space display and activity percentage behavior.
 - `scripts/patch_resource_monitor_vram.js` - patches GPU VRAM display formatting.
 - `scripts/patch_resource_monitor_colors.js` - patches Resource Monitor value colors with per-metric gradients.
-- `scripts/patch_resource_monitor_refresh.py` - adds sub-second timer/schema support and a 500 ms refresh interval.
+- `scripts/patch_resource_monitor_refresh.py` - adds 100 ms-capable timer/schema support and a 500 ms default refresh interval.
 - `tests/` - simulation tests; no system settings are changed by tests.
 
 ## Configuration
@@ -75,9 +75,10 @@ Disk space is configured in GB mode, so the panel shows the `/home` disk row as 
 
 Ethernet status is enabled with `netethstatus true`; Wi-Fi status remains disabled with `netwlanstatus false`. Ethernet uses `netunitmeasure 'm'`, and the color gradient reaches red at the `ETHERNET_MAX_MBPS` displayed MB/s value in `scripts/patch_resource_monitor_colors.js`.
 
-Resource values refresh every 0.5 seconds. This is implemented inside the
-extension because upstream v27 stores whole seconds and uses
-`GLib.timeout_add_seconds`; no Ubuntu system-wide configuration is required.
+Resource values refresh every 500 ms by default. Open **Resource Monitor update
+time → details** in either the master or standalone installer and edit the
+pre-filled field to choose an integer from 100 through 2000 ms. The choice is
+persisted and applied live through the extension's GSettings schema.
 
 ## Troubleshooting
 
@@ -154,6 +155,7 @@ works no matter which components you pick. The components below are all optional
 
 | Component id | Description | Default |
 |---|---|---|
+| `rm_refresh_interval` | Resource Monitor update time (typeable 100–2000 ms field) | on, 500 ms |
 | `rm_gradient_colors` | Resource Monitor gradient indicator colors | on |
 | `rm_vram` | Resource Monitor GPU VRAM display | on |
 | `rm_per_disk` | Resource Monitor per-disk display | on |
@@ -161,11 +163,11 @@ works no matter which components you pick. The components below are all optional
 
 ### Customizing the core
 
-The core widens the extension to accept sub-second refresh intervals; `0.5` is
-only the default. Override it (and other defaults) via environment variables:
+The core widens the extension to accept sub-second refresh intervals; 500 ms is
+only the default. Scripted installs can override it in milliseconds:
 
 ```bash
-RESOURCE_MONITOR_REFRESH_TIME=1 bash install.sh   # 1-second refresh instead of 0.5
+RESOURCE_MONITOR_REFRESH_INTERVAL_MS=1000 bash install.sh
 ```
 
 

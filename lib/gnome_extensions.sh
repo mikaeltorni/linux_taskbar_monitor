@@ -30,6 +30,89 @@ ext_gsettings() {
 # extracted extension after the mandatory core has installed it.
 RESOURCE_MONITOR_EXT_DIR=""
 
+# resource_monitor_refresh_interval_file - Print the target user's persisted
+# refresh-interval file. The plain integer stored here is milliseconds.
+resource_monitor_refresh_interval_file() {
+  printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
+}
+
+# resource_monitor_refresh_interval_ms - Print the configured interval in ms.
+# Invalid environment/file values are ignored so installation remains bounded
+# to the supported 100..2000 ms range. The clean-install default is 500 ms.
+resource_monitor_refresh_interval_ms() {
+  local value="${RESOURCE_MONITOR_REFRESH_INTERVAL_MS:-500}" file
+  file="$(resource_monitor_refresh_interval_file)"
+  if [ -f "$file" ]; then
+    value="$(tr -d '[:space:]' < "$file")"
+  fi
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 100 || value > 2000 )); then
+    msg "Invalid Resource Monitor update time '$value'; using 500 ms." >&2
+    value=500
+  fi
+  printf '%s\n' "$value"
+}
+
+# resource_monitor_refresh_seconds - Convert the configured integer
+# milliseconds to the decimal seconds expected by Resource Monitor's schema.
+resource_monitor_refresh_seconds() {
+  awk -v ms="$(resource_monitor_refresh_interval_ms)" 'BEGIN { printf "%.3f", ms / 1000 }'
+}
+
+# persist_resource_monitor_refresh_interval VALUE - Validate and save an
+# integer millisecond interval for future standalone and master installer runs.
+persist_resource_monitor_refresh_interval() {
+  local value="$1" file dir
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 100 || value > 2000 )); then
+    msg "Update time must be a whole number from 100 to 2000 ms." >&2
+    return 2
+  fi
+  file="$(resource_monitor_refresh_interval_file)"
+  dir="$(dirname "$file")"
+  run_as_target mkdir -p "$dir"
+  printf '%s\n' "$value" | run_as_target tee "$file" >/dev/null
+  msg "Saved Resource Monitor update time: ${value} ms."
+}
+
+# apply_resource_monitor_refresh_interval - Apply the persisted interval to an
+# installed Resource Monitor schema. It is safe before installation: the core
+# installer will consume the persisted value when it creates the schema.
+apply_resource_monitor_refresh_interval() {
+  local ext_dir seconds
+  ext_dir="$(resource_monitor_ext_dir)"
+  seconds="$(resource_monitor_refresh_seconds)"
+  if [ -d "$ext_dir/schemas" ]; then
+    if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
+      msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
+      return 1
+    fi
+    msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
+  else
+    msg "Resource Monitor is not installed yet; saved update time will apply during installation."
+  fi
+}
+
+# configure_resource_monitor_refresh_interval - Open a typeable field prefilled
+# with the current value. Re-prompts until an integer from 100 through 2000 is
+# entered, persists it, and applies it live when the schema is installed.
+configure_resource_monitor_refresh_interval() {
+  local current value
+  current="$(resource_monitor_refresh_interval_ms)"
+  while true; do
+    value=""
+    read -r -e -i "$current" -p "Resource Monitor update time in ms (100-2000): " value </dev/tty || return 1
+    if persist_resource_monitor_refresh_interval "$value"; then
+      apply_resource_monitor_refresh_interval
+      return 0
+    fi
+  done
+}
+
+# resource_monitor_refresh_interval_status - Print the menu-friendly current
+# interval without changing desktop or repository state.
+resource_monitor_refresh_interval_status() {
+  printf '%s ms\n' "$(resource_monitor_refresh_interval_ms)"
+}
+
 # resource_monitor_ext_dir - Echo the installed Resource Monitor extension dir.
 # Falls back to the canonical path derived from the extension id when the core
 # has not exported it yet (e.g. a patch component invoked in isolation).
@@ -44,8 +127,8 @@ resource_monitor_ext_dir() {
 # install_resource_monitor_core - Mandatory core: download, verify, extract and
 # configure the Resource Monitor extension so the taskbar indicator works on its
 # own regardless of which optional components the user selects. The sub-second
-# refresh *capability* patch lives here; the refresh *value* is configurable via
-# RESOURCE_MONITOR_REFRESH_TIME (default 0.5). The visual/VRAM/per-disk tweaks
+# refresh *capability* patch lives here; the refresh *value* is configurable in
+# milliseconds through the installer (default 500). The visual/VRAM/per-disk tweaks
 # are split into separately selectable components below.
 install_resource_monitor_core() {
   msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator (core)"
@@ -75,7 +158,7 @@ install_resource_monitor_core() {
   rm -rf "$tmpdir"
 
   # Sub-second refresh capability (schema/type widening + GPU poll floor). The
-  # actual interval is applied below from RESOURCE_MONITOR_REFRESH_TIME.
+  # actual interval is applied below from the persisted installer setting.
   run_as_target python3 "$SCRIPT_DIR/scripts/patch_resource_monitor_refresh.py" "$ext_dir"
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
@@ -86,7 +169,7 @@ install_resource_monitor_core() {
     patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999 || true
   fi
 
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "${RESOURCE_MONITOR_REFRESH_TIME:-0.5}"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
@@ -122,7 +205,7 @@ install_resource_monitor_core() {
 
   enable_shell_extension "$ext_id"
   RESOURCE_MONITOR_EXT_DIR="$ext_dir"
-  msg "Resource Monitor core installed with a ${RESOURCE_MONITOR_REFRESH_TIME:-0.5}-second refresh interval."
+  msg "Resource Monitor core installed with a $(resource_monitor_refresh_interval_ms) ms refresh interval."
 }
 
 # ── Optional Resource Monitor tweaks (selectable components) ──────────────────

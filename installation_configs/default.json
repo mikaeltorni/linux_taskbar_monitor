@@ -1,5 +1,14 @@
 {
   "components": {
+    "rm_refresh_interval": {
+      "config_value": "500 ms",
+      "favorite": 0,
+      "on": 1,
+      "startup": 0,
+      "sticky": 0,
+      "uninstall": 0,
+      "workspace": 0
+    },
     "rm_gradient_colors": {
       "config_value": "",
       "favorite": 0,
