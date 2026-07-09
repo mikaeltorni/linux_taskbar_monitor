@@ -80,6 +80,10 @@ def test_patch_removes_eth_icon(tmp_path):
     assert "indicator._ethIcon," not in patched
     assert "indicator._ethValue," in patched
     assert "indicator._ethUnit," in patched
+    # _appendSimpleChildren must now guard against a null icon so the null
+    # argument does not throw on addChild(null).
+    assert "A null icon (e.g. ethernet) means no icon actor is added" in patched
+    assert "  if (icon) {" in patched
 
 
 def test_patch_is_idempotent(tmp_path):
