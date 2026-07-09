@@ -413,7 +413,7 @@ class TestInstallerWiring:
         assert "diskstatsstatus false" in source
         assert "netethstatus true" in source
         assert "netwlanstatus false" in source
-        assert "['cpu', 'ram', 'stats', 'space', 'eth', 'wlan', 'gpu']" in source
+        assert "['eth', 'cpu', 'ram', 'stats', 'space', 'wlan', 'gpu']" in source
 
     def test_installer_sets_ethernet_to_megabytes(self):
         """Installer should set netunitmeasure to 'm' for Mbps display."""

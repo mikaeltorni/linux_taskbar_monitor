@@ -110,3 +110,51 @@ def test_install_runs_core_before_component_selection():
     assert install.index("install_resource_monitor_core") < install.rindex(
         'component_main "$@"'
     )
+
+
+def test_core_reserves_tight_stable_per_value_widths():
+    """Value labels get snug fixed widths so the taskbar does not shift as digits change."""
+    core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+
+    # Each reserved width (px, pre-scale) is tight: sized to the widest reading at
+    # the configured units, not a generous buffer. CPU 0-100 (3 digits, "100"=24px)
+    # -> 24, RAM GB (2) -> 20, disk free GB (3) -> 36, GPU usage 3 -> 24 (VRAM 2
+    # is split off to its own snug width by rm_stable_width), ethernet down|up (3|3).
+    expected = {
+        "cpuwidth 24",
+        "ramwidth 20",
+        "diskspacewidth 36",
+        "netethwidth 60",
+        "gpuwidth 24",
+    }
+    for key_width in expected:
+        assert (
+            f"org.gnome.shell.extensions.resource-monitor {key_width}" in core
+        ), key_width
+
+    # Ethernet is placed leftmost so its rarer wider readings grow toward the
+    # screen center instead of shifting the clock.
+    assert "itemsposition \"[\'eth\', \'cpu\', \'ram\', \'stats\', \'space\', \'wlan\', \'gpu\']\"" in core
+
+    # The reservations live in the mandatory core, not a deselectable component.
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+    for key in ("cpuwidth", "ramwidth", "netethwidth", "gpuwidth", "diskspacewidth"):
+        assert key not in components, f"{key} must not be a component toggle"
+
+
+def test_stable_width_is_a_selectable_component():
+    """Disk-space activity % has no upstream width setting, so a component reserves it."""
+    lib = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+
+    assert "patch_resource_monitor_stable_width()" in lib
+
+    patch = (ROOT_DIR / "scripts" / "patch_resource_monitor_stable_width.js").read_text(
+        encoding="utf-8"
+    )
+    # The patcher reserves the secondary value width and is idempotent.
+    assert "this._diskActivityWidth = 24" in patch
+    assert "already reserved" in patch
+
+    assert "rm_stable_width|Resource Monitor stable panel widths" in components
+    assert "detect_rm_stable_width" in components

@@ -173,7 +173,7 @@ install_resource_monitor_core() {
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor itemsposition "['cpu', 'ram', 'stats', 'space', 'eth', 'wlan', 'gpu']"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor itemsposition "['eth', 'cpu', 'ram', 'stats', 'space', 'wlan', 'gpu']"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpustatus true
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpufrequencystatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuloadaveragestatus false
@@ -195,6 +195,20 @@ install_resource_monitor_core() {
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunitmeasure "'auto'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemorymonitor "'used'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudisplaydevicename false
+
+  # Reserve a tight per-value width so the taskbar does not jump as metric values
+  # change digit count. The extension multiplies these pixel values by the display
+  # scale factor and right-aligns every value label, so text grows leftward inside
+  # a fixed box while the right edge stays put. Sizes match the widest expected
+  # reading at the configured units (measured in the panel font, digit ~8px):
+  # CPU 0-100 (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3)
+  # -> 36, GPU usage 3 / VRAM 2 (VRAM split off in rm_stable_width) -> 24, ethernet
+  # down|up (3|3) -> 60. These are intentionally snug (one char of slack).
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
 
   gpu_devices="$(run_as_target python3 "$SCRIPT_DIR/scripts/report_cuda_devices.py")"
   if [ -n "$gpu_devices" ]; then
@@ -232,6 +246,16 @@ patch_resource_monitor_vram() {
     "$(resource_monitor_ext_dir)/panel/containers.js"
 }
 
+# patch_resource_monitor_eth_icon - Remove the ethernet display icon while
+# keeping the numeric Mbps value and unit. No upstream GSetting hides a single
+# icon, so this source patch drops the eth icon argument at its wiring site.
+patch_resource_monitor_eth_icon() {
+  msg "Applying Resource Monitor ethernet-icon removal patch"
+  ensure_node || { msg "Node.js unavailable; skipping ethernet-icon patch (install nodejs and re-run)"; return 1; }
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_eth_icon.js" \
+    "$(resource_monitor_ext_dir)/panel/mainGui.js"
+}
+
 # patch_resource_monitor_per_disk - Show each disk device separately in the panel.
 patch_resource_monitor_per_disk() {
   msg "Applying Resource Monitor per-disk display patch"
@@ -239,6 +263,18 @@ patch_resource_monitor_per_disk() {
   run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
     "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_per_disk" || true
+}
+
+# patch_resource_monitor_stable_width - Reserve the disk-space secondary
+# "activity %" width. It has no upstream *width GSetting, so reserve it through
+# the same element.width mechanism the extension uses for the primary values
+# (idempotent patch script). Keeps the panel steady as the percentage grows
+# from "5%" to "100%".
+patch_resource_monitor_stable_width() {
+  msg "Applying Resource Monitor stable-width (disk activity) patch"
+  ensure_node || { msg "Node.js unavailable; skipping stable-width patch (install nodejs and re-run)"; return 1; }
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js"     "$(resource_monitor_ext_dir)/panel/containers.js"
+  _isc_mark_installed "rm_stable_width" || true
 }
 
 

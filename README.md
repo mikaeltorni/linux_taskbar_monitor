@@ -67,6 +67,25 @@ bash -n install.sh
 
 The installer supports these environment overrides:
 
+## Stable panel width (no taskbar shift)
+
+Every Resource Monitor value label is right-aligned and given a tight reserved pixel width, so the panel no longer jumps when a metric's digit count changes (e.g. CPU 9% → 10% → 100%, RAM 50 → 9 GB, or disk activity 5% → 100%). The reserved widths are sized to the widest reading at the configured units and the panel font (one character of slack each), and the extension multiplies them by the display scale factor:
+
+| Metric | Reserved width (px, pre-scale) | Covers |
+|---|---|---|
+| CPU | 24 | 0–100% (3 digits, "100"=24px) |
+| RAM | 20 | GB, integer (2 digits) |
+| Disk free | 36 | GB, integer (3 digits) |
+| GPU usage | 24 | 0–100% (3 digits) |
+| GPU VRAM | 16 | GB, integer (2 digits; split off from usage by `rm_stable_width`) |
+| Ethernet | 60 | down\|up, 3\|3 digits |
+
+Ethernet is placed **first** (leftmost) in the indicator order so its wider and rarer over-range readings grow toward the screen center instead of shifting the clock. The ethernet **icon is hidden** (`rm_hide_eth_icon`) while the numeric Mbps value and unit stay visible. The disk-space secondary **activity %** and the GPU VRAM value have no upstream width setting, so the `rm_stable_width` component reserves them through a small source patch (`scripts/patch_resource_monitor_stable_width.js`).
+
+If you change units or monitor large networks/VRAM, raise the relevant key with `gsettings set org.gnome.shell.extensions.resource-monitor <key>width <px>`.
+
+
+
 - `RESOURCE_MONITOR_EXTENSION_ID`
 - `RESOURCE_MONITOR_EXTENSION_URL`
 - `RESOURCE_MONITOR_EXTENSION_SHA256`
@@ -159,6 +178,8 @@ works no matter which components you pick. The components below are all optional
 | `rm_gradient_colors` | Resource Monitor gradient indicator colors | on |
 | `rm_vram` | Resource Monitor GPU VRAM display | on |
 | `rm_per_disk` | Resource Monitor per-disk display | on |
+| `rm_stable_width` | Resource Monitor stable panel widths | on |
+| `rm_hide_eth_icon` | Resource Monitor hide ethernet icon (keep Mbps) | on |
 | `window_rules` | App window-rules extension (Wayland) | on |
 
 ### Customizing the core

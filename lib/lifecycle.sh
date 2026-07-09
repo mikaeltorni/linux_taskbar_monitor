@@ -46,10 +46,27 @@ detect_rm_vram() {
   local js; js="$(_rm_containers_js)"
   [ -f "$js" ] && grep -q "Space separator between GPU usage and VRAM" "$js"
 }
+
+# detect_rm_stable_width: the stable-width patcher reserves the disk-space
+# secondary activity percentage via the "Space separator between disk-space
+# activity percent and its unit (stable width)" marker it injects into
+# containers.js. Its presence is the deterministic live signal.
+detect_rm_stable_width() {
+  local js; js="$(_rm_containers_js)"
+  [ -f "$js" ] && grep -q "Space separator between disk-space activity percent and its unit (stable width)" "$js"
+}
+# detect_rm_hide_eth_icon: the eth-icon patcher wires the ethernet group to
+# _appendSimpleChildren with a null icon ("Ethernet icon removed: value/unit
+# kept, icon omitted"). Its presence in mainGui.js is the deterministic signal.
+detect_rm_hide_eth_icon() {
+  local js; js="$(_rm_ext_root)/panel/mainGui.js"
+  [ -f "$js" ] && grep -q "Ethernet icon removed: value/unit kept, icon omitted" "$js"
+}
 detect_window_rules() { [ -d "$(rm_ext_dir app-rules@local)" ]; }
 
 # --- Uninstall ---------------------------------------------------------------
 uninstall_rm_vram()     { msg "Disabling Resource Monitor VRAM display"; run_as_target gsettings reset "$RM_SCHEMA" gpumemorymonitor 2>/dev/null || true; }
+
 uninstall_window_rules() {
   msg "Removing app window-rules extension"
   run_as_target gnome-extensions disable app-rules@local 2>/dev/null || true
