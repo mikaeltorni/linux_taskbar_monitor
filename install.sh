@@ -39,6 +39,12 @@ RESOURCE_MONITOR_EXTENSION_SHA256="${RESOURCE_MONITOR_EXTENSION_SHA256:-761f4229
 # persists the selected value; this environment variable supports scripted
 # clean installs and defaults to 500 ms.
 RESOURCE_MONITOR_REFRESH_INTERVAL_MS="${RESOURCE_MONITOR_REFRESH_INTERVAL_MS:-500}"
+# Panel spacing mode: "stable" reserves a tight per-value width so the taskbar
+# stays put as metric values change digit count; "compact" drops the reserved
+# widths so the indicator is narrower but shifts slightly as digits change. The
+# repository persists the selection; this environment variable seeds a clean
+# install (defaults to "stable").
+RESOURCE_MONITOR_SPACING_MODE="${RESOURCE_MONITOR_SPACING_MODE:-stable}"
 
 # Dash-to-Panel now lives in linux_configuration_setup (lib/dash_to_panel.sh),
 # which owns desktop layout/panel behavior; its EGO download settings moved with

@@ -36,6 +36,109 @@ resource_monitor_refresh_interval_file() {
   printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
 }
 
+# ── Panel spacing mode (stable vs compact) ──────────────────────────────────
+# The Resource Monitor indicator reserves a fixed pixel width per value label
+# ("stable" spacing) so the taskbar does not shift as a reading changes digit
+# count. Some users prefer the indicator to take less space and accept the
+# small shift ("compact"). The mode is configurable in the installer and
+# persisted like the refresh interval.
+
+# Valid spacing modes and the map to the rm_stable_width patch's --mode flag.
+RESOURCE_MONITOR_SPACING_VALID="stable compact"
+
+# resource_monitor_spacing_file - Print the persisted spacing-mode file path.
+resource_monitor_spacing_file() {
+  printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/panel-spacing-mode"
+}
+
+# resource_monitor_spacing_mode - Print the configured spacing mode. Honors the
+# RESOURCE_MONITOR_SPACING_MODE environment override, then a persisted file, and
+# defaults to "stable". Invalid values fall back to "stable".
+resource_monitor_spacing_mode() {
+  local value="${RESOURCE_MONITOR_SPACING_MODE:-stable}" file
+  file="$(resource_monitor_spacing_file)"
+  if [ -f "$file" ]; then
+    value="$(tr -d '[:space:]' < "$file")"
+  fi
+  case "$value" in
+    stable|compact) ;;
+    *) msg "Invalid Resource Monitor spacing mode '$value'; using stable." >&2; value=stable ;;
+  esac
+  printf '%s\n' "$value"
+}
+
+# persist_resource_monitor_spacing MODE - Validate and save the spacing mode.
+resource_monitor_spacing_persist() {
+  local value="$1" file dir
+  case "$value" in
+    stable|compact) ;;
+    *) msg "Spacing mode must be 'stable' or 'compact'." >&2; return 2 ;;
+  esac
+  file="$(resource_monitor_spacing_file)"
+  dir="$(dirname "$file")"
+  run_as_target mkdir -p "$dir"
+  printf '%s\n' "$value" | run_as_target tee "$file" >/dev/null
+  msg "Saved Resource Monitor panel spacing mode: ${value}."
+}
+
+# apply_resource_monitor_spacing_mode - Apply the configured spacing mode to the
+# installed Resource Monitor. Sets the *width GSettings (left to upstream
+# defaults when compact) and runs the rm_stable_width patcher in the matching
+# mode so the secondary disk-activity reservation and GPU VRAM split follow.
+# Safe before installation: it only acts when the extension dir is present.
+apply_resource_monitor_spacing_mode() {
+  local ext_dir mode
+  ext_dir="$(resource_monitor_ext_dir)"
+  mode="$(resource_monitor_spacing_mode)"
+  if [ ! -d "$ext_dir/schemas" ]; then
+    msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation."
+    return 0
+  fi
+  case "$mode" in
+    compact)
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
+      ;;
+    stable)
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
+      ;;
+  esac
+  ensure_node || { msg "Node.js unavailable; skipping stable-width patch (install nodejs and re-run)"; return 1; }
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js"     "--mode" "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
+}
+
+# configure_resource_monitor_spacing - Open a typeable-choice field for the
+# spacing mode, persist it, and apply it live when the extension is installed.
+configure_resource_monitor_spacing() {
+  local current value
+  current="$(resource_monitor_spacing_mode)"
+  while true; do
+    value=""
+    read -r -e -i "$current" -p "Resource Monitor panel spacing [stable|compact]: " value </dev/tty || return 1
+    case "$value" in
+      stable|compact)
+        if resource_monitor_spacing_persist "$value"; then
+          apply_resource_monitor_spacing_mode
+          return 0
+        fi
+        ;;
+      *) msg "Type 'stable' or 'compact'." >&2 ;;
+    esac
+  done
+}
+
+# resource_monitor_spacing_status - Print the menu-friendly current mode.
+resource_monitor_spacing_status() {
+  printf '%s\n' "$(resource_monitor_spacing_mode)"
+}
+
 # resource_monitor_refresh_interval_ms - Print the configured interval in ms.
 # Invalid environment/file values are ignored so installation remains bounded
 # to the supported 100..2000 ms range. The clean-install default is 500 ms.
@@ -204,11 +307,31 @@ install_resource_monitor_core() {
   # CPU 0-100 (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3)
   # -> 36, GPU usage 3 / VRAM 2 (VRAM split off in rm_stable_width) -> 24, ethernet
   # down|up (3|3) -> 60. These are intentionally snug (one char of slack).
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
+  #
+  # The spacing mode selects whether these reserved widths are applied. "stable"
+  # keeps the panel put as digits change; "compact" skips them so the indicator
+  # takes less horizontal space but shifts slightly as values grow/shrink.
+  # The secondary disk-activity width (no upstream GSetting) is handled by the
+  # rm_stable_width component (patch_resource_monitor_stable_width.js); the
+  # spacing mode is passed straight through to it below.
+  case "$(resource_monitor_spacing_mode)" in
+    compact)
+      # Adaptive widths: leave every value label to size itself, so the panel
+      # is as narrow as the current readings but shifts as digits change.
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
+      ;;
+    stable)
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
+      ;;
+  esac
 
   gpu_devices="$(run_as_target python3 "$SCRIPT_DIR/scripts/report_cuda_devices.py")"
   if [ -n "$gpu_devices" ]; then
@@ -276,15 +399,17 @@ patch_resource_monitor_per_disk() {
   _isc_mark_installed "rm_per_disk" || true
 }
 
-# patch_resource_monitor_stable_width - Reserve the disk-space secondary
-# "activity %" width. It has no upstream *width GSetting, so reserve it through
-# the same element.width mechanism the extension uses for the primary values
-# (idempotent patch script). Keeps the panel steady as the percentage grows
-# from "5%" to "100%".
+# patch_resource_monitor_stable_width - Apply the configured panel-spacing mode to
+# the disk-space secondary "activity %" width (which has no upstream *width
+# GSetting) and the GPU VRAM split. "stable" reserves a snug width so the panel
+# stays put as the percentage grows from "5%" to "100%"; "compact" releases those
+# reservations so the indicator takes less space. The matching *width GSettings
+# (primary values) are applied by apply_resource_monitor_spacing_mode / the core.
 patch_resource_monitor_stable_width() {
   msg "Applying Resource Monitor stable-width (disk activity) patch"
   ensure_node || { msg "Node.js unavailable; skipping stable-width patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js"     "$(resource_monitor_ext_dir)/panel/containers.js"
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js" \
+    "--mode" "$(resource_monitor_spacing_mode)" "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_stable_width" || true
 }
 

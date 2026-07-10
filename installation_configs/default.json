@@ -44,6 +44,15 @@
       "sticky": 0,
       "uninstall": 0,
       "workspace": 0
+    },
+    "rm_panel_spacing": {
+      "config_value": "stable",
+      "favorite": 0,
+      "on": 1,
+      "startup": 0,
+      "sticky": 0,
+      "uninstall": 0,
+      "workspace": 0
     }
   },
   "repo": "ubuntu_2404_taskbar_system_status_monitor",

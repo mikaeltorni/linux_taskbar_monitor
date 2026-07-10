@@ -47,13 +47,23 @@ detect_rm_vram() {
   [ -f "$js" ] && grep -q "Space separator between GPU usage and VRAM" "$js"
 }
 
-# detect_rm_stable_width: the stable-width patcher reserves the disk-space
-# secondary activity percentage via the "Space separator between disk-space
-# activity percent and its unit (stable width)" marker it injects into
-# containers.js. Its presence is the deterministic live signal.
+# detect_rm_stable_width: reflects the configured panel-spacing mode.
+# In "stable" mode the stable-width patcher reserves the disk-space secondary
+# activity percentage (via the "Space separator between disk-space activity
+# percent and its unit (stable width)" marker it injects into containers.js);
+# detection is the presence of that marker. In "compact" mode the reservation
+# is intentionally absent, so the component is "installed" (and its *width
+# GSettings are 0) while the marker must be gone.
 detect_rm_stable_width() {
-  local js; js="$(_rm_containers_js)"
-  [ -f "$js" ] && grep -q "Space separator between disk-space activity percent and its unit (stable width)" "$js"
+  local js stable_marker compact
+  js="$(_rm_containers_js)"
+  stable_marker="Space separator between disk-space activity percent and its unit (stable width)"
+  compact="$(resource_monitor_spacing_mode 2>/dev/null || echo stable)"
+  [ -f "$js" ] || return 1
+  case "$compact" in
+    compact) ! grep -q "$stable_marker" "$js" ;;
+    *) grep -q "$stable_marker" "$js" ;;
+  esac
 }
 # detect_rm_hide_eth_icon: the eth-icon patcher wires the ethernet group to
 # _appendSimpleChildren with a null icon ("Ethernet icon removed: value/unit
@@ -73,6 +83,15 @@ detect_rm_process_popup() {
 detect_window_rules() { [ -d "$(rm_ext_dir app-rules@local)" ]; }
 
 # --- Uninstall ---------------------------------------------------------------
+# uninstall_rm_panel_spacing - Revert the panel to the default stable spacing
+# (reserved widths, no taskbar shift) and clear the persisted compact choice.
+uninstall_rm_panel_spacing() {
+  msg "Reverting Resource Monitor panel spacing to stable (default)"
+  if resource_monitor_spacing_persist stable; then
+    apply_resource_monitor_spacing_mode
+  fi
+}
+
 uninstall_rm_vram()     { msg "Disabling Resource Monitor VRAM display"; run_as_target gsettings reset "$RM_SCHEMA" gpumemorymonitor 2>/dev/null || true; }
 
 uninstall_window_rules() {

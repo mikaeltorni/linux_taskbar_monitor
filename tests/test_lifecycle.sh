@@ -48,4 +48,18 @@ detect_rm_vram && fail "detect_rm_vram should reject unpatched bracket labels"
 printf 'const spaceSep = new St.Label({}); // Space separator between GPU usage and VRAM (no brackets)\n' >"$EXT_DIR/panel/containers.js"
 detect_rm_vram || fail "detect_rm_vram should accept the patched (bracket-free) containers.js"
 
+# --- Panel spacing detection is mode-aware ----------------------------------
+# The stable-width marker the patcher injects (absent from a clean re-extract).
+STABLE_MARKER='Space separator between disk-space activity percent and its unit (stable width)'
+printf '%s\n' "$STABLE_MARKER" >"$EXT_DIR/panel/containers.js"
+# stable mode detects installed via the disk-activity marker.
+RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_stable_width || fail "detect_rm_stable_width should report installed in stable mode"
+# compact mode must NOT carry the stable-width marker.
+rm -f "$EXT_DIR/panel/containers.js"
+RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_stable_width && fail "detect_rm_stable_width should reject the marker in compact mode"
+# Re-add the marker: stable still detects it, compact treats it as not installed.
+printf '%s\n' "$STABLE_MARKER" >"$EXT_DIR/panel/containers.js"
+RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_stable_width || fail "detect_rm_stable_width should still detect the marker in stable mode"
+RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_stable_width && fail "detect_rm_stable_width must treat a present marker as NOT installed in compact mode"
+
 printf 'test_lifecycle.sh: all assertions passed\n'

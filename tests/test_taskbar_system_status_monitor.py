@@ -36,6 +36,23 @@ def test_refresh_interval_is_exposed_as_nested_installer_configuration():
     assert "resource_monitor_refresh_interval_status" in components
 
 
+def test_panel_spacing_is_exposed_as_nested_installer_configuration():
+    """Panel spacing mode (stable/compact) is a repository-owned configurable component."""
+    install = (ROOT_DIR / "install.sh").read_text()
+    components = (ROOT_DIR / "installer" / "components.sh").read_text()
+    lib = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text()
+
+    assert "--list-configurable-components" in install
+    assert "rm_panel_spacing|Resource Monitor panel spacing" in components
+    assert "configure_resource_monitor_spacing" in components
+    assert "resource_monitor_spacing_status" in components
+    assert "apply_resource_monitor_spacing_mode" in lib
+    assert "resource_monitor_spacing_mode" in lib
+    # The persisted file and env override seed the compact choice.
+    assert "RESOURCE_MONITOR_SPACING_MODE:-stable" in install
+    assert "resource_monitor_spacing_file" in lib
+
+
 def test_refresh_interval_configurator_has_requested_bounds_and_default():
     """The editable field uses milliseconds and rejects values outside 100..2000."""
     source = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text()
@@ -113,24 +130,34 @@ def test_install_runs_core_before_component_selection():
 
 
 def test_core_reserves_tight_stable_per_value_widths():
-    """Value labels get snug fixed widths so the taskbar does not shift as digits change."""
+    """Value labels get snug fixed widths in stable mode so the taskbar does not shift."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
 
-    # Each reserved width (px, pre-scale) is tight: sized to the widest reading at
-    # the configured units, not a generous buffer. CPU 0-100 (3 digits, "100"=24px)
-    # -> 24, RAM GB (2) -> 20, disk free GB (3) -> 36, GPU usage 3 -> 24 (VRAM 2
-    # is split off to its own snug width by rm_stable_width), ethernet down|up (3|3).
-    expected = {
+    # The default (stable) spacing reserves a tight width per value: sized to the
+    # widest reading at the configured units, not a generous buffer. CPU 0-100
+    # (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3) -> 36, GPU
+    # usage 3 -> 24 (VRAM 2 is split off to its own snug width by rm_panel_spacing),
+    # ethernet down|up (3|3) -> 60. compact mode sets these widths to 0 instead.
+    stable_expected = {
         "cpuwidth 24",
         "ramwidth 20",
         "diskspacewidth 36",
         "netethwidth 60",
         "gpuwidth 24",
     }
-    for key_width in expected:
+    compact_expected = {"cpuwidth 0", "ramwidth 0", "diskspacewidth 0", "netethwidth 0", "gpuwidth 0"}
+    for key_width in stable_expected:
         assert (
             f"org.gnome.shell.extensions.resource-monitor {key_width}" in core
         ), key_width
+    for key_width in compact_expected:
+        assert (
+            f"org.gnome.shell.extensions.resource-monitor {key_width}" in core
+        ), key_width
+
+    # The spacing mode selects between them.
+    assert "resource_monitor_spacing_mode" in core
+    assert "case \"$(resource_monitor_spacing_mode)\" in" in core
 
     # Ethernet is placed leftmost so its rarer wider readings grow toward the
     # screen center instead of shifting the clock.
@@ -142,19 +169,27 @@ def test_core_reserves_tight_stable_per_value_widths():
         assert key not in components, f"{key} must not be a component toggle"
 
 
-def test_stable_width_is_a_selectable_component():
-    """Disk-space activity % has no upstream width setting, so a component reserves it."""
+def test_panel_spacing_is_a_selectable_component():
+    """Panel spacing (stable/compact) is a configurable component that drives the patch."""
     lib = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
     components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
 
-    assert "patch_resource_monitor_stable_width()" in lib
+    assert "apply_resource_monitor_spacing_mode" in lib
+    assert "resource_monitor_spacing_mode" in lib
 
     patch = (ROOT_DIR / "scripts" / "patch_resource_monitor_stable_width.js").read_text(
         encoding="utf-8"
     )
-    # The patcher reserves the secondary value width and is idempotent.
+    # The patcher reserves the secondary value width in stable mode, releases it
+    # in compact mode, and is idempotent in both.
     assert "this._diskActivityWidth = 24" in patch
     assert "already reserved" in patch
+    assert "compact" in patch
 
-    assert "rm_stable_width|Resource Monitor stable panel widths" in components
+    assert "rm_panel_spacing|Resource Monitor panel spacing" in components
     assert "detect_rm_stable_width" in components
+    # The apply function forwards the configured mode to the patch script.
+    assert '--mode" "$(resource_monitor_spacing_mode)"' in lib
+    # Uninstall reverts to the stable baseline spacing.
+    lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
+    assert "uninstall_rm_panel_spacing" in lifecycle

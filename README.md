@@ -67,9 +67,11 @@ bash -n install.sh
 
 The installer supports these environment overrides:
 
-## Stable panel width (no taskbar shift)
+## Panel spacing (stable vs compact)
 
 Every Resource Monitor value label is right-aligned and given a tight reserved pixel width, so the panel no longer jumps when a metric's digit count changes (e.g. CPU 9% → 10% → 100%, RAM 50 → 9 GB, or disk activity 5% → 100%). The reserved widths are sized to the widest reading at the configured units and the panel font (one character of slack each), and the extension multiplies them by the display scale factor:
+
+This is the **stable** spacing mode. The installer also offers a **compact** mode that drops the reserved widths so the indicator takes less horizontal space — the trade-off is that the taskbar shifts slightly as a reading grows or shrinks (e.g. CPU 9% → 100%). Choose the mode in the installer's panel-spacing configuration (`rm_panel_spacing`); it is persisted and applied live.
 
 | Metric | Reserved width (px, pre-scale) | Covers |
 |---|---|---|
@@ -80,7 +82,7 @@ Every Resource Monitor value label is right-aligned and given a tight reserved p
 | GPU VRAM | 16 | GB, integer (2 digits; split off from usage by `rm_stable_width`) |
 | Ethernet | 60 | down\|up, 3\|3 digits |
 
-Ethernet is placed **first** (leftmost) in the indicator order so its wider and rarer over-range readings grow toward the screen center instead of shifting the clock. The ethernet **icon is hidden** (`rm_hide_eth_icon`) while the numeric Mbps value and unit stay visible. The disk-space secondary **activity %** and the GPU VRAM value have no upstream width setting, so the `rm_stable_width` component reserves them through a small source patch (`scripts/patch_resource_monitor_stable_width.js`).
+Ethernet is placed **first** (leftmost) in the indicator order so its wider and rarer over-range readings grow toward the screen center instead of shifting the clock. The ethernet **icon is hidden** (`rm_hide_eth_icon`) while the numeric Mbps value and unit stay visible. The disk-space secondary **activity %** and the GPU VRAM value have no upstream width setting, so the `rm_panel_spacing` component reserves them through a small source patch (`scripts/patch_resource_monitor_stable_width.js`). In compact mode the patch releases those reservations instead.
 
 If you change units or monitor large networks/VRAM, raise the relevant key with `gsettings set org.gnome.shell.extensions.resource-monitor <key>width <px>`.
 
@@ -89,6 +91,8 @@ If you change units or monitor large networks/VRAM, raise the relevant key with 
 - `RESOURCE_MONITOR_EXTENSION_ID`
 - `RESOURCE_MONITOR_EXTENSION_URL`
 - `RESOURCE_MONITOR_EXTENSION_SHA256`
+- `RESOURCE_MONITOR_SPACING_MODE` (`stable` or `compact` — seeds a clean install)
+- `RESOURCE_MONITOR_REFRESH_INTERVAL_MS`
 
 Disk space is configured in GB mode, so the panel shows the `/home` disk row as colored free-space GB and keeps disk throughput stats disabled. The disk patch renders live disk load as a secondary colored percentage next to that primary GB value.
 
@@ -178,7 +182,7 @@ works no matter which components you pick. The components below are all optional
 | `rm_gradient_colors` | Resource Monitor gradient indicator colors | on |
 | `rm_vram` | Resource Monitor GPU VRAM display | on |
 | `rm_per_disk` | Resource Monitor per-disk display | on |
-| `rm_stable_width` | Resource Monitor stable panel widths | on |
+| `rm_panel_spacing` | Resource Monitor panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Resource Monitor hide ethernet icon (keep Mbps) | on |
 | `window_rules` | App window-rules extension (Wayland) | on |
 
@@ -189,6 +193,14 @@ only the default. Scripted installs can override it in milliseconds:
 
 ```bash
 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=1000 bash install.sh
+```
+
+The panel spacing mode defaults to `stable` (reserved widths, no taskbar shift).
+Set it to `compact` for a narrower indicator that shifts slightly as values
+change digit count:
+
+```bash
+RESOURCE_MONITOR_SPACING_MODE=compact bash install.sh
 ```
 
 

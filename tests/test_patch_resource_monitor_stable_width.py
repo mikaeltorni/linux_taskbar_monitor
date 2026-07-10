@@ -113,7 +113,7 @@ EXPECTED_MARKERS = [
 
 def _write_containers_fixture(tmp_path: Path) -> Path:
     panel_dir = tmp_path / "panel"
-    panel_dir.mkdir()
+    panel_dir.mkdir(parents=True)
     containers = panel_dir / "containers.js"
     containers.write_text(ORIGINAL_CONTAINERS, encoding="utf-8")
     return containers
@@ -201,3 +201,74 @@ def test_patch_is_idempotent(tmp_path):
     again = _write_containers_fixture(again_dir)
     _run_patch(again)
     assert containers.read_text() == again.read_text()
+
+def _run_patch_mode(mode, containers_path):
+    return subprocess.run(
+        ["node", str(PATCH_SCRIPT), "--mode", mode, str(containers_path)],
+        cwd=ROOT_DIR,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_patch_compact_releases_disk_activity_width(tmp_path):
+    """Compact mode removes the disk-space secondary reservation."""
+    containers = _write_containers_fixture(tmp_path)
+    _run_patch(containers)
+
+    result = _run_patch_mode("compact", containers)
+    assert result.returncode == 0, f"Compact patch failed: {result.stderr}"
+
+    patched = containers.read_text(encoding="utf-8")
+    assert "this._diskActivityWidth = 24" not in patched
+    assert "Space separator between disk-space activity percent and its unit (stable width)" not in patched
+
+
+def test_patch_compact_merges_gpu_vram_back_to_shared_width(tmp_path):
+    """Compact mode reverts GPU VRAM to share the GPU usage width."""
+    containers = _write_containers_fixture(tmp_path)
+    _run_patch(containers)
+
+    result = _run_patch_mode("compact", containers)
+    assert result.returncode == 0, f"Compact patch failed: {result.stderr}"
+
+    patched = containers.read_text(encoding="utf-8")
+    assert "this._gpuMemoryWidth = 16" not in patched
+    assert "VRAM value (0-99 GB, 2 digits) gets its own tighter reserved" not in patched
+    # VRAM value now uses the shared `width` again.
+    assert "this._elementsMemoryValue[element].width = width;" in patched
+
+
+def test_patch_compact_is_idempotent(tmp_path):
+    """Running compact twice is a no-op."""
+    containers = _write_containers_fixture(tmp_path)
+    _run_patch(containers)
+
+    first = _run_patch_mode("compact", containers)
+    assert first.returncode == 0
+    second = _run_patch_mode("compact", containers)
+    assert second.returncode == 0
+    assert "already compact" in second.stdout
+
+
+def test_patch_compact_then_stable_roundtrips(tmp_path):
+    """Compact then stable restores the reserved widths exactly."""
+    containers = _write_containers_fixture(tmp_path)
+    baseline = _write_containers_fixture(tmp_path / "baseline")
+    _run_patch(baseline)
+
+    _run_patch(containers)
+    _run_patch_mode("compact", containers)
+    _run_patch_mode("stable", containers)
+
+    assert containers.read_text() == baseline.read_text()
+
+
+def test_patch_rejects_invalid_mode(tmp_path):
+    """An unknown mode exits non-zero with a usage error."""
+    containers = _write_containers_fixture(tmp_path)
+    result = _run_patch_mode("tiny", containers)
+    assert result.returncode != 0
+    assert "Invalid --mode" in result.stderr
+
