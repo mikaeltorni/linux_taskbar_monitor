@@ -62,6 +62,14 @@ detect_rm_hide_eth_icon() {
   local js; js="$(_rm_ext_root)/panel/mainGui.js"
   [ -f "$js" ] && grep -q "Ethernet icon removed: value/unit kept, icon omitted" "$js"
 }
+# detect_rm_process_popup: the process-popup patcher injects marker-guarded
+# _toggleProcessMenu/_refreshProcessMenu methods ("Process popup: total CPU/RAM
+# aggregated per process name"). Its presence in extension.js is the
+# deterministic live signal.
+detect_rm_process_popup() {
+  local js; js="$(_rm_extension_js)"
+  [ -f "$js" ] && grep -q "Process popup: total CPU/RAM aggregated per process name" "$js"
+}
 detect_window_rules() { [ -d "$(rm_ext_dir app-rules@local)" ]; }
 
 # --- Uninstall ---------------------------------------------------------------

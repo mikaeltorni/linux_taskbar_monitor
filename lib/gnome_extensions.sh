@@ -256,6 +256,17 @@ patch_resource_monitor_eth_icon() {
     "$(resource_monitor_ext_dir)/panel/mainGui.js"
 }
 
+# patch_resource_monitor_process_popup - Left-click shows a popup menu with
+# total CPU%/RAM% aggregated per process name instead of launching the
+# configured task manager (gnome-system-monitor). No upstream GSetting offers
+# this, so the source patch rewires _clickManager to an in-panel PopupMenu.
+patch_resource_monitor_process_popup() {
+  msg "Applying Resource Monitor process-popup (left-click) patch"
+  ensure_node || { msg "Node.js unavailable; skipping process-popup patch (install nodejs and re-run)"; return 1; }
+  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_process_popup.js" \
+    "$(resource_monitor_ext_dir)/extension.js"
+}
+
 # patch_resource_monitor_per_disk - Show each disk device separately in the panel.
 patch_resource_monitor_per_disk() {
   msg "Applying Resource Monitor per-disk display patch"
