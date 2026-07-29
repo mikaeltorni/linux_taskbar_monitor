@@ -35,7 +35,27 @@ def test_gsettings_strv_append_stdout_contract():
     assert completed.stdout.strip() == "['one', 'two']"
 
 
+def test_gsettings_strv_rejects_unparseable_current():
+    bin_path = _ensure_bin()
+    completed = subprocess.run(
+        [str(bin_path), "gsettings-strv", "append", "x"],
+        check=False,
+        text=True,
+        capture_output=True,
+        env={**os.environ, "CURRENT": "not-a-list"},
+    )
+    assert completed.returncode == 1
+    assert "parseable" in completed.stderr.lower() or "CURRENT" in completed.stderr
+
+
 def test_installer_uses_rm_monitor_gsettings_strv():
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
     assert "rm_monitor gsettings-strv" in installer
     assert "scripts/gsettings_strv.py" not in installer
+
+
+def test_rm_monitor_forwards_current_under_sudo():
+    """CURRENT must survive sudo env_reset or enabled-extensions can be wiped."""
+    helper = (ROOT / "lib" / "rm_monitor_bin.sh").read_text(encoding="utf-8")
+    assert 'CURRENT+set' in helper or '"${CURRENT+set}"' in helper
+    assert 'env "CURRENT=$CURRENT"' in helper
