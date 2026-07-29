@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.sh"
 EXTENSIONS = ROOT / "lib" / "gnome_extensions.sh"
 BIN_HELPER = ROOT / "lib" / "rm_monitor_bin.sh"
+BUILD = ROOT / "scripts" / "build_rm_monitor.sh"
 
 
 def test_ensure_rm_monitor_tools_builds_the_cli():
@@ -55,3 +56,13 @@ def test_patches_guard_on_rm_monitor():
         body = source.split(f"{fn}()", 1)[1].split("\n}", 1)[0]
         assert "ensure_rm_monitor_bin ||" in body, f"{fn} must guard on ensure_rm_monitor_bin"
         assert f"rm_monitor {subcommand}" in body, f"{fn} must call rm_monitor {subcommand}"
+
+
+def test_build_script_rebuilds_when_sources_are_newer():
+    """dist/rm-monitor must not be reused blindly when src/ or Cargo.toml is newer."""
+    build = BUILD.read_text(encoding="utf-8")
+    assert "sources_newer_than_dist" in build
+    assert "dist_is_fresh" in build
+    assert "stale" in build.lower()
+    assert "build_with_cargo" in build
+    assert "Using existing" in build
