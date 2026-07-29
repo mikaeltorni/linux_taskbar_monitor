@@ -25,14 +25,16 @@ _rm_main_gui_js() { printf '%s/panel/mainGui.js\n' "$(resource_monitor_ext_dir)"
 
 # --- Detection ---------------------------------------------------------------
 # detect_rm_refresh_interval: live check that the installed schema refreshtime
-# matches the configured millisecond interval (converted to seconds).
+# matches the configured millisecond interval (converted to seconds). Compare
+# numerically so gsettings' `0.5` still matches the helper's `0.500`.
 detect_rm_refresh_interval() {
   local ext_dir expected actual
   ext_dir="$(resource_monitor_ext_dir)"
   [ -d "$ext_dir/schemas" ] || return 1
   expected="$(resource_monitor_refresh_seconds)"
   actual="$(ext_gsettings "$ext_dir" get org.gnome.shell.extensions.resource-monitor refreshtime 2>/dev/null | tr -d "[:space:]'")" || return 1
-  [ -n "$actual" ] && [ "$actual" = "$expected" ]
+  [ -n "$actual" ] || return 1
+  awk -v a="$actual" -v e="$expected" 'BEGIN { exit !(a + 0 == e + 0) }'
 }
 
 # detect_rm_gradient_colors: the colors patcher injects the _gradientGetUsageColor

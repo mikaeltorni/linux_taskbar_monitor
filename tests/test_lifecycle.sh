@@ -96,6 +96,9 @@ ext_gsettings() {
 }
 STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
   detect_rm_refresh_interval || fail "detect_rm_refresh_interval should match 500 ms -> 0.500 s"
+# gsettings often prints `0.5` for the same double; string equality must not fail.
+STUB_REFRESHTIME=0.5 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
+  detect_rm_refresh_interval || fail "detect_rm_refresh_interval should treat 0.5 and 0.500 as equal"
 STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=1000 \
   detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject a mismatched refreshtime"
 rm -rf "$EXT_DIR/schemas"
