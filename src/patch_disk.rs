@@ -1,6 +1,6 @@
 //! Patch the Resource Monitor disk space display.
 //!
-//! Port of `scripts/patch_resource_monitor_disk.js`. Three files are touched:
+//! Three files are touched:
 //!
 //! - `panel/containers.js`: `DiskContainerSpace` gains a secondary label for
 //!   live disk activity, plus styled unit labels.

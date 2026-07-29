@@ -23,23 +23,13 @@ ISC_COMPONENTS=(
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk"
-  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_stable_width|uninstall_rm_panel_spacing|configurable||configure_resource_monitor_spacing|resource_monitor_spacing_status"
+  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|configurable||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon"
   "rm_process_popup|Resource Monitor per-process CPU popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup"
-  "window_rules|App window-rules extension (Wayland)|on|monitor_configure_window_rules|detect_window_rules|uninstall_window_rules"
+  "window_rules|App window-rules extension (Wayland)|on|configure_window_rules_extension|detect_window_rules|uninstall_window_rules"
 )
 # Note: this repo owns only the Resource Monitor system-status extension and its
 # window-rules helper. Features that are desktop-wide behavior were moved to their
 # owning repositories to avoid cross-repo duplication: auto-move-windows placement
 # -> linux_workspaces_setup, Chrome PWA icons/desktop entries and the Dash-to-Panel
 # layout -> linux_configuration_setup.
-
-# monitor_configure_window_rules - install the window-rules extension, skipping
-# it on X11 sessions where it does not apply (matches the original guard).
-monitor_configure_window_rules() {
-  if [[ "${SESSION_TYPE:-}" =~ ^(x11|xorg)$ ]]; then
-    msg "X11 session detected; skipping custom window-rules extension."
-    return 0
-  fi
-  configure_window_rules_extension
-}

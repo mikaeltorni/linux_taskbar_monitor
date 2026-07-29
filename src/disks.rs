@@ -1,6 +1,6 @@
 //! Detect and format disk devices for Resource Monitor.
 //!
-//! Port of `scripts/resource_monitor_disks.py`. Discovers mounted block devices
+//! Discovers mounted block devices
 //! through `df -P`, always exposes a `/home` row (even when `/home` lives on the
 //! root filesystem), and shapes each row as a Resource Monitor v2 disk entry.
 

@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
-# gnome_extensions.sh — GNOME Shell extension management helpers
+# gnome_extensions.sh — Resource Monitor core install and optional patch components.
 #
 # Components:
-#   - enable_shell_extension(ext_id): Append ext_id to enabled-extensions list.
-#   - install_gnome_ext_zip(url, dest_dir, sha256, ext_id): Download zip, extract, chown.
-#   - install_gnome_ext_from_src(src_dir, dest_dir, ext_id): Copy from source dir.
-#   - patch_extension_metadata(ext_dir metadata_json shell_ver): Patch metadata.json.
 #   - ext_gsettings(ext_dir schema args...): Run gsettings with extension schemadir.
+#   - install_resource_monitor_core: Download, patch-refresh, configure, enable.
+#   - apply_resource_monitor_* / patch_resource_monitor_* / configure_*: selectable
+#     components declared in installer/components.sh.
 #
-# Sourced after lib/helpers.sh and lib/gsettings_helpers.sh.
-# Depends on: msg, run_as_target, append_gsettings_list, need_cmd.
+# Sourced by install.sh after rm_monitor_bin.sh and extension_installation.sh.
+# Also sources those helpers so pytest / test_lifecycle.sh can load this file alone.
+# Depends on: msg, run_as_target, append_gsettings_list, need_cmd, rm_monitor.
 
-# Also sources lib/extension_installation.sh for installation helpers.
 source "$SCRIPT_DIR/lib/extension_installation.sh"
-# Also sources lib/window_rules_extension.sh for window rules extension config.
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
-# Also sources lib/extension_features.sh (Resource Monitor feature helpers).
-source "$SCRIPT_DIR/lib/extension_features.sh"
 
 # ── Enable GNOME Shell extension (idempotent) ────────────────────────────────
 ext_gsettings() {
@@ -43,17 +39,18 @@ resource_monitor_refresh_interval_file() {
 # small shift ("compact"). The mode is configurable in the installer and
 # persisted like the refresh interval.
 
-# Valid spacing modes and the map to the rm_stable_width patch's --mode flag.
-RESOURCE_MONITOR_SPACING_VALID="stable compact"
+# Panel spacing mode: "stable" reserves a tight per-value width so the taskbar
+# stays put as metric values change digit count; "compact" drops the reserved
+# widths so the indicator is narrower but shifts slightly as digits change.
 
 # resource_monitor_spacing_file - Print the persisted spacing-mode file path.
 resource_monitor_spacing_file() {
   printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/panel-spacing-mode"
 }
 
-# resource_monitor_spacing_mode - Print the configured spacing mode. Honors the
-# RESOURCE_MONITOR_SPACING_MODE environment override, then a persisted file, and
-# defaults to "stable". Invalid values fall back to "stable".
+# resource_monitor_spacing_mode - Print the configured spacing mode.
+# Prefers a persisted file when present; otherwise honors RESOURCE_MONITOR_SPACING_MODE
+# (or defaults to "stable"). Invalid values fall back to "stable".
 resource_monitor_spacing_mode() {
   local value="${RESOURCE_MONITOR_SPACING_MODE:-stable}" file
   file="$(resource_monitor_spacing_file)"
@@ -67,7 +64,7 @@ resource_monitor_spacing_mode() {
   printf '%s\n' "$value"
 }
 
-# persist_resource_monitor_spacing MODE - Validate and save the spacing mode.
+# resource_monitor_spacing_persist MODE - Validate and save the spacing mode.
 resource_monitor_spacing_persist() {
   local value="$1" file dir
   case "$value" in
@@ -83,7 +80,7 @@ resource_monitor_spacing_persist() {
 
 # apply_resource_monitor_spacing_mode - Apply the configured spacing mode to the
 # installed Resource Monitor. Sets the *width GSettings (left to upstream
-# defaults when compact) and runs the rm_stable_width patcher in the matching
+# defaults when compact) and runs the patch-stable-width CLI in the matching
 # mode so the secondary disk-activity reservation and GPU VRAM split follow.
 # Safe before installation: it only acts when the extension dir is present.
 apply_resource_monitor_spacing_mode() {
@@ -112,6 +109,7 @@ apply_resource_monitor_spacing_mode() {
   esac
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch (build with scripts/build_rm_monitor.sh and re-run)"; return 1; }
   rm_monitor patch-stable-width --mode "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
+  _isc_mark_installed "rm_panel_spacing" || true
 }
 
 # configure_resource_monitor_spacing - Open a typeable-choice field for the
@@ -140,8 +138,9 @@ resource_monitor_spacing_status() {
 }
 
 # resource_monitor_refresh_interval_ms - Print the configured interval in ms.
-# Invalid environment/file values are ignored so installation remains bounded
-# to the supported 100..2000 ms range. The clean-install default is 500 ms.
+# Prefers a persisted file when present; otherwise honors
+# RESOURCE_MONITOR_REFRESH_INTERVAL_MS (default 500). Invalid values fall back
+# to 500 so installation stays within the supported 100..2000 ms range.
 resource_monitor_refresh_interval_ms() {
   local value="${RESOURCE_MONITOR_REFRESH_INTERVAL_MS:-500}" file
   file="$(resource_monitor_refresh_interval_file)"
@@ -237,7 +236,6 @@ install_resource_monitor_core() {
   msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator (core)"
   need_cmd curl
   need_cmd unzip
-  need_cmd python3
   need_cmd gsettings
   need_cmd glib-compile-schemas
 
@@ -305,15 +303,15 @@ install_resource_monitor_core() {
   # a fixed box while the right edge stays put. Sizes match the widest expected
   # reading at the configured units (measured in the panel font, digit ~8px):
   # CPU 0-100 (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3)
-  # -> 36, GPU usage 3 / VRAM 2 (VRAM split off in rm_stable_width) -> 24, ethernet
+  # -> 36, GPU usage 3 / VRAM 2 (VRAM split off in patch-stable-width) -> 24, ethernet
   # down|up (3|3) -> 60. These are intentionally snug (one char of slack).
   #
   # The spacing mode selects whether these reserved widths are applied. "stable"
   # keeps the panel put as digits change; "compact" skips them so the indicator
   # takes less horizontal space but shifts slightly as values grow/shrink.
   # The secondary disk-activity width (no upstream GSetting) is handled by the
-  # rm_stable_width component (patch_resource_monitor_stable_width.js); the
-  # spacing mode is passed straight through to it below.
+  # rm_panel_spacing component via rm-monitor patch-stable-width; the spacing
+  # mode is passed straight through to it when that component runs.
   case "$(resource_monitor_spacing_mode)" in
     compact)
       # Adaptive widths: leave every value label to size itself, so the panel
@@ -360,11 +358,12 @@ patch_resource_monitor_gradient_colors() {
   _isc_mark_installed "rm_gradient_colors" || true
 }
 
-# patch_resource_monitor_vram - Show GPU VRAM usage in the panel.
+# patch_resource_monitor_vram - Show GPU VRAM usage without brackets in the panel.
 patch_resource_monitor_vram() {
   msg "Applying Resource Monitor VRAM display patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping VRAM display patch"; return 1; }
   rm_monitor patch-vram "$(resource_monitor_ext_dir)/panel/containers.js"
+  _isc_mark_installed "rm_vram" || true
 }
 
 # patch_resource_monitor_eth_icon - Remove the ethernet display icon while
@@ -374,6 +373,7 @@ patch_resource_monitor_eth_icon() {
   msg "Applying Resource Monitor ethernet-icon removal patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping ethernet-icon patch"; return 1; }
   rm_monitor patch-eth-icon "$(resource_monitor_ext_dir)/panel/mainGui.js"
+  _isc_mark_installed "rm_hide_eth_icon" || true
 }
 
 # patch_resource_monitor_process_popup - Left-click shows a popup menu with
@@ -384,6 +384,7 @@ patch_resource_monitor_process_popup() {
   msg "Applying Resource Monitor process-popup (left-click) patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping process-popup patch"; return 1; }
   rm_monitor patch-process-popup "$(resource_monitor_ext_dir)/extension.js"
+  _isc_mark_installed "rm_process_popup" || true
 }
 
 # patch_resource_monitor_per_disk - Show each disk device separately in the panel.
@@ -392,30 +393,4 @@ patch_resource_monitor_per_disk() {
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping per-disk display patch"; return 1; }
   rm_monitor patch-disk "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_per_disk" || true
-}
-
-# patch_resource_monitor_stable_width - Apply the configured panel-spacing mode to
-# the disk-space secondary "activity %" width (which has no upstream *width
-# GSetting) and the GPU VRAM split. "stable" reserves a snug width so the panel
-# stays put as the percentage grows from "5%" to "100%"; "compact" releases those
-# reservations so the indicator takes less space. The matching *width GSettings
-# (primary values) are applied by apply_resource_monitor_spacing_mode / the core.
-patch_resource_monitor_stable_width() {
-  msg "Applying Resource Monitor stable-width (disk activity) patch"
-  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch"; return 1; }
-  rm_monitor patch-stable-width --mode "$(resource_monitor_spacing_mode)" "$(resource_monitor_ext_dir)/panel/containers.js"
-  _isc_mark_installed "rm_stable_width" || true
-}
-
-
-# Integrate system-status extension with Dash-to-Panel bottom panel
-# When both extensions are active, ensure proper positioning and interaction
-setup_dash_to_panel_integration() {
-  # Ensure dash-to-panel is configured for bottom panel position  
-  dconf write /org/gnome/shell/extensions/dash-to-panel/panel-position "'BOTTOM'" || true
-  
-  # Configure system-status to work with dash-to-panel layout
-  gsettings set org.gnome.shell disable-user-extensions false 2>/dev/null || true
-  
-  msg "System status extension configured for Dash-to-Panel integration"  
 }

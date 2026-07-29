@@ -33,14 +33,35 @@ gnome-extensions disable Resource_Monitor@Ory0n
 # Build the helper CLI if needed, then run each patcher
 bash scripts/build_rm_monitor.sh
 EXT=~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
+./dist/rm-monitor patch-extension-metadata "$EXT/metadata.json" 46 9999
+./dist/rm-monitor patch-refresh "$EXT"
 ./dist/rm-monitor patch-vram "$EXT/panel/containers.js"
 ./dist/rm-monitor patch-disk "$EXT/panel/containers.js"
 ./dist/rm-monitor patch-colors "$EXT/extension.js"
-./dist/rm-monitor patch-refresh "$EXT"
+./dist/rm-monitor patch-eth-icon "$EXT/panel/mainGui.js"
+./dist/rm-monitor patch-process-popup "$EXT/extension.js"
+./dist/rm-monitor patch-stable-width --mode stable "$EXT/panel/containers.js"
+./dist/rm-monitor configure-resource-monitor --disk-space-gb --schema-dir "$EXT/schemas"
 
 # Re-enable the extension
 gnome-extensions enable Resource_Monitor@Ory0n
 ```
+
+Other `rm-monitor` subcommands used by the installer:
+
+| Subcommand | Purpose |
+|---|---|
+| `gsettings-strv` | Append/remove values in a GSettings string array (`CURRENT=…`) |
+| `report-cuda-devices` | Print the GPU device list for `gpudeviceslist` |
+| `configure-resource-monitor` | Apply display-mode GSettings (GPU/disk) |
+| `patch-extension-metadata` | Add shell-version + optional version pin |
+| `patch-refresh` | Widen refresh schema / GPU poll floor |
+| `patch-vram` | Remove VRAM bracket labels |
+| `patch-disk` | Free space + live IO activity % |
+| `patch-colors` | 256-step gradient indicator colors |
+| `patch-eth-icon` | Hide ethernet icon, keep Mbps |
+| `patch-process-popup` | Left-click per-process CPU/RAM popup |
+| `patch-stable-width` | Stable/compact reserved widths |
 
 ### Apply gsettings without sudo
 

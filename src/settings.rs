@@ -1,6 +1,6 @@
 //! Build and apply GSettings values for the Resource Monitor extension.
 //!
-//! Port of `scripts/resource_monitor_settings.py`. Owns device serialization
+//! Owns device serialization
 //! (byte-compatible with Python's `repr(json.dumps(device))`), display-mode
 //! command construction, and execution of individual `gsettings set` commands.
 

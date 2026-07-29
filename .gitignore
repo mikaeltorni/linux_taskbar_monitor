@@ -1,10 +1,7 @@
-# Python (legacy helpers / tests during migration)
+# Python (pytest installer contract tests)
 __pycache__/
 .pytest_cache/
 *.py[cod]
-
-# Node (legacy JS patchers during migration)
-node_modules/
 
 # Rust / Cargo
 /target/

@@ -185,9 +185,36 @@ def test_panel_spacing_is_a_selectable_component():
     assert "compact" in patch
 
     assert "rm_panel_spacing|Resource Monitor panel spacing" in components
-    assert "detect_rm_stable_width" in components
+    assert "detect_rm_panel_spacing" in components
     # The apply function forwards the configured mode to rm-monitor.
     assert 'rm_monitor patch-stable-width --mode "$mode"' in lib
     # Uninstall reverts to the stable baseline spacing.
     lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
     assert "uninstall_rm_panel_spacing" in lifecycle
+
+
+def test_default_json_lists_every_default_on_component():
+    """installation_configs/default.json must match ISC_COMPONENTS default-on ids."""
+    import json
+    import re
+
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+    default = json.loads(
+        (ROOT_DIR / "installation_configs" / "default.json").read_text(encoding="utf-8")
+    )
+    ids = re.findall(
+        r'"(rm_[a-z_]+|window_rules)\|[^"]+\|on\|',
+        components,
+    )
+    assert ids, "expected at least one default-on component in ISC_COMPONENTS"
+    assert set(ids) == set(default["components"].keys())
+    for cid in ids:
+        assert default["components"][cid]["on"] == 1, cid
+
+
+def test_dead_dash_to_panel_helpers_are_gone():
+    """Dash-to-Panel ownership left this repo; leftover helpers must not return."""
+    lib = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    assert "setup_dash_to_panel_integration" not in lib
+    assert not (ROOT_DIR / "lib" / "extension_features.sh").exists()
+    assert "need_cmd python3" not in lib

@@ -1,6 +1,7 @@
 //! Pure gradient color math for the Resource Monitor patches.
 //!
-//! Canonical, unit-tested mirror of `scripts/lib/gradient_colors.js`. GNOME
+//! Canonical, unit-tested mirror of the JavaScript injected by `patch_colors`
+//! and `patch_disk`. GNOME
 //! Shell (GJS) cannot import this crate, so `patch_colors` and `patch_disk`
 //! embed inline JavaScript copies of the same math; keeping this tested source
 //! alongside them documents and verifies the intended behavior, and owns the

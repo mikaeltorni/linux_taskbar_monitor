@@ -1,7 +1,7 @@
 //! Shared snippet-replacement helpers for idempotent extension source patches.
 //!
-//! Mirrors `scripts/lib/patch_text.js` so JS patchers can be ported without
-//! changing fail-fast or migration semantics.
+//! Used by the Rust disk / text patchers so replacements stay fail-fast and
+//! migration-aware (older patched forms can be upgraded to the current form).
 
 use thiserror::Error;
 
@@ -11,11 +11,22 @@ use thiserror::Error;
 pub struct PatchTargetMissing(pub String);
 
 /// Migration from an older patched form to the current form.
+///
+/// # Fields
+/// - `from`: Snippet that identifies the older patched form.
+/// - `to`: Replacement text for the current form.
+/// - `all`: When true, replace every occurrence of `from`; otherwise once.
+/// - `required_marker`: Optional marker that must already be present before
+///   the migration runs (guards against applying migrations to clean upstream).
 #[derive(Debug, Clone)]
 pub struct Migration {
+    /// Older patched snippet to find.
     pub from: &'static str,
+    /// Current patched form to write.
     pub to: &'static str,
+    /// Replace all occurrences when true.
     pub all: bool,
+    /// Optional prerequisite marker in the file.
     pub required_marker: Option<&'static str>,
 }
 

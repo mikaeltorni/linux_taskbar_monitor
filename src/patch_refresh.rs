@@ -1,6 +1,6 @@
 //! Add sub-second refresh interval support to the Resource Monitor extension.
 //!
-//! Port of `scripts/patch_resource_monitor_refresh.py`. Upstream Resource
+//! Upstream Resource
 //! Monitor only allows whole-second refresh intervals and throttles GPU polling
 //! to a 5-second floor. This patcher rewrites the relevant source files so the
 //! panel can refresh every 0.1 seconds (including GPU usage/VRAM), then

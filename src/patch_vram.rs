@@ -1,17 +1,19 @@
 //! Show VRAM next to GPU usage % without brackets.
 //!
-//! Port of `scripts/patch_resource_monitor_vram.js`. Upstream Resource Monitor
-//! wraps the GPU memory (VRAM) value in `[ ]` bracket labels; this patch
-//! replaces those brackets with a plain two-space separator so VRAM sits
-//! directly beside the GPU usage percentage.
+//! Upstream Resource Monitor wraps the GPU memory (VRAM) value in `[ ]`
+//! bracket labels; this patch replaces those brackets with a plain two-space
+//! separator so VRAM sits directly beside the GPU usage percentage.
 //!
-//! The edit is fail-fast: when the expected upstream snippet is absent (already
-//! patched, or an unsupported version) the command exits non-zero.
+//! Idempotent: a second run that already sees the space-separator marker
+//! succeeds without rewriting the file. Missing both the upstream snippet and
+//! the marker exits non-zero (unsupported extension version).
 
 use std::fs;
 use std::path::Path;
 
 use crate::logging;
+
+const MARKER: &str = "Space separator between GPU usage and VRAM";
 
 const OLD_CODE: &str = r#"        const separatorStart = _createBracketLabel("[", [
           "resource-monitor-secondary-bracket",
@@ -36,12 +38,17 @@ const NEW_CODE: &str = r#"        // Space separator between GPU usage and VRAM 
 /// # Parameters
 /// - `content`: Current `containers.js` content.
 ///
-/// Returns the patched content, or `None` when the upstream snippet is absent.
-pub fn patch_containers(content: &str) -> Option<String> {
+/// Returns `(patched_content, changed)`. `changed` is false when the marker is
+/// already present. Returns `None` when neither the upstream snippet nor the
+/// marker is found.
+pub fn patch_containers(content: &str) -> Option<(String, bool)> {
+    if content.contains(MARKER) {
+        return Some((content.to_string(), false));
+    }
     if !content.contains(OLD_CODE) {
         return None;
     }
-    Some(content.replacen(OLD_CODE, NEW_CODE, 1))
+    Some((content.replacen(OLD_CODE, NEW_CODE, 1), true))
 }
 
 /// CLI entry point for the VRAM bracket patcher.
@@ -49,8 +56,8 @@ pub fn patch_containers(content: &str) -> Option<String> {
 /// # Parameters
 /// - `containers_path`: Path to the extension's `panel/containers.js`.
 ///
-/// Returns `0` on success, `1` when the file cannot be read/written or the
-/// target snippet is missing (which includes the already-patched case).
+/// Returns `0` on success (including the already-patched case), `1` when the
+/// file cannot be read/written or the target snippet is missing.
 pub fn run(containers_path: &Path) -> i32 {
     logging::info(format!("patch-vram path={}", containers_path.display()));
 
@@ -66,11 +73,21 @@ pub fn run(containers_path: &Path) -> i32 {
         }
     };
 
-    let Some(patched) = patch_containers(&content) else {
-        logging::error("Could not find target code in containers.js - patch may already be applied");
-        eprintln!("Could not find target code in containers.js - patch may already be applied");
+    let Some((patched, changed)) = patch_containers(&content) else {
+        logging::error(
+            "Could not find target code in containers.js - unsupported extension version",
+        );
+        eprintln!(
+            "Could not find target code in containers.js - unsupported extension version"
+        );
         return 1;
     };
+
+    if !changed {
+        logging::info("GPU VRAM brackets already removed");
+        println!("GPU VRAM brackets already removed");
+        return 0;
+    }
 
     if let Err(err) = fs::write(containers_path, patched) {
         logging::error(format!(
@@ -96,7 +113,8 @@ mod tests {
 
     #[test]
     fn replaces_the_bracket_labels() {
-        let patched = patch_containers(&upstream()).expect("patched");
+        let (patched, changed) = patch_containers(&upstream()).expect("patched");
+        assert!(changed);
         assert!(patched.contains(NEW_CODE));
         assert!(!patched.contains("_createBracketLabel"));
         assert!(patched.starts_with("prefix\n"));
@@ -104,18 +122,26 @@ mod tests {
     }
 
     #[test]
-    fn already_patched_content_is_rejected() {
-        assert!(patch_containers(NEW_CODE).is_none());
+    fn already_patched_content_is_a_no_op_success() {
+        let (again, changed) = patch_containers(NEW_CODE).expect("already patched");
+        assert!(!changed);
+        assert_eq!(again, NEW_CODE);
     }
 
     #[test]
-    fn run_exits_one_when_already_applied() {
+    fn unsupported_content_is_rejected() {
+        assert!(patch_containers("// unrelated").is_none());
+    }
+
+    #[test]
+    fn run_is_idempotent_on_disk() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("containers.js");
         fs::write(&path, upstream()).expect("write");
         assert_eq!(run(&path), 0);
-        // A second run finds no bracket labels and must fail fast.
-        assert_eq!(run(&path), 1);
+        let first = fs::read_to_string(&path).expect("read");
+        assert_eq!(run(&path), 0);
+        assert_eq!(first, fs::read_to_string(&path).expect("read"));
     }
 
     #[test]

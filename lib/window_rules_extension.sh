@@ -1,29 +1,16 @@
 #!/usr/bin/env bash
-# window_rules_extension.sh — GNOME Shell window rules extension (Wayland workspace/sticky)
+# window_rules_extension.sh — GNOME Shell window rules extension (Wayland)
 #
 # Components:
-#   - configure_window_rules_extension(): Install and enable the app-rules@local extension.
-#     Creates a GNOME Shell extension that assigns specific apps to workspaces or makes them sticky.
+#   - configure_window_rules_extension(): Install and enable app-rules@local.
 #
-# Sourced after lib/helpers.sh, lib/gsettings_helpers.sh, and lib/extension_installation.sh.
-# Depends on: msg, run_as_target, enable_shell_extension, SESSION_TYPE, TARGET_HOME, TARGET_USER
+# Sourced by install.sh and by lib/gnome_extensions.sh for standalone tests.
+# Depends on: msg, run_as_target, enable_shell_extension, SESSION_TYPE,
+#             TARGET_HOME, TARGET_USER
 
-# ── configure_window_rules_extension ─────────────────────────────────────────
-# Install the local GNOME Shell window rules extension for Wayland sessions.
-# This extension assigns specific applications to workspaces or marks them sticky.
-#
-# Behavior:
-#   - Skips installation on X11/XOrg sessions (only works on Wayland).
-#   - Creates metadata.json, extension.js in ~/.local/share/gnome-shell/extensions/app-rules@local/
-#   - Enables the extension via enable_shell_extension().
-#
-# Rules defined in the extension:
-#   gitkraken*              → workspace 2
-#   monkeytype.desktop      → workspace 7
-#   chatgpt.desktop         → workspace 0
-#   obs*                    → workspace 7
-#   discord*                → sticky
-#   spotify*                → sticky
+# configure_window_rules_extension — Install the local window-rules extension.
+# Skips on X11/XOrg (Wayland-only). Writes metadata.json + extension.js under
+# ~/.local/share/gnome-shell/extensions/app-rules@local/ and enables it.
 
 configure_window_rules_extension() {
   msg "Installing local GNOME Shell window rules (Wayland workspace/sticky)"
