@@ -32,6 +32,16 @@ pub struct Migration {
 
 /// Replace the first matching known snippet, or return the content unchanged
 /// when `already_marker` is already present.
+///
+/// # Parameters
+/// - `content`: File text to patch.
+/// - `snippets`: Upstream forms to match (first hit wins).
+/// - `replacement`: Current patched form.
+/// - `already_marker`: Marker proving the patch is already applied.
+/// - `target_name`: Human label used in logs and [`PatchTargetMissing`].
+///
+/// # Returns
+/// `(content, status)` where status is `"already"` or `"patched"`.
 pub fn replace_known_snippet(
     content: &str,
     snippets: &[&str],
@@ -54,6 +64,17 @@ pub fn replace_known_snippet(
 }
 
 /// Apply in-place migrations first, then fall back to `replace_known_snippet`.
+///
+/// # Parameters
+/// - `content`: File text to patch.
+/// - `snippets`: Upstream forms to match after migrations.
+/// - `replacement`: Current patched form.
+/// - `already_marker`: Marker proving the current patch is present.
+/// - `migrations`: Older patched forms to upgrade first.
+/// - `target_name`: Human label used in logs and errors.
+///
+/// # Returns
+/// `(content, status)` where status is `"migrated"`, `"already"`, or `"patched"`.
 pub fn replace_known_snippet_with_migration(
     content: &str,
     snippets: &[&str],
@@ -90,6 +111,17 @@ pub fn replace_known_snippet_with_migration(
 }
 
 /// Try regex patterns first, then literal snippets.
+///
+/// # Parameters
+/// - `content`: File text to patch.
+/// - `snippets`: Literal upstream forms (fallback after patterns).
+/// - `patterns`: Compiled regexes tried before literals.
+/// - `replacement`: Current patched form (literal; `${...}` is not expanded).
+/// - `already_marker`: Marker proving the patch is already applied.
+/// - `target_name`: Human label used in logs and errors.
+///
+/// # Returns
+/// `(content, status)` where status is `"already"` or `"patched"`.
 pub fn replace_known_snippet_or_patterns(
     content: &str,
     snippets: &[&str],

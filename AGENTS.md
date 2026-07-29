@@ -3,19 +3,26 @@
 All repository changes must remain compatible with a clean installation run
 through this repository's `install.sh`. When also listed by the optional master
 orchestrator (`installation_scripts`), keep the shared component CLI contract
-(`--list-components`, `--select`, `--detect`, `--reconfigure`, `--uninstall`)
-stable so that orchestrator keeps working. Do not rely on packages, files,
-settings, or manual steps that exist only on the current machine. Add every
-required dependency, asset, configuration step, and migration to the installer
-so a fresh checkout can reproduce the complete setup.
+(`--list-components`, `--select`, `--detect`, `--reconfigure`, `--uninstall`,
+and the other readonly flags documented in `README.md`) stable so that
+orchestrator keeps working. Do not rely on packages, files, settings, or
+manual steps that exist only on the current machine. Add every required
+dependency, asset, configuration step, and migration to the installer so a
+fresh checkout can reproduce the complete setup.
 
 Keep installation steps idempotent and verify the clean-install path for every
 change.
 
+User-facing install steps, component tables, `rm-monitor` subcommands, and
+environment overrides live in [`README.md`](README.md). Keep that file the
+single source of truth for CLI surfaces; update it whenever behavior changes.
+
 ## Running Without Sudo
 
-The GNOME Shell extension files live in `~/.local/share/gnome-shell/extensions/`
-and are owned by the user — no root is needed to patch or reconfigure them.
+This installer writes Resource Monitor under
+`~/.local/share/gnome-shell/extensions/` (user-owned). Patching and
+reconfiguring that tree needs no root. `gsettings` also runs as the logged-in
+user.
 
 ### Apply a single setting change (no sudo)
 
@@ -47,40 +54,17 @@ EXT=~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
 gnome-extensions enable Resource_Monitor@Ory0n
 ```
 
-Other `rm-monitor` subcommands used by the installer:
-
-| Subcommand | Purpose |
-|---|---|
-| `gsettings-strv` | Append/remove values in a GSettings string array (`CURRENT=…`) |
-| `report-cuda-devices` | Print the GPU device list for `gpudeviceslist` |
-| `configure-resource-monitor` | Apply display-mode GSettings (GPU/disk) |
-| `patch-extension-metadata` | Add shell-version + optional version pin |
-| `patch-refresh` | Widen refresh schema / GPU poll floor |
-| `patch-vram` | Remove VRAM bracket labels |
-| `patch-disk` | Free space + live IO activity % |
-| `patch-colors` | 256-step gradient indicator colors |
-| `patch-eth-icon` | Hide ethernet icon, keep Mbps |
-| `patch-process-popup` | Left-click per-process CPU/RAM popup |
-| `patch-stable-width` | Stable/compact reserved widths |
-
-### Apply gsettings without sudo
-
-All `gsettings` commands work as the logged-in user — no `sudo` or `run_as_target`:
-
-```bash
-gsettings set org.gnome.shell.extensions.resource-monitor netunit "'bits'"
-gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
-# ... any other gsettings key
-```
+See `README.md` for the full `rm-monitor` subcommand table and
+`configure-resource-monitor` flags.
 
 ### When sudo IS required
 
-- Installing the extension zip to system-wide locations (`/usr/share/gnome-shell/extensions/`)
-- Modifying files owned by root (e.g., `/etc/`, `/usr/lib/`)
-- Running `apt install` or system package management (e.g. `cargo` when no toolchain exists)
+- Running `apt install` or other system package management (for example `cargo`
+  when no toolchain exists)
+- Modifying root-owned paths under `/etc` or `/usr` (not part of this
+  installer's normal path — extensions stay under `$HOME/.local`)
 
 For routine development and patching, **no sudo is needed**.
-
 
 ## Mandatory programming guidelines prompt
 
@@ -98,6 +82,11 @@ harness-native invocation for the runtime in use:
 - Codex-family (`ca`, `qa`, `oa`, `na`, …): `$general-programming-guidelines`
 - Claude Code, Cline, Grok: `/general-programming-guidelines`
 - OpenCode: load `general-programming-guidelines` with the skill tool
+
+Also load `linux-configuration` for any GNOME Shell extension, gsettings,
+systemd user unit, or `install.sh` change. Use only the sanctioned in-place
+X11 run-dialog reload (`xdotool` `Alt+F2 r`) to activate edited extension
+code; never logout, `gnome-shell --replace`, or kill the Shell.
 
 Agent Command Center prepends this bare invocation to every dispatched prompt, so the
 harness activates the skill before reading the task. When you start a task by hand, invoke it

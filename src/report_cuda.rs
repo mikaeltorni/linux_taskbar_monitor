@@ -103,7 +103,14 @@ pub fn get_gpu_devices() -> Vec<Device> {
 /// Returns `0` on success. A missing `nvidia-smi` is not an error; the command
 /// prints `[]` and succeeds so the installer can use the value unconditionally.
 pub fn run() -> i32 {
-    println!("{}", format_gsettings_list(&get_gpu_devices()));
+    logging::info("report-cuda-devices starting");
+    let devices = get_gpu_devices();
+    let formatted = format_gsettings_list(&devices);
+    logging::info(format!(
+        "report-cuda-devices emitted {} device(s)",
+        devices.len()
+    ));
+    println!("{formatted}");
     0
 }
 

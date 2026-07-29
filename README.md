@@ -67,13 +67,28 @@ python3 -m pytest tests -q
 
 | Subcommand | Role |
 |---|---|
-| `gsettings-strv` | Mutate GSettings `as` lists for the installer |
-| `report-cuda-devices` | NVIDIA GPU device list for GSettings |
-| `configure-resource-monitor` | Display-mode GSettings (GPU/disk) |
-| `patch-extension-metadata` | Shell version + version pin |
+| `gsettings-strv` | Append/remove values in a GSettings `as` list (`CURRENT=…`) |
+| `report-cuda-devices` | NVIDIA GPU device list for `gpudeviceslist` |
+| `configure-resource-monitor` | Display-mode GSettings (GPU/disk); see flags below |
+| `patch-extension-metadata` | Shell version + optional version pin |
 | `patch-refresh` | Sub-second refresh capability |
-| `patch-vram` / `patch-disk` / `patch-colors` | Panel display patches |
-| `patch-eth-icon` / `patch-process-popup` / `patch-stable-width` | UX patches |
+| `patch-vram` | Remove VRAM bracket labels |
+| `patch-disk` | Free space + live IO activity % |
+| `patch-colors` | 256-step gradient indicator colors |
+| `patch-eth-icon` | Hide ethernet icon, keep Mbps |
+| `patch-process-popup` | Left-click per-process CPU/RAM popup |
+| `patch-stable-width` | `--mode stable\|compact` reserved widths |
+
+`configure-resource-monitor` flags:
+
+| Flag | Effect |
+|---|---|
+| `--disk-space-gb` | Free space in GB (installer default) |
+| `--disk-space-perc-home-only` | `/home` used percentage |
+| `--gpu-memory-perc` | GPU memory as used/total % |
+| `--schema-dir PATH` | Extension schemas directory (auto-detected when omitted) |
+
+`--disk-space-perc` remains as a hidden legacy alias for `--disk-space-gb`.
 
 ## Configuration
 
@@ -87,6 +102,8 @@ Environment overrides (used when no persisted file exists yet):
 | `RESOURCE_MONITOR_SPACING_MODE` | `stable` or `compact` (seed; file wins if present) |
 | `RESOURCE_MONITOR_REFRESH_INTERVAL_MS` | 100–2000 (default 500; file wins if present) |
 | `RM_MONITOR_RUST_IMAGE` | Container image for builds (default `rust:1-bookworm`) |
+| `ISC_FUNCTIONS_DIR` | Override path to `linux_installation_scripts_functions` |
+| `ISC_FUNCTIONS_REF` | Git ref for the on-demand framework download (default `master`) |
 
 Persisted under `~/.config/taskbar-system-status-monitor/` once chosen in the
 installer menu (`refresh-interval-ms`, `panel-spacing-mode`).
@@ -96,7 +113,14 @@ installer menu (`refresh-interval-ms`, `panel-spacing-mode`).
 Every Resource Monitor value label is right-aligned and given a tight reserved
 pixel width in **stable** mode so the panel does not jump when digit counts
 change. **Compact** mode drops those widths for a narrower indicator. Choose
-the mode via the installer's `rm_panel_spacing` component.
+the mode via the installer's `rm_panel_spacing` component (or
+`RESOURCE_MONITOR_SPACING_MODE` / the persisted file under
+`~/.config/taskbar-system-status-monitor/`).
+
+The five upstream `*width` GSettings keys are applied by the mandatory core
+(and again when the spacing component runs). The secondary disk-activity and
+VRAM split reservations that have no upstream GSetting are applied by
+`rm-monitor patch-stable-width` when `rm_panel_spacing` is selected.
 
 Ethernet is placed first (leftmost). The ethernet icon is hidden while Mbps
 values stay visible. Disk free space shows as colored GB with a secondary
@@ -110,13 +134,24 @@ bash install.sh --default       # install all default-on components, no prompts
 bash install.sh --all           # install every component, no prompts
 bash install.sh --select a,b    # install exactly these component ids
 bash install.sh --list-components  # print: id<TAB>label<TAB>default
+bash install.sh --list-configurable-components
+bash install.sh --list-select-configure-components
+bash install.sh --list-component-config-values
+bash install.sh --configure-component ID
+bash install.sh --export-selection
 bash install.sh --detect
 bash install.sh --reconfigure a,b
 bash install.sh --uninstall a,b
 ```
 
+Readonly flags (`--list-*`, `--detect`, `--help`, `--configure-component`,
+`--export-selection`) and `--reconfigure` / `--uninstall` never wipe the
+installed extension tree. Fresh install modes (`--default`, `--all`,
+`--select`, interactive) always re-run `install_resource_monitor_core`, which
+re-extracts a clean Resource Monitor zip so deselected source patches revert.
+
 The Resource Monitor extension is the mandatory core (`install_resource_monitor_core`
-runs before component selection). Optional default-on components:
+runs before component selection on fresh installs). Optional default-on components:
 
 | Component id | Description | Default |
 |---|---|---|

@@ -68,8 +68,9 @@ resource_monitor_spacing_mode() {
   printf '%s\n' "$value"
 }
 
-# resource_monitor_spacing_persist MODE - Validate and save the spacing mode.
-resource_monitor_spacing_persist() {
+# persist_resource_monitor_spacing_mode MODE - Validate and save the spacing mode.
+# Mirrors persist_resource_monitor_refresh_interval naming for the sibling setting.
+persist_resource_monitor_spacing_mode() {
   local value="$1" file dir
   case "$value" in
     stable|compact) ;;
@@ -80,6 +81,37 @@ resource_monitor_spacing_persist() {
   run_as_target mkdir -p "$dir"
   printf '%s\n' "$value" | run_as_target tee "$file" >/dev/null
   msg "Saved Resource Monitor panel spacing mode: ${value}."
+}
+
+# apply_resource_monitor_width_gsettings EXT_DIR MODE - Set the five upstream
+# *width GSettings keys for stable (tight reserved widths) or compact (0).
+# Shared by core install and the selectable spacing component so the values
+# cannot drift.
+apply_resource_monitor_width_gsettings() {
+  local ext_dir="$1" mode="$2"
+  case "$mode" in
+    compact)
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
+      ;;
+    stable)
+      # Sizes match the widest expected reading at the configured units
+      # (measured in the panel font, digit ~8px): CPU 0-100 -> 24, RAM GB -> 20,
+      # disk free GB -> 36, GPU usage/VRAM split -> 24, ethernet down|up -> 60.
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
+      ;;
+    *)
+      msg "Invalid spacing mode for width GSettings: $mode" >&2
+      return 2
+      ;;
+  esac
 }
 
 # apply_resource_monitor_spacing_mode - Apply the configured spacing mode to the
@@ -97,22 +129,7 @@ apply_resource_monitor_spacing_mode() {
     return 0
   fi
   msg "Applying Resource Monitor panel spacing mode: ${mode}"
-  case "$mode" in
-    compact)
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
-      ;;
-    stable)
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
-      ;;
-  esac
+  apply_resource_monitor_width_gsettings "$ext_dir" "$mode"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch (build with scripts/build_rm_monitor.sh and re-run)"; return 1; }
   rm_monitor patch-stable-width --mode "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_panel_spacing" || true
@@ -128,7 +145,7 @@ configure_resource_monitor_spacing() {
     read -r -e -i "$current" -p "Resource Monitor panel spacing [stable|compact]: " value </dev/tty || return 1
     case "$value" in
       stable|compact)
-        if resource_monitor_spacing_persist "$value"; then
+        if persist_resource_monitor_spacing_mode "$value"; then
           apply_resource_monitor_spacing_mode
           return 0
         fi
@@ -245,6 +262,8 @@ install_resource_monitor_core() {
   need_cmd unzip || { msg "ERROR: unzip is required to extract Resource Monitor"; return 1; }
   need_cmd gsettings || { msg "ERROR: gsettings is required to configure Resource Monitor"; return 1; }
   need_cmd glib-compile-schemas || { msg "ERROR: glib-compile-schemas is required after schema patches"; return 1; }
+  need_cmd sha256sum || { msg "ERROR: sha256sum is required to verify the Resource Monitor zip"; return 1; }
+  need_cmd gnome-shell || { msg "ERROR: gnome-shell is required to read the running Shell version"; return 1; }
 
   local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
@@ -307,11 +326,7 @@ install_resource_monitor_core() {
   # Reserve a tight per-value width so the taskbar does not jump as metric values
   # change digit count. The extension multiplies these pixel values by the display
   # scale factor and right-aligns every value label, so text grows leftward inside
-  # a fixed box while the right edge stays put. Sizes match the widest expected
-  # reading at the configured units (measured in the panel font, digit ~8px):
-  # CPU 0-100 (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3)
-  # -> 36, GPU usage 3 / VRAM 2 (VRAM split off in patch-stable-width) -> 24, ethernet
-  # down|up (3|3) -> 60. These are intentionally snug (one char of slack).
+  # a fixed box while the right edge stays put.
   #
   # The spacing mode selects whether these reserved widths are applied. "stable"
   # keeps the panel put as digits change; "compact" skips them so the indicator
@@ -319,24 +334,7 @@ install_resource_monitor_core() {
   # The secondary disk-activity width (no upstream GSetting) is handled by the
   # rm_panel_spacing component via rm-monitor patch-stable-width; the spacing
   # mode is passed straight through to it when that component runs.
-  case "$(resource_monitor_spacing_mode)" in
-    compact)
-      # Adaptive widths: leave every value label to size itself, so the panel
-      # is as narrow as the current readings but shifts as digits change.
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
-      ;;
-    stable)
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
-      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
-      ;;
-  esac
+  apply_resource_monitor_width_gsettings "$ext_dir" "$(resource_monitor_spacing_mode)"
 
   gpu_devices="$(rm_monitor report-cuda-devices)"
   if [ -n "$gpu_devices" ]; then

@@ -135,7 +135,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let code = match cli.command {
         Command::GsettingsStrv { action, value } => {
-            match gsettings_strv::run_cli(&action, &value) {
+            match gsettings_strv::run(&action, &value) {
                 Ok(()) => 0,
                 Err(code) => code,
             }

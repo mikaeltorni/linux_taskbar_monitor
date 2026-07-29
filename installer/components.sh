@@ -6,7 +6,11 @@
 # first, then this manifest, then routes execution through component_main from
 # the shared component_loader.sh (linux_installation_scripts_functions).
 #
-# Entry format: "id|label|default(on/off)|function".
+# Entry format (pipe-separated fields; trailing empties may be omitted):
+#   id|label|default(on/off)|install_fn|detect_fn|uninstall_fn|section|requires|configure_fn|status_fn
+# Nested configurators are discovered when configure_fn (field 8) is non-empty.
+# Field 6 is an optional menu section heading — never a keyword like
+# "configurable".
 
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
 ISC_REPO_LABEL="Taskbar system status monitor"
@@ -23,7 +27,7 @@ ISC_COMPONENTS=(
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk"
-  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|configurable||configure_resource_monitor_spacing|resource_monitor_spacing_status"
+  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon"
   "rm_process_popup|Resource Monitor per-process CPU popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup"
   "window_rules|App window-rules extension (Wayland)|on|configure_window_rules_extension|detect_window_rules|uninstall_window_rules"

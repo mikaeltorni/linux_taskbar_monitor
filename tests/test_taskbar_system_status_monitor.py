@@ -155,9 +155,10 @@ def test_core_reserves_tight_stable_per_value_widths():
             f"org.gnome.shell.extensions.resource-monitor {key_width}" in core
         ), key_width
 
-    # The spacing mode selects between them.
+    # The spacing mode selects between them via the shared width helper.
     assert "resource_monitor_spacing_mode" in core
-    assert "case \"$(resource_monitor_spacing_mode)\" in" in core
+    assert "apply_resource_monitor_width_gsettings" in core
+    assert 'apply_resource_monitor_width_gsettings "$ext_dir" "$(resource_monitor_spacing_mode)"' in core
 
     # Ethernet is placed leftmost so its rarer wider readings grow toward the
     # screen center instead of shifting the clock.
@@ -241,3 +242,43 @@ def test_refresh_interval_has_live_detect():
     assert '_isc_mark_installed "rm_refresh_interval"' in (
         ROOT_DIR / "lib" / "gnome_extensions.sh"
     ).read_text(encoding="utf-8")
+
+
+def test_readonly_cli_flags_early_exit_before_core_install():
+    """List/detect/help/uninstall/reconfigure must not wipe/re-extract Resource Monitor."""
+    install = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+    # The early-exit case lives in the main installer block, before the
+    # mandatory core call (not the ensure_rm_monitor_tools function definition).
+    main = install.split("# ── Main installer logic")[1]
+    early, after = main.split("ensure_rm_monitor_tools", 1)
+    for flag in (
+        "--list-components",
+        "--list-configurable-components",
+        "--list-select-configure-components",
+        "--list-component-config-values",
+        "--configure-component",
+        "--export-selection",
+        "--detect",
+        "--help",
+        "--uninstall",
+        "--reconfigure",
+    ):
+        assert flag in early, f"{flag} must early-exit before ensure_rm_monitor_tools"
+    assert "install_resource_monitor_core" in after
+    assert "install_resource_monitor_core" not in early
+
+
+def test_panel_spacing_manifest_section_is_empty():
+    """Field 6 is a menu section heading, not the word 'configurable'."""
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+    row = [
+        line
+        for line in components.splitlines()
+        if line.strip().startswith('"rm_panel_spacing|')
+    ][0]
+    # uninstall | empty section | empty requires | configure | status
+    assert (
+        "uninstall_rm_panel_spacing|||configure_resource_monitor_spacing|"
+        "resource_monitor_spacing_status"
+    ) in row
+    assert "|configurable|" not in row

@@ -16,6 +16,8 @@
 use std::fs;
 use std::path::Path;
 
+use thiserror::Error;
+
 use crate::gradient_colors::{
     DISK_USAGE_MAX_PERCENT, ETHERNET_MAX_MBPS, GPU_MEMORY_MAX_GB, RAM_MAX_GB,
 };
@@ -340,37 +342,54 @@ pub fn migrate_green_yellow_red_gradient(content: &str) -> String {
     migrated
 }
 
+/// Failures when the upstream Resource Monitor anchors are missing.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ColorsError {
+    /// `_getUsageColor` method body is absent.
+    #[error(
+        "Could not find target _getUsageColor in extension.js — unsupported extension version"
+    )]
+    MissingMethod,
+    /// `export default class` marker is absent.
+    #[error(
+        "Could not find extension class marker in extension.js — unsupported extension version"
+    )]
+    MissingClass,
+}
+
 /// Patch `extension.js` to override `_getUsageColor` with gradient coloring.
 ///
 /// Also injects type markers into each indicator's color settings during init.
-/// When the upstream anchors are missing the content is returned unchanged and
-/// a skip message is printed, matching the tolerant JavaScript behavior.
+/// When the upstream anchors are missing, returns [`ColorsError`] so the CLI
+/// exits non-zero like the other patchers.
 ///
 /// # Parameters
 /// - `content`: Original `extension.js` content.
-pub fn patch_extension_js(content: &str) -> String {
+///
+/// # Returns
+/// `(patched_content, changed)` where `changed` is false when the file already
+/// matches the target gradient patch (including after no-op migrations).
+pub fn patch_extension_js(content: &str) -> Result<(String, bool), ColorsError> {
     if content.contains(ALREADY_PATCHED_MARKER) {
-        let migrated = migrate_green_yellow_red_gradient(content);
+        let mut migrated = migrate_green_yellow_red_gradient(content);
         if !migrated.contains("colors === this._diskSpaceColors") {
             logging::info("Migrating gradient color detection to property identity checks");
             println!("Migrating gradient color detection to property identity checks");
-            return migrated.replacen(MARKER_ONLY_DETECTION, IDENTITY_DETECTION, 1);
+            migrated = migrated.replacen(MARKER_ONLY_DETECTION, IDENTITY_DETECTION, 1);
+        } else {
+            logging::info("Colors already patched — skipping");
+            println!("Colors already patched — skipping");
         }
-        logging::info("Colors already patched — skipping");
-        println!("Colors already patched — skipping");
-        return migrated;
+        let changed = migrated != content;
+        return Ok((migrated, changed));
     }
 
     if !content.contains(ORIGINAL_METHOD) {
-        logging::warn("Could not find target _getUsageColor in extension.js — skipping");
-        println!("Could not find target _getUsageColor in extension.js — skipping");
-        return content.to_string();
+        return Err(ColorsError::MissingMethod);
     }
 
     if !content.contains(CLASS_MARKER) {
-        logging::warn("Could not find extension class marker in extension.js — skipping");
-        println!("Could not find extension class marker in extension.js — skipping");
-        return content.to_string();
+        return Err(ColorsError::MissingClass);
     }
 
     let with_support_block = content.replacen(
@@ -381,7 +400,7 @@ pub fn patch_extension_js(content: &str) -> String {
     let patched = with_support_block.replacen(ORIGINAL_METHOD, REPLACEMENT, 1);
     logging::info("Patched extension.js with gradient-based color system");
     println!("Patched extension.js with gradient-based color system");
-    patched
+    Ok((patched, true))
 }
 
 /// CLI entry point for the gradient color patcher.
@@ -389,7 +408,8 @@ pub fn patch_extension_js(content: &str) -> String {
 /// # Parameters
 /// - `extension_path`: Path to the extension's `extension.js`.
 ///
-/// Returns `0` on success and `1` when the file cannot be read or written.
+/// Returns `0` on success (including already-patched) and `1` when the file
+/// cannot be read/written or the target anchors are missing.
 pub fn run(extension_path: &Path) -> i32 {
     logging::info(format!("patch-colors path={}", extension_path.display()));
 
@@ -405,7 +425,18 @@ pub fn run(extension_path: &Path) -> i32 {
         }
     };
 
-    let patched = patch_extension_js(&content);
+    let (patched, changed) = match patch_extension_js(&content) {
+        Ok(result) => result,
+        Err(err) => {
+            logging::error(err.to_string());
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+
+    if !changed {
+        return 0;
+    }
 
     if let Err(err) = fs::write(extension_path, patched) {
         logging::error(format!(
@@ -444,7 +475,8 @@ mod tests {
 
     #[test]
     fn patches_upstream_extension_source() {
-        let patched = patch_extension_js(&upstream());
+        let (patched, changed) = patch_extension_js(&upstream()).expect("patched");
+        assert!(changed);
         assert!(patched.contains("_gradientGetUsageColor"));
         assert!(patched.contains("return this._gradientGetUsageColor(value, colors);"));
         assert!(patched.contains("colors === this._diskSpaceColors"));
@@ -457,16 +489,23 @@ mod tests {
 
     #[test]
     fn re_running_the_patch_is_a_no_op() {
-        let once = patch_extension_js(&upstream());
-        let twice = patch_extension_js(&once);
+        let (once, _) = patch_extension_js(&upstream()).expect("first");
+        let (twice, changed) = patch_extension_js(&once).expect("second");
+        assert!(!changed);
         assert_eq!(once, twice);
     }
 
     #[test]
-    fn missing_anchors_leave_the_content_untouched() {
-        assert_eq!(patch_extension_js("// unrelated"), "// unrelated");
+    fn missing_anchors_are_rejected() {
+        assert_eq!(
+            patch_extension_js("// unrelated"),
+            Err(ColorsError::MissingMethod)
+        );
         let no_class = ORIGINAL_METHOD.to_string();
-        assert_eq!(patch_extension_js(&no_class), no_class);
+        assert_eq!(
+            patch_extension_js(&no_class),
+            Err(ColorsError::MissingClass)
+        );
     }
 
     #[test]
@@ -475,7 +514,8 @@ mod tests {
             "_gradientGetUsageColor(value, colors) {{\n{MARKER_ONLY_DETECTION}\n      }}\n{NEW_RETURN}\n\
              function getGreenYellowRedGradientColor(a) {{}}\n"
         );
-        let migrated = patch_extension_js(&legacy);
+        let (migrated, changed) = patch_extension_js(&legacy).expect("migrate");
+        assert!(changed);
         assert!(migrated.contains("colors === this._diskSpaceColors"));
         assert!(migrated.contains("colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")"));
     }
@@ -486,7 +526,8 @@ mod tests {
             "_gradientGetUsageColor(value, colors) {{\n{IDENTITY_DETECTION}\n      }}\n\
              function getGradientColor(v) {{\n{HELPER_INSERTION_POINT}\n{OLD_RETURN}\n"
         );
-        let migrated = patch_extension_js(&legacy);
+        let (migrated, changed) = patch_extension_js(&legacy).expect("migrate");
+        assert!(changed);
         assert!(migrated.contains("function getGreenYellowRedGradientColor("));
         assert!(migrated.contains(NEW_RETURN));
         assert!(!migrated.contains(OLD_RETURN));
@@ -502,6 +543,15 @@ mod tests {
             .expect("read")
             .contains("_gradientGetUsageColor"));
         assert_eq!(run(&path), 0);
+    }
+
+    #[test]
+    fn run_exits_one_for_unsupported_content() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("extension.js");
+        fs::write(&path, "// unrelated").expect("write");
+        assert_eq!(run(&path), 1);
+        assert_eq!(fs::read_to_string(&path).expect("read"), "// unrelated");
     }
 
     #[test]

@@ -4,6 +4,10 @@ use std::collections::HashSet;
 use std::env;
 
 /// Parse `gsettings get` string-array output into normalized values.
+///
+/// # Parameters
+/// - `raw`: Optional `gsettings get` output (`@as [...]` or `[...]`). `None`
+///   and empty strings yield an empty list.
 pub fn parse_strv(raw: Option<&str>) -> Vec<String> {
     let mut value = raw.unwrap_or("").trim().to_string();
     if let Some(rest) = value.strip_prefix("@as ") {
@@ -61,6 +65,9 @@ fn pythonish_list(value: &str) -> Option<Vec<String>> {
 }
 
 /// De-duplicate while preserving first appearance.
+///
+/// # Parameters
+/// - `values`: Input list that may contain duplicates.
 pub fn unique_values(values: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
@@ -73,6 +80,10 @@ pub fn unique_values(values: Vec<String>) -> Vec<String> {
 }
 
 /// Append `value` when non-empty and not already present.
+///
+/// # Parameters
+/// - `raw`: Current `gsettings get` string-array text (or `None`).
+/// - `value`: Entry to append.
 pub fn append_strv(raw: Option<&str>, value: &str) -> Vec<String> {
     let mut current = unique_values(parse_strv(raw));
     if !value.is_empty() && !current.iter().any(|v| v == value) {
@@ -82,6 +93,10 @@ pub fn append_strv(raw: Option<&str>, value: &str) -> Vec<String> {
 }
 
 /// Remove every occurrence of `value`.
+///
+/// # Parameters
+/// - `raw`: Current `gsettings get` string-array text (or `None`).
+/// - `value`: Entry to drop.
 pub fn remove_strv(raw: Option<&str>, value: &str) -> Vec<String> {
     unique_values(
         parse_strv(raw)
@@ -92,6 +107,12 @@ pub fn remove_strv(raw: Option<&str>, value: &str) -> Vec<String> {
 }
 
 /// Serialize values for `gsettings set` (Python `repr` style single quotes).
+///
+/// Escapes `\` and `'` only — matching the installer's historical contract for
+/// extension UUIDs and similar simple tokens (not a full Python `repr`).
+///
+/// # Parameters
+/// - `values`: Normalized string-array entries.
 pub fn format_strv(values: &[String]) -> String {
     let parts: Vec<String> = values
         .iter()
@@ -100,8 +121,16 @@ pub fn format_strv(values: &[String]) -> String {
     format!("[{}]", parts.join(", "))
 }
 
-/// CLI: `append|remove <value>` reading `CURRENT` from the environment.
-pub fn run_cli(action: &str, value: &str) -> Result<(), i32> {
+/// CLI entry: `append|remove <value>` reading `CURRENT` from the environment.
+///
+/// # Parameters
+/// - `action`: Must be `append` or `remove`.
+/// - `value`: Entry to add or drop.
+///
+/// # Returns
+/// `Ok(())` after printing the new list on stdout. `Err(2)` for an invalid
+/// action (usage error). Reads `CURRENT` for the prior `gsettings get` text.
+pub fn run(action: &str, value: &str) -> Result<(), i32> {
     crate::logging::info(format!("gsettings-strv {action} value={value}"));
     if action != "append" && action != "remove" {
         crate::logging::error(format!("gsettings-strv invalid action={action}"));
@@ -114,7 +143,12 @@ pub fn run_cli(action: &str, value: &str) -> Result<(), i32> {
     } else {
         remove_strv(current.as_deref(), value)
     };
-    println!("{}", format_strv(&result));
+    let formatted = format_strv(&result);
+    crate::logging::info(format!(
+        "gsettings-strv {action} -> {} entr(y/ies)",
+        result.len()
+    ));
+    println!("{formatted}");
     Ok(())
 }
 

@@ -887,6 +887,7 @@ pub fn run(containers_path: &Path) -> i32 {
     let patched_containers = match patch_containers(&containers_content) {
         Ok(content) => content,
         Err(err) => {
+            logging::error(err.to_string());
             eprintln!("{err}");
             return 1;
         }
@@ -924,6 +925,7 @@ pub fn run(containers_path: &Path) -> i32 {
     let patched_refreshers = match patch_refreshers(&refreshers_content) {
         Ok(content) => content,
         Err(err) => {
+            logging::error(err.to_string());
             eprintln!("{err}");
             return 1;
         }
@@ -953,6 +955,7 @@ pub fn run(containers_path: &Path) -> i32 {
         let patched_extension = match patch_extension(&extension_content) {
             Ok(content) => content,
             Err(err) => {
+                logging::error(err.to_string());
                 eprintln!("{err}");
                 return 1;
             }
@@ -967,6 +970,8 @@ pub fn run(containers_path: &Path) -> i32 {
         }
     }
 
+    logging::info("Patched Resource Monitor disk free-space and live IO activity display");
+    println!("Patched Resource Monitor disk free-space and live IO activity display");
     0
 }
 
