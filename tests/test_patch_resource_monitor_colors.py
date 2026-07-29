@@ -280,20 +280,17 @@ class TestInstallerWiringColors:
     """Tests for installer integration with gradient color patching."""
 
     def test_installer_calls_color_patch_script(self):
-        """Installer should call the new color patch script on extension.js."""
+        """Installer should call rm-monitor patch-colors on extension.js."""
         source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
-        assert "patch_resource_monitor_colors.js" in source
-        assert 'patch_resource_monitor_colors.js' in source
+        assert "rm_monitor patch-colors" in source
 
     def test_installer_patches_extension_js(self):
         """Color patch component should target extension.js, not containers.js."""
         source = Path("lib/gnome_extensions.sh").read_text(encoding="utf-8")
-        # Collapse line continuations so the multi-line patch invocation reads as
-        # one logical command before asserting on its target file.
         joined = source.replace("\\\n", " ")
-        assert "patch_resource_monitor_colors.js" in joined
+        assert "rm_monitor patch-colors" in joined
         for line in joined.splitlines():
-            if "patch_resource_monitor_colors.js" in line:
+            if "rm_monitor patch-colors" in line:
                 assert "extension.js" in line, f"Color patch should target extension.js: {line}"
 
     def test_vram_runs_before_per_disk(self):

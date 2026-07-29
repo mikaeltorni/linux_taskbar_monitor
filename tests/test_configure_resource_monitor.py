@@ -407,7 +407,7 @@ class TestInstallerWiring:
         """Installer should populate diskdeviceslist after enabling disk status."""
         source = INSTALLER_WIRING_SOURCE
 
-        assert "scripts/configure_resource_monitor.py" in source
+        assert "rm_monitor configure-resource-monitor" in source
         assert "--disk-space-gb" in source
         assert '--schema-dir "$ext_dir/schemas"' in source
         assert "diskstatsstatus false" in source
@@ -583,6 +583,6 @@ class TestInstallerWiringDiskSpaceGb:
     def test_installer_still_configures_other_settings(self):
         """Installer should still configure other Resource Monitor settings correctly."""
         source = INSTALLER_WIRING_SOURCE
-        assert "scripts/configure_resource_monitor.py" in source
+        assert "rm_monitor configure-resource-monitor" in source
         assert "diskstatsstatus false" in source
         assert "diskspacestatus true" in source

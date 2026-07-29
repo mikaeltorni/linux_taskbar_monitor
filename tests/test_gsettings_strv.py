@@ -47,8 +47,9 @@ def test_cli_formats_updated_array_from_current_environment(monkeypatch):
     assert completed.stdout.strip() == "['one', 'two']"
 
 
-def test_installer_uses_extracted_parser():
+def test_installer_uses_rm_monitor_gsettings_strv():
     installer = (ROOT / "install.sh").read_text(encoding="utf-8")
 
-    assert "scripts/gsettings_strv.py" in installer
+    assert "rm_monitor gsettings-strv" in installer
+    assert "scripts/gsettings_strv.py" not in installer
     assert "python3 - <<'PY'" not in installer

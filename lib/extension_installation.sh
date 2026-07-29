@@ -98,7 +98,7 @@ patch_extension_metadata() {
     return 1
   fi
 
-  if python3 "$SCRIPT_DIR/scripts/patch_extension_metadata.py" \
+  if rm_monitor patch-extension-metadata \
      "$ext_dir/$meta_file" "$shell_ver" ${pin_ver:+"$pin_ver"}; then
     msg "Patched extension metadata for GNOME Shell ${shell_ver}"
     return 0
