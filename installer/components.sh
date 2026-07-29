@@ -23,7 +23,7 @@ ISC_COMPONENTS=(
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk"
-  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_stable_width|uninstall_rm_panel_spacing|configurable|configure_resource_monitor_spacing|resource_monitor_spacing_status"
+  "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_stable_width|uninstall_rm_panel_spacing|configurable||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon"
   "rm_process_popup|Resource Monitor per-process CPU popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup"
   "window_rules|App window-rules extension (Wayland)|on|monitor_configure_window_rules|detect_window_rules|uninstall_window_rules"
