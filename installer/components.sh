@@ -6,7 +6,11 @@
 # first, then this manifest, then routes execution through component_main from
 # the shared component_loader.sh (linux_installation_scripts_functions).
 #
-# Entry format: "id|label|default(on/off)|function".
+# Entry format (pipe-separated fields; trailing empties may be omitted):
+#   id|label|default(on/off)|install_fn|detect_fn|uninstall_fn|section|requires|configure_fn|status_fn
+# Nested configurators are discovered when configure_fn (field 8) is non-empty.
+# Field 6 is an optional menu section heading — never a keyword like
+# "configurable".
 
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
 ISC_REPO_LABEL="Taskbar system status monitor"
