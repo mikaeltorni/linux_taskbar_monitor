@@ -260,9 +260,18 @@ install_resource_monitor_core() {
   need_cmd sha256sum || { msg "ERROR: sha256sum is required to verify the Resource Monitor zip"; return 1; }
   need_cmd gnome-shell || { msg "ERROR: gnome-shell is required to read the running Shell version"; return 1; }
 
+  # Resolve the Shell version BEFORE wiping the live extension tree so a parse
+  # failure cannot leave a half-applied (refresh-patched, unpinned) install.
+  local shell_version
+  shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
+  if [ -z "$shell_version" ] || [ "$shell_version" = "0" ]; then
+    msg "ERROR: could not parse GNOME Shell version from 'gnome-shell --version' (needed to pin metadata against EGO overwrite)"
+    return 1
+  fi
+
   local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
-  local tmpdir zip_file gpu_devices shell_version
+  local tmpdir zip_file gpu_devices
   tmpdir="$(mktemp -d)"
   zip_file="$tmpdir/resource-monitor.zip"
 
@@ -283,11 +292,6 @@ install_resource_monitor_core() {
   # actual interval is applied below from the persisted installer setting.
   rm_monitor patch-refresh "$ext_dir"
 
-  shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
-  if [ -z "$shell_version" ] || [ "$shell_version" = "0" ]; then
-    msg "ERROR: could not parse GNOME Shell version from 'gnome-shell --version' (needed to pin metadata against EGO overwrite)"
-    return 1
-  fi
   # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
   # extension over the local patches on shell reload, which previously
   # reverted the gradient colors back to upstream's threshold coloring.

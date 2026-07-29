@@ -33,6 +33,10 @@ sudo bash install.sh            # also apt-installs missing packages (e.g. cargo
 
 The installer builds `dist/rm-monitor` on demand (local cargo, apt `cargo`, or
 container), downloads Resource Monitor, applies patches, and writes GSettings.
+Core install requires a running `gnome-shell` whose version can be parsed: that
+value is pinned into `metadata.json` (version `9999`) so extensions.gnome.org
+cannot overwrite local patches on reload. Shell-version parse and pin failures
+abort before (or during) core install rather than leaving a half-applied tree.
 
 After installation, log out and back in before testing GNOME Shell extension
 changes (on X11, agents may use the sanctioned in-place Shell reload instead).

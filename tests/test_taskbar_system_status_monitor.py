@@ -12,11 +12,24 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 def test_core_fails_when_metadata_pin_fails():
     """Version pin must not be soft-skipped; EGO overwrite depends on it."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    helper = (ROOT_DIR / "lib" / "extension_installation.sh").read_text(
+        encoding="utf-8"
+    )
     assert 'patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999' in core
     assert "9999 || true" not in core
     # Empty/zero shell version must hard-fail before the pin call.
     assert 'could not parse GNOME Shell version' in core
     assert '[ "$shell_version" = "0" ]' in core
+    # Parse must happen before the destructive re-extract so a failure cannot
+    # wipe a working tree and leave a half-applied install.
+    assert core.index("could not parse GNOME Shell version") < core.index(
+        'run_as_target rm -rf "$ext_dir"'
+    )
+    assert "ERROR: metadata.json not found" in helper
+    assert "WARNING: metadata.json not found" not in helper
+    readme = (ROOT_DIR / "README.md").read_text(encoding="utf-8")
+    assert "gnome-shell" in readme
+    assert "9999" in readme
 
 
 def test_gnome_extension_module_installs_resource_monitor():
