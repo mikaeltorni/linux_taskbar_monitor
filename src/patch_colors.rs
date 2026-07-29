@@ -344,6 +344,7 @@ pub fn migrate_green_yellow_red_gradient(content: &str) -> String {
 
 /// Failures when the upstream Resource Monitor anchors are missing.
 #[derive(Debug, Error, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
 pub enum ColorsError {
     /// `_getUsageColor` method body is absent.
     #[error(
