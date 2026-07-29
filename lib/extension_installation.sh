@@ -34,7 +34,7 @@ patch_extension_metadata() {
   local ext_dir="$1" meta_file="${2:-metadata.json}" shell_ver="$3" pin_ver="${4:-}"
 
   if [ ! -f "$ext_dir/$meta_file" ]; then
-    msg "WARNING: metadata.json not found at $ext_dir/$meta_file; skipping patch."
+    msg "ERROR: metadata.json not found at $ext_dir/$meta_file; cannot pin against EGO overwrite."
     return 1
   fi
 
@@ -43,7 +43,7 @@ patch_extension_metadata() {
     msg "Patched extension metadata for GNOME Shell ${shell_ver}"
     return 0
   else
-    msg "WARNING: failed to patch $meta_file in $ext_dir"
+    msg "ERROR: failed to patch $meta_file in $ext_dir"
     return 1
   fi
 }

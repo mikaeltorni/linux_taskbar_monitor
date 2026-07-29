@@ -27,7 +27,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")"
 DISPLAY_VAL="${DISPLAY:-:0}"
 USER_BUS="unix:path=${RUNTIME_DIR}/bus"
-SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
+# Prefer the installer process env; under sudo that is often empty, so fall back
+# to the target user's active session type (loginctl) before defaulting unknown.
+SESSION_TYPE="${XDG_SESSION_TYPE:-}"
+if [ -z "$SESSION_TYPE" ]; then
+  SESSION_TYPE="$(
+    loginctl show-user "$TARGET_USER" -p Sessions --value 2>/dev/null \
+      | tr ' ' '\n' | while read -r sid; do
+          [ -n "$sid" ] || continue
+          typ="$(loginctl show-session "$sid" -p Type --value 2>/dev/null || true)"
+          case "$typ" in
+            x11|wayland) printf '%s\n' "$typ"; break ;;
+          esac
+        done
+  )"
+fi
+SESSION_TYPE="${SESSION_TYPE:-unknown}"
 
 # ── Resource Monitor extension settings ───────────────────────────────────────
 RESOURCE_MONITOR_EXTENSION_ID="${RESOURCE_MONITOR_EXTENSION_ID:-Resource_Monitor@Ory0n}"

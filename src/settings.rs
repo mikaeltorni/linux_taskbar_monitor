@@ -255,6 +255,7 @@ pub fn build_gsettings_args(
 pub fn apply_settings(args: &[String]) -> bool {
     let Some((program, rest)) = args.split_first() else {
         logging::error("apply_settings called without a command");
+        eprintln!("apply_settings called without a command");
         return false;
     };
 
@@ -267,7 +268,9 @@ pub fn apply_settings(args: &[String]) -> bool {
     let mut child = match spawned {
         Ok(child) => child,
         Err(err) => {
-            logging::error(format!("Unexpected error running gsettings: {err}"));
+            let message = format!("Unexpected error running gsettings: {err}");
+            logging::error(&message);
+            eprintln!("{message}");
             return false;
         }
     };
@@ -281,12 +284,15 @@ pub fn apply_settings(args: &[String]) -> bool {
                     let _ = child.kill();
                     let _ = child.wait();
                     logging::error("gsettings command timed out");
+                    eprintln!("gsettings command timed out");
                     return false;
                 }
                 std::thread::sleep(Duration::from_millis(25));
             }
             Err(err) => {
-                logging::error(format!("Unexpected error running gsettings: {err}"));
+                let message = format!("Unexpected error running gsettings: {err}");
+                logging::error(&message);
+                eprintln!("{message}");
                 return false;
             }
         }
@@ -300,7 +306,9 @@ pub fn apply_settings(args: &[String]) -> bool {
     if let Some(mut pipe) = child.stderr.take() {
         let _ = pipe.read_to_string(&mut stderr);
     }
-    logging::error(format!("gsettings failed: {}", stderr.trim()));
+    let message = format!("gsettings failed: {}", stderr.trim());
+    logging::error(&message);
+    eprintln!("{message}");
     false
 }
 

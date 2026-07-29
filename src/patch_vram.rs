@@ -11,6 +11,8 @@
 use std::fs;
 use std::path::Path;
 
+use thiserror::Error;
+
 use crate::logging;
 
 const MARKER: &str = "Space separator between GPU usage and VRAM";
@@ -33,22 +35,31 @@ const NEW_CODE: &str = r#"        // Space separator between GPU usage and VRAM 
         this.add_child(this._elementsMemoryValue[uuid]);
         this.add_child(this._elementsMemoryUnit[uuid]);"#;
 
+/// Failures when the upstream VRAM bracket anchors are missing.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum VramError {
+    /// Neither the upstream bracket snippet nor the space-separator marker.
+    #[error(
+        "Could not find target code in containers.js - unsupported extension version"
+    )]
+    MissingTarget,
+}
+
 /// Remove the bracket labels around the GPU VRAM value.
 ///
 /// # Parameters
 /// - `content`: Current `containers.js` content.
 ///
 /// Returns `(patched_content, changed)`. `changed` is false when the marker is
-/// already present. Returns `None` when neither the upstream snippet nor the
-/// marker is found.
-pub fn patch_containers(content: &str) -> Option<(String, bool)> {
+/// already present.
+pub fn patch_containers(content: &str) -> Result<(String, bool), VramError> {
     if content.contains(MARKER) {
-        return Some((content.to_string(), false));
+        return Ok((content.to_string(), false));
     }
     if !content.contains(OLD_CODE) {
-        return None;
+        return Err(VramError::MissingTarget);
     }
-    Some((content.replacen(OLD_CODE, NEW_CODE, 1), true))
+    Ok((content.replacen(OLD_CODE, NEW_CODE, 1), true))
 }
 
 /// CLI entry point for the VRAM bracket patcher.
@@ -73,14 +84,13 @@ pub fn run(containers_path: &Path) -> i32 {
         }
     };
 
-    let Some((patched, changed)) = patch_containers(&content) else {
-        logging::error(
-            "Could not find target code in containers.js - unsupported extension version",
-        );
-        eprintln!(
-            "Could not find target code in containers.js - unsupported extension version"
-        );
-        return 1;
+    let (patched, changed) = match patch_containers(&content) {
+        Ok(result) => result,
+        Err(err) => {
+            logging::error(err.to_string());
+            eprintln!("{err}");
+            return 1;
+        }
     };
 
     if !changed {
@@ -130,7 +140,10 @@ mod tests {
 
     #[test]
     fn unsupported_content_is_rejected() {
-        assert!(patch_containers("// unrelated").is_none());
+        assert_eq!(
+            patch_containers("// unrelated"),
+            Err(VramError::MissingTarget)
+        );
     }
 
     #[test]

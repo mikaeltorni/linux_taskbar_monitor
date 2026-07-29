@@ -116,7 +116,7 @@ pub enum RefreshPatchError {
 ///
 /// # Parameters
 /// - `extension_dir`: Installed Resource Monitor extension directory.
-pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
+pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> {
     let mut any_changed = false;
     for (relative_path, replacements) in REPLACEMENTS {
         let path = extension_dir.join(relative_path);
@@ -155,7 +155,7 @@ pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
 
     if !any_changed {
         logging::info("Refresh patch already applied; skipping schema compile");
-        return Ok(());
+        return Ok(false);
     }
 
     let schemas_dir = extension_dir.join("schemas");
@@ -173,7 +173,7 @@ pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
         )));
     }
 
-    Ok(())
+    Ok(true)
 }
 
 /// CLI entry point for the refresh-interval patcher.
@@ -184,15 +184,23 @@ pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
 /// Returns `0` on success and `1` when patching or schema compilation fails.
 pub fn run(extension_dir: &Path) -> i32 {
     logging::info(format!("patch-refresh dir={}", extension_dir.display()));
-    if let Err(err) = patch_extension(extension_dir) {
-        logging::error(format!(
-            "Failed to patch Resource Monitor refresh interval: {err}"
-        ));
-        eprintln!("Failed to patch Resource Monitor refresh interval: {err}");
-        return 1;
+    match patch_extension(extension_dir) {
+        Ok(true) => {
+            println!("Patched Resource Monitor for configurable 0.1–60 second refresh intervals");
+            0
+        }
+        Ok(false) => {
+            println!("Resource Monitor refresh intervals already patched — skipping");
+            0
+        }
+        Err(err) => {
+            logging::error(format!(
+                "Failed to patch Resource Monitor refresh interval: {err}"
+            ));
+            eprintln!("Failed to patch Resource Monitor refresh interval: {err}");
+            1
+        }
     }
-    println!("Patched Resource Monitor for configurable 0.1–60 second refresh intervals");
-    0
 }
 
 #[cfg(test)]
@@ -255,7 +263,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
     /// guaranteed to exist in a test environment.
     fn patch_sources_only(root: &Path) -> Result<(), RefreshPatchError> {
         match patch_extension(root) {
-            Err(RefreshPatchError::SchemaCompile(_)) | Ok(()) => Ok(()),
+            Err(RefreshPatchError::SchemaCompile(_)) | Ok(_) => Ok(()),
             Err(other) => Err(other),
         }
     }

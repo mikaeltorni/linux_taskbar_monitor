@@ -5,6 +5,7 @@ __pycache__/
 
 # Rust / Cargo
 /target/
+.cargo-container/
 **/*.rs.bk
 # Cargo.lock is committed for reproducible installer builds of this binary.
 

@@ -112,7 +112,8 @@ build_with_container() {
   # Mount the repo read-write so cargo can write target/; copy the binary out to dist/.
   "$engine" run --rm \
     --user "$(id -u):$(id -g)" \
-    -e CARGO_HOME=/usr/local/cargo \
+    -e CARGO_HOME=/src/.cargo-container \
+    -e CARGO_TARGET_DIR=/src/target \
     -v "$REPO_ROOT:/src:rw" \
     -w /src \
     "$RUST_IMAGE" \
@@ -129,6 +130,13 @@ main() {
   elif build_with_container; then
     :
   elif have_binary "$TARGET_BIN"; then
+    # Only promote target/ when it is at least as new as sources (same freshness
+    # rule as the no-cargo dist fallback).
+    if find "$REPO_ROOT/src" "$REPO_ROOT/Cargo.toml" "$REPO_ROOT/Cargo.lock" \
+         -type f -newer "$TARGET_BIN" 2>/dev/null | head -1 | grep -q .; then
+      log "Cannot promote stale $TARGET_BIN (sources are newer; install cargo or docker/podman)."
+      exit 1
+    fi
     log "WARNING: promoting existing $TARGET_BIN without rebuild (no cargo/container)"
     mkdir -p "$DIST_DIR"
     install -m 0755 "$TARGET_BIN" "$DIST_BIN"
