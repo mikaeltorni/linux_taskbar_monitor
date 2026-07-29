@@ -409,7 +409,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
         let result = patch_extension(dir.path());
         unsafe { std::env::set_var("PATH", original_path) };
 
-        assert_eq!(result.expect("patch"), false, "sources should already be patched");
+        assert!(!result.expect("patch"), "sources should already be patched");
         assert!(
             marker.is_file(),
             "already-patched re-run must still invoke glib-compile-schemas"
