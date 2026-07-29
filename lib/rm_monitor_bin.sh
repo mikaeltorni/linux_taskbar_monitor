@@ -35,11 +35,16 @@ ensure_rm_monitor_bin() {
 # rm_monitor — Run the rm-monitor CLI with the given arguments as the target user.
 #
 # Uses run_as_target when that function exists (installer context); otherwise
-# runs directly. Arguments after the function name are passed through unchanged.
+# runs directly. Forwards CURRENT when set so `gsettings-strv` keeps working
+# under `sudo` (env_reset would otherwise drop it and rewrite lists from []).
 rm_monitor() {
   ensure_rm_monitor_bin || return 1
   if declare -F run_as_target >/dev/null 2>&1; then
-    run_as_target "$RM_MONITOR_BIN" "$@"
+    if [ "${CURRENT+set}" = set ]; then
+      run_as_target env "CURRENT=$CURRENT" "$RM_MONITOR_BIN" "$@"
+    else
+      run_as_target "$RM_MONITOR_BIN" "$@"
+    fi
   else
     "$RM_MONITOR_BIN" "$@"
   fi

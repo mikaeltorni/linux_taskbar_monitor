@@ -271,31 +271,50 @@ install_resource_monitor_core() {
 
   local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
-  local tmpdir zip_file gpu_devices
+  local tmpdir zip_file staging gpu_devices
   tmpdir="$(mktemp -d)"
   zip_file="$tmpdir/resource-monitor.zip"
+  staging="$tmpdir/staging"
+  # Drop the staging tree on any early return so a failed patch cannot linger.
+  # shellcheck disable=SC2064
+  trap 'rm -rf "$tmpdir"' RETURN
 
   curl -fL "$RESOURCE_MONITOR_EXTENSION_URL" -o "$zip_file"
   if [ -n "$RESOURCE_MONITOR_EXTENSION_SHA256" ]; then
     printf "%s  %s\n" "$RESOURCE_MONITOR_EXTENSION_SHA256" "$zip_file" | sha256sum -c -
   fi
 
-  run_as_target rm -rf "$ext_dir"
-  run_as_target mkdir -p "$ext_dir"
-  unzip -q "$zip_file" -d "$ext_dir"
+  # Stage extract + refresh patch + metadata pin BEFORE touching the live tree
+  # so a patch/pin failure leaves the previously working extension intact.
+  mkdir -p "$staging"
+  unzip -q "$zip_file" -d "$staging"
   if [ "$(id -u)" -eq 0 ]; then
-    chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+    chown -R "$TARGET_USER:$TARGET_USER" "$staging"
   fi
-  rm -rf "$tmpdir"
 
   # Sub-second refresh capability (schema/type widening + GPU poll floor). The
   # actual interval is applied below from the persisted installer setting.
-  rm_monitor patch-refresh "$ext_dir"
+  rm_monitor patch-refresh "$staging"
 
   # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
   # extension over the local patches on shell reload, which previously
   # reverted the gradient colors back to upstream's threshold coloring.
-  patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999
+  patch_extension_metadata "$staging" metadata.json "$shell_version" 9999
+
+  run_as_target mkdir -p "$(dirname "$ext_dir")"
+  run_as_target rm -rf "$ext_dir"
+  run_as_target mkdir -p "$ext_dir"
+  # Cross-device-safe publish: copy staged tree into the live extension path.
+  if declare -F run_as_target >/dev/null 2>&1; then
+    run_as_target cp -a "$staging/." "$ext_dir/"
+  else
+    cp -a "$staging/." "$ext_dir/"
+  fi
+  if [ "$(id -u)" -eq 0 ]; then
+    chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+  fi
+  rm -rf "$tmpdir"
+  trap - RETURN
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"

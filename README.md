@@ -35,8 +35,11 @@ The installer builds `dist/rm-monitor` on demand (local cargo, apt `cargo`, or
 container), downloads Resource Monitor, applies patches, and writes GSettings.
 Core install requires a running `gnome-shell` whose version can be parsed: that
 value is pinned into `metadata.json` (version `9999`) so extensions.gnome.org
-cannot overwrite local patches on reload. Shell-version parse and pin failures
-abort before (or during) core install rather than leaving a half-applied tree.
+cannot overwrite local patches on reload. Extract, refresh patch, and metadata
+pin run in a staging directory first; the live extension tree is replaced only
+after those steps succeed, so a patch/pin failure leaves a previous install
+intact. Later GSettings/enable failures can still leave a freshly published
+tree that needs a re-run.
 
 After installation, log out and back in before testing GNOME Shell extension
 changes (on X11, agents may use the sanctioned in-place Shell reload instead).
