@@ -892,13 +892,15 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
-    if let Err(err) = fs::write(containers_path, patched_containers) {
-        logging::error(format!(
-            "Could not write {}: {err}",
-            containers_path.display()
-        ));
-        eprintln!("Could not write {}: {err}", containers_path.display());
-        return 1;
+    if patched_containers != containers_content {
+        if let Err(err) = fs::write(containers_path, &patched_containers) {
+            logging::error(format!(
+                "Could not write {}: {err}",
+                containers_path.display()
+            ));
+            eprintln!("Could not write {}: {err}", containers_path.display());
+            return 1;
+        }
     }
 
     let refreshers_path = sibling(containers_path, &["services", "refreshers.js"]);
@@ -930,13 +932,15 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
-    if let Err(err) = fs::write(&refreshers_path, patched_refreshers) {
-        logging::error(format!(
-            "Could not write {}: {err}",
-            refreshers_path.display()
-        ));
-        eprintln!("Could not write {}: {err}", refreshers_path.display());
-        return 1;
+    if patched_refreshers != refreshers_content {
+        if let Err(err) = fs::write(&refreshers_path, &patched_refreshers) {
+            logging::error(format!(
+                "Could not write {}: {err}",
+                refreshers_path.display()
+            ));
+            eprintln!("Could not write {}: {err}", refreshers_path.display());
+            return 1;
+        }
     }
 
     let extension_path = sibling(containers_path, &["extension.js"]);
@@ -960,13 +964,15 @@ pub fn run(containers_path: &Path) -> i32 {
                 return 1;
             }
         };
-        if let Err(err) = fs::write(&extension_path, patched_extension) {
-            logging::error(format!(
-                "Could not write {}: {err}",
-                extension_path.display()
-            ));
-            eprintln!("Could not write {}: {err}", extension_path.display());
-            return 1;
+        if patched_extension != extension_content {
+            if let Err(err) = fs::write(&extension_path, &patched_extension) {
+                logging::error(format!(
+                    "Could not write {}: {err}",
+                    extension_path.display()
+                ));
+                eprintln!("Could not write {}: {err}", extension_path.display());
+                return 1;
+            }
         }
     }
 
