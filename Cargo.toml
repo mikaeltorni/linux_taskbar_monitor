@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 regex = "1"
-serde = { version = "1", features = ["derive"] }
+serde = "1"
 # preserve_order keeps metadata.json / device-list key order stable for
 # GSettings device-list serialization.
 serde_json = { version = "1", features = ["preserve_order"] }

@@ -9,6 +9,16 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
+def test_core_fails_when_metadata_pin_fails():
+    """Version pin must not be soft-skipped; EGO overwrite depends on it."""
+    core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    assert 'patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999' in core
+    assert "9999 || true" not in core
+    # Empty/zero shell version must hard-fail before the pin call.
+    assert 'could not parse GNOME Shell version' in core
+    assert '[ "$shell_version" = "0" ]' in core
+
+
 def test_gnome_extension_module_installs_resource_monitor():
     """Resource Monitor core should patch and configure the downloaded extension."""
     source = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
@@ -80,6 +90,28 @@ test "$(resource_monitor_refresh_interval_ms)" = 2000
 ! persist_resource_monitor_refresh_interval 2001
 ! persist_resource_monitor_refresh_interval 500.5
 test "$(resource_monitor_refresh_interval_ms)" = 2000
+'''
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path)
+    subprocess.run(["bash", "-c", script], check=True, env=env)
+
+
+def test_spacing_mode_persistence_validates_values(tmp_path):
+    """Only stable/compact are persisted; invalid values return 2."""
+    script = f'''set -euo pipefail
+TARGET_HOME="$HOME"
+SCRIPT_DIR="{ROOT_DIR}"
+RESOURCE_MONITOR_SPACING_MODE=stable
+msg() {{ :; }}
+run_as_target() {{ "$@"; }}
+source "{ROOT_DIR / 'lib' / 'gnome_extensions.sh'}"
+persist_resource_monitor_spacing_mode compact
+test "$(resource_monitor_spacing_mode)" = compact
+persist_resource_monitor_spacing_mode stable
+test "$(resource_monitor_spacing_mode)" = stable
+! persist_resource_monitor_spacing_mode wide
+! persist_resource_monitor_spacing_mode ""
+test "$(resource_monitor_spacing_mode)" = stable
 '''
     env = os.environ.copy()
     env["HOME"] = str(tmp_path)

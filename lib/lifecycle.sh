@@ -66,13 +66,13 @@ detect_rm_vram() {
 # applied secondary labels) and/or the GPU VRAM width-split marker (always
 # attempted by patch-stable-width). Compact mode requires both markers gone.
 detect_rm_panel_spacing() {
-  local js disk_marker gpu_marker compact
+  local js disk_marker gpu_marker mode
   js="$(_rm_containers_js)"
   disk_marker="Space separator between disk-space activity percent and its unit (stable width)"
   gpu_marker="VRAM value (0-99 GB, 2 digits) gets its own tighter reserved"
-  compact="$(resource_monitor_spacing_mode 2>/dev/null || echo stable)"
+  mode="$(resource_monitor_spacing_mode 2>/dev/null || echo stable)"
   [ -f "$js" ] || return 1
-  case "$compact" in
+  case "$mode" in
     compact)
       ! grep -q "$disk_marker" "$js" && ! grep -q "$gpu_marker" "$js"
       ;;

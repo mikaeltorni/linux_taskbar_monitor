@@ -4,9 +4,10 @@
 //! One binary replaces the Python and Node helper scripts the installer used to
 //! shell out to, so a clean install needs no `python3` or `node` runtime. Each
 //! subcommand keeps the exit codes and stdout contract of the script it
-//! replaces: stdout carries machine-readable output the installer consumes
-//! (notably `report-cuda-devices` and `gsettings-strv`), while diagnostics go to
-//! stderr and the repository `.log/` sink.
+//! replaces: machine-readable installer payloads (`report-cuda-devices`,
+//! `gsettings-strv`) stay on stdout alone; patchers also print a short human
+//! progress line on stdout for interactive runs. Structured diagnostics go to
+//! the repository `.log/` sink (and errors also to stderr).
 
 mod configure;
 mod disks;
