@@ -59,10 +59,12 @@ def test_patches_guard_on_rm_monitor():
 
 
 def test_build_script_rebuilds_when_sources_are_newer():
-    """dist/rm-monitor must not be reused blindly when src/ or Cargo.toml is newer."""
+    """When cargo is available, always run incremental cargo then refresh dist/."""
     build = BUILD.read_text(encoding="utf-8")
     assert "sources_newer_than_dist" in build
     assert "dist_is_fresh" in build
-    assert "stale" in build.lower()
     assert "build_with_cargo" in build
-    assert "Using existing" in build
+    assert "Always let cargo decide freshness" in build
+    # In main(), cargo must be tried before the dist_is_fresh fallback.
+    main = build.split("main() {", 1)[1]
+    assert main.index("ensure_cargo_on_path") < main.index("dist_is_fresh")
