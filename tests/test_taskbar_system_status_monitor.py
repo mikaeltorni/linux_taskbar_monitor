@@ -155,9 +155,10 @@ def test_core_reserves_tight_stable_per_value_widths():
             f"org.gnome.shell.extensions.resource-monitor {key_width}" in core
         ), key_width
 
-    # The spacing mode selects between them.
+    # The spacing mode selects between them via the shared width helper.
     assert "resource_monitor_spacing_mode" in core
-    assert "case \"$(resource_monitor_spacing_mode)\" in" in core
+    assert "apply_resource_monitor_width_gsettings" in core
+    assert 'apply_resource_monitor_width_gsettings "$ext_dir" "$(resource_monitor_spacing_mode)"' in core
 
     # Ethernet is placed leftmost so its rarer wider readings grow toward the
     # screen center instead of shifting the clock.

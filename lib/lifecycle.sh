@@ -18,10 +18,10 @@ rm_ext_dir() { printf '%s\n' "$TARGET_HOME/.local/share/gnome-shell/extensions/$
 # Resolve the installed Resource Monitor extension's source files through the
 # same helper the patch components use, so detection matches the live core state
 # (RESOURCE_MONITOR_EXT_DIR when the core has run, the canonical path otherwise).
-_rm_ext_root() { resource_monitor_ext_dir; }
-_rm_extension_js() { printf '%s/extension.js\n' "$(_rm_ext_root)"; }
-_rm_containers_js() { printf '%s/panel/containers.js\n' "$(_rm_ext_root)"; }
-_rm_refreshers_js() { printf '%s/services/refreshers.js\n' "$(_rm_ext_root)"; }
+_rm_extension_js() { printf '%s/extension.js\n' "$(resource_monitor_ext_dir)"; }
+_rm_containers_js() { printf '%s/panel/containers.js\n' "$(resource_monitor_ext_dir)"; }
+_rm_refreshers_js() { printf '%s/services/refreshers.js\n' "$(resource_monitor_ext_dir)"; }
+_rm_main_gui_js() { printf '%s/panel/mainGui.js\n' "$(resource_monitor_ext_dir)"; }
 
 # --- Detection ---------------------------------------------------------------
 # detect_rm_refresh_interval: live check that the installed schema refreshtime
@@ -83,7 +83,7 @@ detect_rm_panel_spacing() {
 # _appendSimpleChildren with a null icon ("Ethernet icon removed: value/unit
 # kept, icon omitted"). Its presence in mainGui.js is the deterministic signal.
 detect_rm_hide_eth_icon() {
-  local js; js="$(_rm_ext_root)/panel/mainGui.js"
+  local js; js="$(_rm_main_gui_js)"
   [ -f "$js" ] && grep -q "Ethernet icon removed: value/unit kept, icon omitted" "$js"
 }
 # detect_rm_process_popup: the process-popup patcher injects marker-guarded
@@ -101,7 +101,7 @@ detect_window_rules() { [ -d "$(rm_ext_dir app-rules@local)" ]; }
 # (reserved widths, no taskbar shift) and clear the persisted compact choice.
 uninstall_rm_panel_spacing() {
   msg "Reverting Resource Monitor panel spacing to stable (default)"
-  if resource_monitor_spacing_persist stable; then
+  if persist_resource_monitor_spacing_mode stable; then
     apply_resource_monitor_spacing_mode
   fi
 }

@@ -83,4 +83,22 @@ RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing && fail "detect_rm_
 mkdir -p "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"
 detect_window_rules || fail "detect_window_rules should accept an installed app-rules@local"
 
+# --- Refresh interval detect compares schema value to configured ms --------
+mkdir -p "$EXT_DIR/schemas"
+ext_gsettings() {
+  # $1 = ext_dir; remaining args are gsettings argv. Stub refreshtime get.
+  shift
+  if [ "${1:-}" = get ] && [ "${3:-}" = refreshtime ]; then
+    printf '%s\n' "${STUB_REFRESHTIME:-0.500}"
+    return 0
+  fi
+  return 1
+}
+STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
+  detect_rm_refresh_interval || fail "detect_rm_refresh_interval should match 500 ms -> 0.500 s"
+STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=1000 \
+  detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject a mismatched refreshtime"
+rm -rf "$EXT_DIR/schemas"
+detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject a missing schemas dir"
+
 printf 'test_lifecycle.sh: all assertions passed\n'
