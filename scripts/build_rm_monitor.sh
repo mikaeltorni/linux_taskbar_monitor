@@ -2,9 +2,13 @@
 # build_rm_monitor.sh — Build the rm-monitor Rust binary for installers and CI.
 #
 # Preference order:
-#   1. Fresh release binary at dist/rm-monitor (newer than sources)
-#   2. Local cargo/rustc (PATH or ~/.cargo/bin) — rebuild when dist is missing/stale
-#   3. Docker/Podman rust:1-bookworm image (no local toolchain required)
+#   1. Local cargo/rustc (PATH or ~/.cargo/bin) — always run incremental
+#      `cargo build --release` then install into dist/rm-monitor. Cargo's own
+#      fingerprinting decides whether work is needed; never reuse a dist binary
+#      that can be older-by-content than sources.
+#   2. Existing fresh dist/rm-monitor only when cargo is unavailable and sources
+#      are not newer than the binary (offline / no-toolchain fallback).
+#   3. Docker/Podman rust:1-bookworm image when cargo is missing.
 #
 # Usage:
 #   bash scripts/build_rm_monitor.sh           # build into dist/rm-monitor
@@ -46,8 +50,7 @@ done
 have_binary() { [ -x "$1" ]; }
 
 # sources_newer_than_dist — True when Cargo.toml, Cargo.lock, or any src/*.rs
-# is newer than dist/rm-monitor. Used so a previously built dist binary is not
-# reused after source changes (which would ship stale patchers).
+# is newer than dist/rm-monitor. Used only for the no-cargo fallback path.
 sources_newer_than_dist() {
   local bin="$DIST_BIN" newest
   [ -f "$bin" ] || return 0
@@ -74,7 +77,8 @@ ensure_cargo_on_path() {
   command -v cargo >/dev/null 2>&1
 }
 
-# build_with_cargo — Compile the release binary with the local toolchain.
+# build_with_cargo — Compile the release binary with the local toolchain and
+# install it into dist/. Cargo skips work when fingerprints are current.
 build_with_cargo() {
   log "Building with local cargo…"
   (
@@ -117,24 +121,20 @@ build_with_container() {
 }
 
 main() {
-  if dist_is_fresh; then
-    log "Using existing $DIST_BIN"
+  if ensure_cargo_on_path; then
+    # Always let cargo decide freshness, then refresh dist/ from target/release.
+    build_with_cargo
+  elif dist_is_fresh; then
+    log "Using existing $DIST_BIN (cargo unavailable; sources not newer)"
+  elif build_with_container; then
+    :
+  elif have_binary "$TARGET_BIN"; then
+    log "WARNING: promoting existing $TARGET_BIN without rebuild (no cargo/container)"
+    mkdir -p "$DIST_DIR"
+    install -m 0755 "$TARGET_BIN" "$DIST_BIN"
   else
-    if have_binary "$DIST_BIN" && sources_newer_than_dist; then
-      log "dist/rm-monitor is stale (sources newer than binary); rebuilding"
-    fi
-    if ensure_cargo_on_path; then
-      build_with_cargo
-    elif build_with_container; then
-      :
-    elif have_binary "$TARGET_BIN"; then
-      log "WARNING: promoting existing $TARGET_BIN without rebuild (no cargo/container)"
-      mkdir -p "$DIST_DIR"
-      install -m 0755 "$TARGET_BIN" "$DIST_BIN"
-    else
-      log "Cannot build rm-monitor: install cargo (rustup or apt install cargo) or docker/podman."
-      exit 1
-    fi
+    log "Cannot build rm-monitor: install cargo (rustup or apt install cargo) or docker/podman."
+    exit 1
   fi
 
   if ! have_binary "$DIST_BIN"; then
