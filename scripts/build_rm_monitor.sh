@@ -2,8 +2,8 @@
 # build_rm_monitor.sh — Build the rm-monitor Rust binary for installers and CI.
 #
 # Preference order:
-#   1. Existing release binary at dist/rm-monitor or target/release/rm-monitor
-#   2. Local cargo/rustc (PATH or ~/.cargo/bin)
+#   1. Fresh release binary at dist/rm-monitor (newer than sources)
+#   2. Local cargo/rustc (PATH or ~/.cargo/bin) — rebuild when dist is missing/stale
 #   3. Docker/Podman rust:1-bookworm image (no local toolchain required)
 #
 # Usage:
@@ -44,6 +44,22 @@ done
 
 # have_binary PATH — True when PATH is an executable file.
 have_binary() { [ -x "$1" ]; }
+
+# sources_newer_than_dist — True when Cargo.toml, Cargo.lock, or any src/*.rs
+# is newer than dist/rm-monitor. Used so a previously built dist binary is not
+# reused after source changes (which would ship stale patchers).
+sources_newer_than_dist() {
+  local bin="$DIST_BIN" newest
+  [ -f "$bin" ] || return 0
+  newest="$(find "$REPO_ROOT/src" "$REPO_ROOT/Cargo.toml" "$REPO_ROOT/Cargo.lock" \
+    -type f -newer "$bin" 2>/dev/null | head -1 || true)"
+  [ -n "$newest" ]
+}
+
+# dist_is_fresh — True when dist/rm-monitor exists and is not older than sources.
+dist_is_fresh() {
+  have_binary "$DIST_BIN" && ! sources_newer_than_dist
+}
 
 # ensure_cargo_on_path — Prefer rustup cargo when present.
 ensure_cargo_on_path() {
@@ -101,19 +117,24 @@ build_with_container() {
 }
 
 main() {
-  if have_binary "$DIST_BIN"; then
+  if dist_is_fresh; then
     log "Using existing $DIST_BIN"
-  elif have_binary "$TARGET_BIN"; then
-    log "Promoting $TARGET_BIN → $DIST_BIN"
-    mkdir -p "$DIST_DIR"
-    install -m 0755 "$TARGET_BIN" "$DIST_BIN"
-  elif ensure_cargo_on_path; then
-    build_with_cargo
-  elif build_with_container; then
-    :
   else
-    log "Cannot build rm-monitor: install cargo (rustup or apt install cargo) or docker/podman."
-    exit 1
+    if have_binary "$DIST_BIN" && sources_newer_than_dist; then
+      log "dist/rm-monitor is stale (sources newer than binary); rebuilding"
+    fi
+    if ensure_cargo_on_path; then
+      build_with_cargo
+    elif build_with_container; then
+      :
+    elif have_binary "$TARGET_BIN"; then
+      log "WARNING: promoting existing $TARGET_BIN without rebuild (no cargo/container)"
+      mkdir -p "$DIST_DIR"
+      install -m 0755 "$TARGET_BIN" "$DIST_BIN"
+    else
+      log "Cannot build rm-monitor: install cargo (rustup or apt install cargo) or docker/podman."
+      exit 1
+    fi
   fi
 
   if ! have_binary "$DIST_BIN"; then
