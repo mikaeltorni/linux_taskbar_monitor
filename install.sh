@@ -136,10 +136,17 @@ isc_activate_components
 source "$SCRIPT_DIR/installer/components.sh"
 
 # ── Main installer logic ─────────────────────────────────────────────────────
-# Listing/help must print only their own output (the master installer parses
-# --list-components); bypass the surrounding messages for those.
+# Readonly / uninstall / reconfigure must not wipe the installed extension.
+# Listing/help print only their own output (the master installer parses
+# --list-components). --reconfigure re-runs selected install functions against
+# the already-extracted tree; core re-extract is reserved for fresh install
+# modes (--default / --all / --select / interactive) so deselected patches
+# revert cleanly on a full install.
 case "${1:-}" in
-  --list-components|--list-configurable-components|--list-component-config-values|--configure-component|--configure-component=*|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*) component_main "$@"; exit $? ;;
+  --list-components|--list-configurable-components|--list-select-configure-components|--list-component-config-values|--configure-component|--configure-component=*|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*|--reconfigure|--reconfigure=*)
+    component_main "$@"
+    exit $?
+    ;;
 esac
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
