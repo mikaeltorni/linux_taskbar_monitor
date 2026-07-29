@@ -37,15 +37,10 @@ resource_monitor_refresh_interval_file() {
 }
 
 # ── Panel spacing mode (stable vs compact) ──────────────────────────────────
-# The Resource Monitor indicator reserves a fixed pixel width per value label
-# ("stable" spacing) so the taskbar does not shift as a reading changes digit
-# count. Some users prefer the indicator to take less space and accept the
-# small shift ("compact"). The mode is configurable in the installer and
+# "stable" reserves a tight per-value width so the taskbar does not shift as a
+# reading changes digit count. "compact" drops those widths for a narrower
+# indicator that shifts slightly. The mode is configurable in the installer and
 # persisted like the refresh interval.
-
-# Panel spacing mode: "stable" reserves a tight per-value width so the taskbar
-# stays put as metric values change digit count; "compact" drops the reserved
-# widths so the indicator is narrower but shifts slightly as digits change.
 
 # resource_monitor_spacing_file - Print the persisted spacing-mode file path.
 resource_monitor_spacing_file() {
@@ -293,7 +288,7 @@ install_resource_monitor_core() {
     # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
     # extension over the local patches on shell reload, which previously
     # reverted the gradient colors back to upstream's threshold coloring.
-    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999 || true
+    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999
   fi
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
