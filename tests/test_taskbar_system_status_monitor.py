@@ -230,3 +230,14 @@ def test_source_patch_vram_has_no_fake_gsettings_uninstall():
     assert "uninstall_rm_vram" not in vram_row
     assert "uninstall_rm_vram" not in lifecycle
     assert "gpumemorymonitor" not in lifecycle
+
+
+def test_refresh_interval_has_live_detect():
+    """rm_refresh_interval is discoverable via detect_rm_refresh_interval."""
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+    lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
+    assert "detect_rm_refresh_interval" in components
+    assert "detect_rm_refresh_interval()" in lifecycle
+    assert '_isc_mark_installed "rm_refresh_interval"' in (
+        ROOT_DIR / "lib" / "gnome_extensions.sh"
+    ).read_text(encoding="utf-8")

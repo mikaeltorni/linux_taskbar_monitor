@@ -19,7 +19,7 @@ ISC_POSTFLIGHT="report_sudo_required"
 # components the user picks. The refresh row exposes core configuration; the
 # remaining entries are optional tweaks that layer on top of the core.
 ISC_COMPONENTS=(
-  "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|||||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
+  "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|detect_rm_refresh_interval||||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk"

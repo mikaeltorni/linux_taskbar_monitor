@@ -78,6 +78,14 @@ fn auto_detect_schema_dir() -> Option<PathBuf> {
             tried.join(", ")
         }
     ));
+    eprintln!(
+        "Could not auto-detect schema directory (tried: {}). Use --schema-dir.",
+        if tried.is_empty() {
+            "(no HOME/USER candidates)".to_string()
+        } else {
+            tried.join(", ")
+        }
+    );
     None
 }
 
