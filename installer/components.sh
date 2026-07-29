@@ -4,7 +4,7 @@
 # Maps each taskbar/extension component to the function (defined in lib/) that
 # installs it. install.sh defines its inline helpers and sources the lib files
 # first, then this manifest, then routes execution through component_main from
-# component_runtime.sh.
+# the shared component_loader.sh (linux_installation_scripts_functions).
 #
 # Entry format: "id|label|default(on/off)|function".
 
@@ -21,7 +21,7 @@ ISC_POSTFLIGHT="report_sudo_required"
 ISC_COMPONENTS=(
   "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|||||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors"
-  "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
+  "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk"
   "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|configurable||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon"

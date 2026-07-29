@@ -218,3 +218,15 @@ def test_dead_dash_to_panel_helpers_are_gone():
     assert "setup_dash_to_panel_integration" not in lib
     assert not (ROOT_DIR / "lib" / "extension_features.sh").exists()
     assert "need_cmd python3" not in lib
+
+
+def test_source_patch_vram_has_no_fake_gsettings_uninstall():
+    """rm_vram uninstall must not reset gpumemorymonitor (wrong key / no-op)."""
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+    lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
+    vram_row = [
+        line for line in components.splitlines() if line.strip().startswith('"rm_vram|')
+    ][0]
+    assert "uninstall_rm_vram" not in vram_row
+    assert "uninstall_rm_vram" not in lifecycle
+    assert "gpumemorymonitor" not in lifecycle

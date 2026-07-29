@@ -103,7 +103,6 @@ apt_install() {
 # Returns:
 #   0 when dist/rm-monitor is ready, 1 when it could not be produced.
 ensure_rm_monitor_tools() {
-  source "$SCRIPT_DIR/lib/rm_monitor_bin.sh"
   if ensure_rm_monitor_bin; then
     return 0
   fi
