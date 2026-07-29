@@ -84,14 +84,14 @@ report_sudo_required() {
 append_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
   current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(CURRENT="$current" python3 "$SCRIPT_DIR/scripts/gsettings_strv.py" append "$value")"
+  newlist="$(CURRENT="$current" rm_monitor gsettings-strv append "$value")"
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
 remove_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
   current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(CURRENT="$current" python3 "$SCRIPT_DIR/scripts/gsettings_strv.py" remove "$value")"
+  newlist="$(CURRENT="$current" rm_monitor gsettings-strv remove "$value")"
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
@@ -108,23 +108,27 @@ apt_install() {
   DEBIAN_FRONTEND=noninteractive apt install -y "${missing[@]}"
 }
 
-# ensure_node: Guarantee the `node` interpreter used by the Resource Monitor JS
-# patch scripts is available. The gradient/VRAM/per-disk patches transform the
-# extension's JavaScript with Node and have no GJS-runtime equivalent, so a
-# clean machine needs Node.js installed before they can run. Installs the Ubuntu
-# `nodejs` package (which ships /usr/bin/node) when missing and root is present;
-# under a non-root run it records the skipped apt step and reports failure so the
-# dependent component is not falsely marked installed.
+# ensure_rm_monitor_tools: Build or locate the rm-monitor Rust CLI used for every
+# Resource Monitor patch/config helper. Prefers an existing dist/ binary, then
+# local cargo, then a Docker/Podman rust image (see scripts/build_rm_monitor.sh).
+# When root is available and cargo is missing, apt-install cargo as a fallback
+# so a clean Ubuntu install can compile without containers.
 #
 # Returns:
-#   0 when `node` is available, 1 when it could not be provided.
-ensure_node() {
-  need_cmd node && return 0
-  apt_install nodejs
-  need_cmd node
+#   0 when dist/rm-monitor is ready, 1 when it could not be produced.
+ensure_rm_monitor_tools() {
+  source "$SCRIPT_DIR/lib/rm_monitor_bin.sh"
+  if ensure_rm_monitor_bin; then
+    return 0
+  fi
+  if ! need_cmd cargo; then
+    apt_install cargo
+  fi
+  ensure_rm_monitor_bin
 }
 
 # ── Source extension library modules ──────────────────────────────────────────
+source "$SCRIPT_DIR/lib/rm_monitor_bin.sh"
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
 source "$SCRIPT_DIR/lib/gnome_extensions.sh"
@@ -155,6 +159,12 @@ case "${1:-}" in
 esac
 
 msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
+# Build the Rust helper CLI before any patch/config step. Listing/detect modes
+# above already returned, so this never pollutes --list-components output.
+ensure_rm_monitor_tools || {
+  msg "ERROR: could not build rm-monitor (install cargo or docker/podman, then re-run)."
+  exit 1
+}
 # Mandatory core: the Resource Monitor indicator always installs so the program
 # works regardless of which optional components the user selects below.
 install_resource_monitor_core

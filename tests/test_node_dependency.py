@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Structural tests for the Node.js dependency used by the Resource Monitor patches.
+"""Structural tests for the rm-monitor Rust CLI used by Resource Monitor patches.
 
-The gradient/VRAM/per-disk patches transform the extension's JavaScript with
-``node`` and have no GJS-runtime equivalent. A clean machine has no Node.js, so
-the installer must provision it before patching; otherwise the patches fail and
-the components never report installed. These tests lock in that the patches go
-through ensure_node (which apt-installs nodejs) rather than the old, ignored
-``need_cmd node`` guard.
+Patches and GSettings helpers run through the ``rm-monitor`` binary built from
+this repository. A clean machine may lack cargo; the installer must build the
+binary (local cargo, apt cargo, or container) before patching.
 """
 
 from __future__ import annotations
@@ -17,31 +14,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.sh"
 EXTENSIONS = ROOT / "lib" / "gnome_extensions.sh"
+BIN_HELPER = ROOT / "lib" / "rm_monitor_bin.sh"
 
 
-def test_ensure_node_helper_installs_nodejs():
-    """install.sh defines ensure_node, which apt-installs nodejs when missing."""
+def test_ensure_rm_monitor_tools_builds_the_cli():
+    """install.sh defines ensure_rm_monitor_tools and sources the bin helper."""
     source = INSTALL.read_text(encoding="utf-8")
-    assert "ensure_node()" in source
-    body = source.split("ensure_node()", 1)[1].split("\n}", 1)[0]
-    assert "need_cmd node" in body
-    assert "apt_install nodejs" in body
+    assert "ensure_rm_monitor_tools()" in source
+    assert "lib/rm_monitor_bin.sh" in source
+    assert "apt_install cargo" in source
+    assert BIN_HELPER.is_file()
+    helper = BIN_HELPER.read_text(encoding="utf-8")
+    assert "ensure_rm_monitor_bin()" in helper
+    assert "build_rm_monitor.sh" in helper
 
 
-def test_node_patches_use_ensure_node_not_ignored_need_cmd():
-    """Each node-dependent patch guards on ensure_node and bails out cleanly.
-
-    The previous ``need_cmd node`` statement was a no-op (its result was
-    discarded), so the patches ran ``node`` regardless and failed on clean
-    machines. They must now short-circuit via ensure_node."""
+def test_patches_guard_on_rm_monitor_not_node():
+    """Each Resource Monitor patch uses rm-monitor and never shells out to node."""
     source = EXTENSIONS.read_text(encoding="utf-8")
-    for fn in (
-        "patch_resource_monitor_gradient_colors",
-        "patch_resource_monitor_vram",
-        "patch_resource_monitor_per_disk",
+    assert "ensure_node" not in source
+    assert " node " not in source
+    assert "python3 " not in source
+    for fn, subcommand in (
+        ("patch_resource_monitor_gradient_colors", "patch-colors"),
+        ("patch_resource_monitor_vram", "patch-vram"),
+        ("patch_resource_monitor_per_disk", "patch-disk"),
+        ("patch_resource_monitor_eth_icon", "patch-eth-icon"),
+        ("patch_resource_monitor_process_popup", "patch-process-popup"),
+        ("patch_resource_monitor_stable_width", "patch-stable-width"),
     ):
         assert f"{fn}()" in source
         body = source.split(f"{fn}()", 1)[1].split("\n}", 1)[0]
-        assert "ensure_node ||" in body, f"{fn} must guard on ensure_node"
-        # The old ignored guard must be gone.
-        assert "need_cmd node" not in body, f"{fn} still uses the ignored need_cmd node"
+        assert "ensure_rm_monitor_bin ||" in body, f"{fn} must guard on ensure_rm_monitor_bin"
+        assert f"rm_monitor {subcommand}" in body, f"{fn} must call rm_monitor {subcommand}"

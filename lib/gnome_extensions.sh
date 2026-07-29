@@ -110,8 +110,8 @@ apply_resource_monitor_spacing_mode() {
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
       ;;
   esac
-  ensure_node || { msg "Node.js unavailable; skipping stable-width patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js"     "--mode" "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch (build with scripts/build_rm_monitor.sh and re-run)"; return 1; }
+  rm_monitor patch-stable-width --mode "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
 }
 
 # configure_resource_monitor_spacing - Open a typeable-choice field for the
@@ -262,7 +262,7 @@ install_resource_monitor_core() {
 
   # Sub-second refresh capability (schema/type widening + GPU poll floor). The
   # actual interval is applied below from the persisted installer setting.
-  run_as_target python3 "$SCRIPT_DIR/scripts/patch_resource_monitor_refresh.py" "$ext_dir"
+  rm_monitor patch-refresh "$ext_dir"
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
   if [ -n "$shell_version" ]; then
@@ -286,7 +286,7 @@ install_resource_monitor_core() {
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor swapstatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskstatsstatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacestatus true
-  run_as_target python3 "$SCRIPT_DIR/scripts/configure_resource_monitor.py" \
+  rm_monitor configure-resource-monitor \
     --disk-space-gb \
     --schema-dir "$ext_dir/schemas"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethstatus true
@@ -333,7 +333,7 @@ install_resource_monitor_core() {
       ;;
   esac
 
-  gpu_devices="$(run_as_target python3 "$SCRIPT_DIR/scripts/report_cuda_devices.py")"
+  gpu_devices="$(rm_monitor report-cuda-devices)"
   if [ -n "$gpu_devices" ]; then
     ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "$gpu_devices"
   else
@@ -355,18 +355,16 @@ install_resource_monitor_core() {
 # with a smooth value-proportional gradient on the panel indicators.
 patch_resource_monitor_gradient_colors() {
   msg "Applying Resource Monitor gradient colors patch"
-  ensure_node || { msg "Node.js unavailable; skipping gradient colors patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_colors.js" \
-    "$(resource_monitor_ext_dir)/extension.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping gradient colors patch"; return 1; }
+  rm_monitor patch-colors "$(resource_monitor_ext_dir)/extension.js"
   _isc_mark_installed "rm_gradient_colors" || true
 }
 
 # patch_resource_monitor_vram - Show GPU VRAM usage in the panel.
 patch_resource_monitor_vram() {
   msg "Applying Resource Monitor VRAM display patch"
-  ensure_node || { msg "Node.js unavailable; skipping VRAM display patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_vram.js" \
-    "$(resource_monitor_ext_dir)/panel/containers.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping VRAM display patch"; return 1; }
+  rm_monitor patch-vram "$(resource_monitor_ext_dir)/panel/containers.js"
 }
 
 # patch_resource_monitor_eth_icon - Remove the ethernet display icon while
@@ -374,9 +372,8 @@ patch_resource_monitor_vram() {
 # icon, so this source patch drops the eth icon argument at its wiring site.
 patch_resource_monitor_eth_icon() {
   msg "Applying Resource Monitor ethernet-icon removal patch"
-  ensure_node || { msg "Node.js unavailable; skipping ethernet-icon patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_eth_icon.js" \
-    "$(resource_monitor_ext_dir)/panel/mainGui.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping ethernet-icon patch"; return 1; }
+  rm_monitor patch-eth-icon "$(resource_monitor_ext_dir)/panel/mainGui.js"
 }
 
 # patch_resource_monitor_process_popup - Left-click shows a popup menu with
@@ -385,17 +382,15 @@ patch_resource_monitor_eth_icon() {
 # this, so the source patch rewires _clickManager to an in-panel PopupMenu.
 patch_resource_monitor_process_popup() {
   msg "Applying Resource Monitor process-popup (left-click) patch"
-  ensure_node || { msg "Node.js unavailable; skipping process-popup patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_process_popup.js" \
-    "$(resource_monitor_ext_dir)/extension.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping process-popup patch"; return 1; }
+  rm_monitor patch-process-popup "$(resource_monitor_ext_dir)/extension.js"
 }
 
 # patch_resource_monitor_per_disk - Show each disk device separately in the panel.
 patch_resource_monitor_per_disk() {
   msg "Applying Resource Monitor per-disk display patch"
-  ensure_node || { msg "Node.js unavailable; skipping per-disk display patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_disk.js" \
-    "$(resource_monitor_ext_dir)/panel/containers.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping per-disk display patch"; return 1; }
+  rm_monitor patch-disk "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_per_disk" || true
 }
 
@@ -407,9 +402,8 @@ patch_resource_monitor_per_disk() {
 # (primary values) are applied by apply_resource_monitor_spacing_mode / the core.
 patch_resource_monitor_stable_width() {
   msg "Applying Resource Monitor stable-width (disk activity) patch"
-  ensure_node || { msg "Node.js unavailable; skipping stable-width patch (install nodejs and re-run)"; return 1; }
-  run_as_target node "$SCRIPT_DIR/scripts/patch_resource_monitor_stable_width.js" \
-    "--mode" "$(resource_monitor_spacing_mode)" "$(resource_monitor_ext_dir)/panel/containers.js"
+  ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch"; return 1; }
+  rm_monitor patch-stable-width --mode "$(resource_monitor_spacing_mode)" "$(resource_monitor_ext_dir)/panel/containers.js"
   _isc_mark_installed "rm_stable_width" || true
 }
 

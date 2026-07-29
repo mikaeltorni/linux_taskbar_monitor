@@ -14,13 +14,13 @@ def test_gnome_extension_module_installs_resource_monitor():
     source = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
 
     assert "install_resource_monitor_core()" in source
-    assert "patch_resource_monitor_refresh.py" in source
+    assert "rm_monitor patch-refresh" in source
     assert "glib-compile-schemas" in source
     # Refresh interval is configured through the persisted millisecond setting.
     assert 'resource_monitor_refresh_seconds' in source
     assert "curl -fL" in source
     assert "netethstatus false" not in source
-    assert "scripts/configure_resource_monitor.py" in source
+    assert "rm_monitor configure-resource-monitor" in source
 
 
 def test_refresh_interval_is_exposed_as_nested_installer_configuration():
@@ -177,9 +177,7 @@ def test_panel_spacing_is_a_selectable_component():
     assert "apply_resource_monitor_spacing_mode" in lib
     assert "resource_monitor_spacing_mode" in lib
 
-    patch = (ROOT_DIR / "scripts" / "patch_resource_monitor_stable_width.js").read_text(
-        encoding="utf-8"
-    )
+    patch = (ROOT_DIR / "src" / "patch_stable_width.rs").read_text(encoding="utf-8")
     # The patcher reserves the secondary value width in stable mode, releases it
     # in compact mode, and is idempotent in both.
     assert "this._diskActivityWidth = 24" in patch
@@ -188,8 +186,8 @@ def test_panel_spacing_is_a_selectable_component():
 
     assert "rm_panel_spacing|Resource Monitor panel spacing" in components
     assert "detect_rm_stable_width" in components
-    # The apply function forwards the configured mode to the patch script.
-    assert '--mode" "$(resource_monitor_spacing_mode)"' in lib
+    # The apply function forwards the configured mode to rm-monitor.
+    assert 'rm_monitor patch-stable-width --mode "$mode"' in lib
     # Uninstall reverts to the stable baseline spacing.
     lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
     assert "uninstall_rm_panel_spacing" in lifecycle
