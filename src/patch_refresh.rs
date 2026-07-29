@@ -110,14 +110,19 @@ pub enum RefreshPatchError {
 
 /// Apply the sub-second refresh patches and recompile the GSettings schemas.
 ///
-/// Each configured file is read, its legacy upgrades and canonical `(old, new)`
-/// substitutions are applied (skipping any already present so the patch is
-/// idempotent), and written back only when content changes.
+/// Each configured file is read and transformed first; writes happen only after
+/// every target succeeds so a mid-run unsupported file cannot leave a
+/// half-patched tree. Already-applied files are left untouched.
 ///
 /// # Parameters
 /// - `extension_dir`: Installed Resource Monitor extension directory.
+///
+/// # Returns
+/// `Ok(true)` when at least one file changed (and schemas were compiled),
+/// `Ok(false)` when every file was already patched.
 pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> {
-    let mut any_changed = false;
+    let mut pending: Vec<(std::path::PathBuf, String, &'static str)> = Vec::new();
+
     for (relative_path, replacements) in REPLACEMENTS {
         let path = extension_dir.join(relative_path);
         let original = fs::read_to_string(&path)?;
@@ -143,9 +148,7 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         }
 
         if content != original {
-            fs::write(&path, content)?;
-            logging::info(format!("Patched {relative_path} for sub-second refresh"));
-            any_changed = true;
+            pending.push((path, content, relative_path));
         } else {
             logging::info(format!(
                 "{relative_path} already patched for sub-second refresh"
@@ -153,9 +156,14 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         }
     }
 
-    if !any_changed {
+    if pending.is_empty() {
         logging::info("Refresh patch already applied; skipping schema compile");
         return Ok(false);
+    }
+
+    for (path, content, relative_path) in &pending {
+        fs::write(path, content)?;
+        logging::info(format!("Patched {relative_path} for sub-second refresh"));
     }
 
     let schemas_dir = extension_dir.join("schemas");
@@ -341,11 +349,25 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
     #[test]
     fn unsupported_source_fails_fast() {
         let dir = upstream_extension();
-        fs::write(dir.path().join("prefs.js"), "// unrelated\n").expect("write");
+        let extension_js = dir.path().join("extension.js");
+        let settings_js = dir.path().join("services/settings.js");
+        let before_extension = fs::read_to_string(&extension_js).expect("extension before");
+        let before_settings = fs::read_to_string(&settings_js).expect("settings before");
+        fs::write(dir.path().join("prefs.js"), "// unrelated\n").expect("write prefs");
         assert!(matches!(
             patch_sources_only(dir.path()),
             Err(RefreshPatchError::Unsupported(_))
         ));
+        assert_eq!(
+            fs::read_to_string(&extension_js).expect("extension after"),
+            before_extension,
+            "extension.js must stay untouched when a later refresh target is unsupported"
+        );
+        assert_eq!(
+            fs::read_to_string(&settings_js).expect("settings after"),
+            before_settings,
+            "settings.js must stay untouched when a later refresh target is unsupported"
+        );
     }
 
     #[test]
