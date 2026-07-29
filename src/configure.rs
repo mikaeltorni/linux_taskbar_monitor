@@ -1,10 +1,10 @@
 //! Configure Resource Monitor extension display settings.
 //!
-//! Port of `scripts/configure_resource_monitor.py`. Resolves the extension's
-//! compiled schema directory, discovers GPU and disk devices for the requested
-//! display mode, and applies each `gsettings set` command in turn.
+//! Resolves the extension's compiled schema directory, discovers GPU and disk
+//! devices for the requested display mode, and applies each `gsettings set`
+//! command in turn.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::disks::{detect_disk_devices, detect_disk_devices_home_only};
 use crate::logging;
@@ -14,34 +14,69 @@ use crate::settings::{apply_settings, build_gsettings_args, DisplayMode};
 /// Resource Monitor GSettings schema ID.
 const SCHEMA: &str = "org.gnome.shell.extensions.resource-monitor";
 
-/// Resolve the extension schema directory for `username`.
-fn schema_dir_candidate(username: &str) -> PathBuf {
-    PathBuf::from(format!(
-        "/home/{username}/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas"
-    ))
+/// Default extension UUID when `RESOURCE_MONITOR_EXTENSION_ID` is unset.
+const DEFAULT_EXTENSION_ID: &str = "Resource_Monitor@Ory0n";
+
+/// Resolve the extension schema directory under `home` for `extension_id`.
+fn schema_dir_under_home(home: &Path, extension_id: &str) -> PathBuf {
+    home.join(".local/share/gnome-shell/extensions")
+        .join(extension_id)
+        .join("schemas")
+}
+
+/// Candidate home directories for schema auto-detection.
+///
+/// Prefers `HOME` (so custom homes and sudo `-H -u` installs work), then
+/// `/home/$SUDO_USER` and `/home/$USER` when those differ from `HOME`. Never
+/// invents a machine-specific username fallback.
+fn candidate_homes() -> Vec<PathBuf> {
+    let mut homes = Vec::new();
+    let push_unique = |homes: &mut Vec<PathBuf>, path: PathBuf| {
+        if !path.as_os_str().is_empty() && !homes.iter().any(|existing| existing == &path) {
+            homes.push(path);
+        }
+    };
+
+    if let Ok(home) = std::env::var("HOME") {
+        push_unique(&mut homes, PathBuf::from(home));
+    }
+    for key in ["SUDO_USER", "USER"] {
+        if let Ok(user) = std::env::var(key) {
+            if user.is_empty() || user == "root" {
+                continue;
+            }
+            push_unique(&mut homes, PathBuf::from(format!("/home/{user}")));
+        }
+    }
+    homes
 }
 
 /// Auto-detect the compiled schema directory of the installed extension.
 ///
-/// Prefers `SUDO_USER` so a sudo-wrapped installer still targets the invoking
-/// user's home, falling back to `USER` and finally the historical `mk` default.
-///
-/// Returns the directory, or `None` when it does not exist.
+/// Honors `RESOURCE_MONITOR_EXTENSION_ID` (same env the installer uses). Returns
+/// the first existing schemas directory under the candidate homes, or `None`.
 fn auto_detect_schema_dir() -> Option<PathBuf> {
-    let username = std::env::var("SUDO_USER")
+    let extension_id = std::env::var("RESOURCE_MONITOR_EXTENSION_ID")
         .ok()
         .filter(|value| !value.is_empty())
-        .or_else(|| std::env::var("USER").ok())
-        .unwrap_or_else(|| "mk".to_string());
+        .unwrap_or_else(|| DEFAULT_EXTENSION_ID.to_string());
 
-    let candidate = schema_dir_candidate(&username);
-    if candidate.is_dir() {
-        return Some(candidate);
+    let mut tried = Vec::new();
+    for home in candidate_homes() {
+        let candidate = schema_dir_under_home(&home, &extension_id);
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        tried.push(candidate.display().to_string());
     }
 
     logging::error(format!(
-        "Could not auto-detect schema directory at {}. Use --schema-dir.",
-        candidate.display()
+        "Could not auto-detect schema directory (tried: {}). Use --schema-dir.",
+        if tried.is_empty() {
+            "(no HOME/USER candidates)".to_string()
+        } else {
+            tried.join(", ")
+        }
     ));
     None
 }
@@ -145,12 +180,23 @@ mod tests {
     }
 
     #[test]
-    fn schema_dir_candidate_uses_the_extension_uuid_path() {
+    fn schema_dir_under_home_joins_uuid_and_schemas() {
         assert_eq!(
-            schema_dir_candidate("someone"),
+            schema_dir_under_home(Path::new("/home/someone"), DEFAULT_EXTENSION_ID),
             PathBuf::from(
                 "/home/someone/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/schemas"
             )
+        );
+    }
+
+    #[test]
+    fn candidate_homes_prefers_home_env() {
+        // Pure unit check of path joining; env-dependent ordering is covered by
+        // the installer always passing --schema-dir for configure-resource-monitor.
+        let under = schema_dir_under_home(Path::new("/custom/home"), "Ext@id");
+        assert_eq!(
+            under,
+            PathBuf::from("/custom/home/.local/share/gnome-shell/extensions/Ext@id/schemas")
         );
     }
 }

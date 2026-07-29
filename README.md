@@ -4,9 +4,9 @@ Standalone installer for the GNOME Shell Resource Monitor taskbar status setup
 used on Ubuntu 24.04. Tested on Ubuntu 24.04 LTS.
 
 It downloads Resource Monitor v27, patches the extension display for GPU VRAM,
-disk usage rows, gradient colors, and configurable 100–2000 ms refreshes
-(500 ms by default), and configures the panel to show CPU, RAM, `/home` disk
-usage/activity, ethernet, and GPU status.
+disk usage rows, gradient colors, ethernet icon, process popup, and configurable
+100–2000 ms refreshes (500 ms by default), and configures the panel to show
+CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
 
 This repository is **fully standalone**: `bash install.sh` is enough. Soft
 loading of
@@ -40,7 +40,7 @@ changes (on X11, agents may use the sanctioned in-place Shell reload instead).
 ## Development Workflow
 
 ```bash
-# Rust unit/integration tests (primary)
+# Rust unit/integration tests (primary — covers every patcher and helper)
 source "$HOME/.cargo/env"   # if using rustup
 cargo test
 cargo build --release --bin rm-monitor
@@ -48,6 +48,7 @@ cargo build --release --bin rm-monitor
 # Installer contract / shell checks
 bash -n install.sh
 bash scripts/build_rm_monitor.sh
+bash tests/test_lifecycle.sh
 python3 -m pytest tests -q
 ./install.sh --list-components
 ```
@@ -55,24 +56,40 @@ python3 -m pytest tests -q
 ## Project Structure
 
 - `install.sh` — downloads, patches, configures, and enables Resource Monitor.
-- `src/` — Rust sources for the `rm-monitor` CLI.
+- `src/` — Rust sources for the `rm-monitor` CLI (see `rm-monitor --help`).
 - `scripts/build_rm_monitor.sh` — build into `dist/rm-monitor` (cargo or container).
 - `lib/` — Bash installer modules (extension install, components, lifecycle).
 - `installer/components.sh` — selectable component manifest for the shared menu.
-- `tests/` — installer contract tests (behavior covered primarily by `cargo test`).
+- `installation_configs/` — default/empty selection snapshots for the orchestrator.
+- `tests/` — installer contract tests; patch behavior is covered by `cargo test`.
+
+### `rm-monitor` subcommands
+
+| Subcommand | Role |
+|---|---|
+| `gsettings-strv` | Mutate GSettings `as` lists for the installer |
+| `report-cuda-devices` | NVIDIA GPU device list for GSettings |
+| `configure-resource-monitor` | Display-mode GSettings (GPU/disk) |
+| `patch-extension-metadata` | Shell version + version pin |
+| `patch-refresh` | Sub-second refresh capability |
+| `patch-vram` / `patch-disk` / `patch-colors` | Panel display patches |
+| `patch-eth-icon` / `patch-process-popup` / `patch-stable-width` | UX patches |
 
 ## Configuration
 
-Environment overrides:
+Environment overrides (used when no persisted file exists yet):
 
 | Variable | Purpose |
 |---|---|
 | `RESOURCE_MONITOR_EXTENSION_ID` | Extension UUID (default `Resource_Monitor@Ory0n`) |
 | `RESOURCE_MONITOR_EXTENSION_URL` | EGO zip URL |
 | `RESOURCE_MONITOR_EXTENSION_SHA256` | Zip checksum |
-| `RESOURCE_MONITOR_SPACING_MODE` | `stable` or `compact` |
-| `RESOURCE_MONITOR_REFRESH_INTERVAL_MS` | 100–2000 (default 500) |
+| `RESOURCE_MONITOR_SPACING_MODE` | `stable` or `compact` (seed; file wins if present) |
+| `RESOURCE_MONITOR_REFRESH_INTERVAL_MS` | 100–2000 (default 500; file wins if present) |
 | `RM_MONITOR_RUST_IMAGE` | Container image for builds (default `rust:1-bookworm`) |
+
+Persisted under `~/.config/taskbar-system-status-monitor/` once chosen in the
+installer menu (`refresh-interval-ms`, `panel-spacing-mode`).
 
 ### Panel spacing (stable vs compact)
 
@@ -105,7 +122,7 @@ runs before component selection). Optional default-on components:
 |---|---|---|
 | `rm_refresh_interval` | Update time (100–2000 ms) | on, 500 ms |
 | `rm_gradient_colors` | Gradient indicator colors | on |
-| `rm_vram` | GPU VRAM display | on |
+| `rm_vram` | GPU VRAM display (no brackets) | on |
 | `rm_per_disk` | Per-disk display | on |
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |

@@ -1,4 +1,4 @@
-//! GSettings string-array helpers (`scripts/gsettings_strv.py`).
+//! GSettings string-array helpers for the installer (`gsettings-strv` CLI).
 
 use std::collections::HashSet;
 use std::env;

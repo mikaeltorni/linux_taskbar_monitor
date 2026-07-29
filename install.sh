@@ -5,18 +5,16 @@
 # Mandatory core (always installed):
 #   - Resource Monitor extension (CPU/RAM/disk/GPU indicator)
 #
-# Optional components (selectable; all default-on):
-#   - Resource Monitor gradient indicator colors
-#   - Resource Monitor GPU VRAM display
-#   - Resource Monitor per-disk display
+# Optional components (selectable; all default-on — see installer/components.sh):
+#   - Resource Monitor refresh interval, gradient colors, VRAM, per-disk,
+#     panel spacing, ethernet-icon hide, per-process CPU popup
 #   - Window Rules extension (app-rules@local — workspace/sticky rules)
-#   - Dash-to-Panel configuration and Ubuntu Dock disabling
 #
-# Auto-move-windows placement (linux_workspaces_setup) and Chrome PWA icons
-# (linux_configuration_setup) used to be selectable here too; they were removed
-# to avoid duplicating components owned by those repositories.
+# Desktop-wide features that used to live here were moved to owning repos:
+#   auto-move-windows → linux_workspaces_setup; Dash-to-Panel / PWA icons →
+#   linux_configuration_setup.
 #
-# Idempotent: skips already-installed extensions, detects existing desktop files.
+# Idempotent: re-runs re-extract and re-patch cleanly; apt steps skipped without root.
 #
 # Usage: bash install.sh        # user-level setup; apt steps skipped and reported
 #        sudo bash install.sh   # full setup including apt packages
@@ -88,18 +86,6 @@ append_gsettings_list() {
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
-remove_gsettings_list() {
-  local schema="$1" key="$2" value="$3" current newlist
-  current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(CURRENT="$current" rm_monitor gsettings-strv remove "$value")"
-  run_as_target gsettings set "$schema" "$key" "$newlist"
-}
-
-gsettings_key_exists() {
-  local schema="$1" key="$2"
-  run_as_target gsettings list-keys "$schema" 2>/dev/null | grep -qx "$key"
-}
-
 apt_install() {
   local missing=() pkg
   for pkg in "$@"; do dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg"); done
@@ -132,7 +118,6 @@ source "$SCRIPT_DIR/lib/rm_monitor_bin.sh"
 source "$SCRIPT_DIR/lib/extension_installation.sh"
 source "$SCRIPT_DIR/lib/window_rules_extension.sh"
 source "$SCRIPT_DIR/lib/gnome_extensions.sh"
-source "$SCRIPT_DIR/lib/extension_features.sh"
 source "$SCRIPT_DIR/lib/lifecycle.sh"
 
 # ── Component selection runtime and manifest ─────────────────────────────────

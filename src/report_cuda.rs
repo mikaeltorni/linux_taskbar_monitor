@@ -1,6 +1,6 @@
 //! Query `nvidia-smi` and print a GSettings GPU device list.
 //!
-//! Port of `scripts/report_cuda_devices.py`. The installer consumes stdout via
+//! The installer consumes stdout via
 //! command substitution, so stdout carries exactly one line: the GSettings
 //! string array (`[]` when no GPU is present).
 

@@ -47,14 +47,14 @@ detect_rm_vram() {
   [ -f "$js" ] && grep -q "Space separator between GPU usage and VRAM" "$js"
 }
 
-# detect_rm_stable_width: reflects the configured panel-spacing mode.
+# detect_rm_panel_spacing: reflects the configured panel-spacing mode.
 # In "stable" mode the stable-width patcher reserves the disk-space secondary
 # activity percentage (via the "Space separator between disk-space activity
 # percent and its unit (stable width)" marker it injects into containers.js);
 # detection is the presence of that marker. In "compact" mode the reservation
 # is intentionally absent, so the component is "installed" (and its *width
 # GSettings are 0) while the marker must be gone.
-detect_rm_stable_width() {
+detect_rm_panel_spacing() {
   local js stable_marker compact
   js="$(_rm_containers_js)"
   stable_marker="Space separator between disk-space activity percent and its unit (stable width)"

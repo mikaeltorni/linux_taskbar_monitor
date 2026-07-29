@@ -1,6 +1,6 @@
 //! Drop the ethernet display icon from the panel while keeping its Mbps value.
 //!
-//! Port of `scripts/patch_resource_monitor_eth_icon.js`. Upstream appends the
+//! Upstream appends the
 //! icon for every simple metric group (cpu/ram/swap/disk/eth/wlan) through
 //! `_appendSimpleChildren`, and there is no GSetting to hide a single icon, so
 //! this patcher:

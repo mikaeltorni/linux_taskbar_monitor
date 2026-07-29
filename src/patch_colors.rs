@@ -1,6 +1,6 @@
 //! Override `_getUsageColor` with 256-step RGB gradients.
 //!
-//! Port of `scripts/patch_resource_monitor_colors.js`. Patches `extension.js` to:
+//! Patches `extension.js` to:
 //!
 //! 1. Inject gradient configuration into each indicator's color settings during
 //!    init. Each colors array gets a type marker (e.g. `"__cpu"`) appended so
@@ -117,7 +117,7 @@ const GRADIENT_CONFIGS = {
 
 /// Gradient implementation plus type-marker injection, replacing the upstream
 /// `_getUsageColor` method body.
-const REPLACEMENT: &str = r#"    // ── Gradient-based color override (patched by patch_resource_monitor_colors.js) ──
+const REPLACEMENT: &str = r#"    // ── Gradient-based color override (patched by rm-monitor patch-colors) ──
     // Augment each indicator's colors array with a type marker for reliable detection.
     _augmentColorsWithType(colors, typeMarker) {
       if (!Array.isArray(colors)) return colors;
@@ -302,7 +302,7 @@ const IDENTITY_DETECTION: &str = r#"      if (colors === this._diskSpaceColors) 
 /// tests and the injected JavaScript can never disagree.
 pub fn support_block() -> String {
     format!(
-        "// ── Gradient color support (patched by patch_resource_monitor_colors.js) ──\n\
+        "// ── Gradient color support (patched by rm-monitor patch-colors) ──\n\
          const ETHERNET_MAX_MBPS = {ETHERNET_MAX_MBPS};\n\
          const RAM_MAX_GB = {RAM_MAX_GB};\n\
          const DISK_USAGE_MAX_PERCENT = {DISK_USAGE_MAX_PERCENT};\n\

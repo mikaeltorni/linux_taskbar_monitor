@@ -1,7 +1,7 @@
 //! Replace the left-click "launch the configured action" behavior with an
 //! in-panel process popup.
 //!
-//! Port of `scripts/patch_resource_monitor_process_popup.js`. Upstream always
+//! Upstream always
 //! spawns the `leftclickstatus` command on left-click and offers no GSetting to
 //! change that, so this source patch:
 //!

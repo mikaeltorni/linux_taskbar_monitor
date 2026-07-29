@@ -1,6 +1,6 @@
 //! Patch a GNOME extension `metadata.json`.
 //!
-//! Port of `scripts/patch_extension_metadata.py`. Adds the running shell version
+//! Adds the running shell version
 //! to the `shell-version` list and pins `version` above any plausible upstream
 //! release so GNOME never auto-updates over the local source patches.
 

@@ -1,7 +1,7 @@
 //! Reserve (or release) fixed value-label widths so the panel does not shift as
 //! metric values change digit count.
 //!
-//! Port of `scripts/patch_resource_monitor_stable_width.js`. The extension's
+//! The extension's
 //! upstream `*width` GSettings already reserve the primary value labels, but two
 //! labels have no such GSetting and are left adaptive: the disk-space secondary
 //! "activity %" value, and the GPU VRAM value (upstream shares the single
@@ -207,6 +207,7 @@ pub fn patch_containers(
             logging::info("Released disk-space activity percent width (compact mode)");
             println!("Released disk-space activity percent width (compact mode)");
         } else {
+            logging::info("Disk-space activity percent width already compact");
             println!("Disk-space activity percent width already compact");
         }
     } else if !content.contains(DISK_MARKER) {
@@ -246,6 +247,7 @@ pub fn patch_containers(
             logging::info("Released GPU VRAM width back to shared GPU usage width (compact mode)");
             println!("Released GPU VRAM width back to shared GPU usage width (compact mode)");
         } else {
+            logging::info("GPU VRAM width already compact");
             println!("GPU VRAM width already compact");
         }
     } else if !content.contains(GPU_MARKER) {

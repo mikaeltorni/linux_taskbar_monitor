@@ -3,7 +3,8 @@
 
 Patches and GSettings helpers run through the ``rm-monitor`` binary built from
 this repository. A clean machine may lack cargo; the installer must build the
-binary (local cargo, apt cargo, or container) before patching.
+binary (local cargo, apt cargo, or container) before patching. No Node.js or
+Python runtime is required for patching.
 """
 
 from __future__ import annotations
@@ -29,19 +30,26 @@ def test_ensure_rm_monitor_tools_builds_the_cli():
     assert "build_rm_monitor.sh" in helper
 
 
-def test_patches_guard_on_rm_monitor_not_node():
+def test_core_does_not_require_python_or_node():
+    """Clean install must not hard-require python3 or node for patching."""
+    source = EXTENSIONS.read_text(encoding="utf-8")
+    assert "need_cmd python3" not in source
+    assert "need_cmd node" not in source
+    assert "ensure_node" not in source
+    for token in (" node ", "python3 ", "python3\n"):
+        assert token not in source, f"unexpected runtime reference: {token!r}"
+
+
+def test_patches_guard_on_rm_monitor():
     """Each Resource Monitor patch uses rm-monitor and never shells out to node."""
     source = EXTENSIONS.read_text(encoding="utf-8")
-    assert "ensure_node" not in source
-    assert " node " not in source
-    assert "python3 " not in source
     for fn, subcommand in (
         ("patch_resource_monitor_gradient_colors", "patch-colors"),
         ("patch_resource_monitor_vram", "patch-vram"),
         ("patch_resource_monitor_per_disk", "patch-disk"),
         ("patch_resource_monitor_eth_icon", "patch-eth-icon"),
         ("patch_resource_monitor_process_popup", "patch-process-popup"),
-        ("patch_resource_monitor_stable_width", "patch-stable-width"),
+        ("apply_resource_monitor_spacing_mode", "patch-stable-width"),
     ):
         assert f"{fn}()" in source
         body = source.split(f"{fn}()", 1)[1].split("\n}", 1)[0]
