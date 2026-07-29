@@ -1,11 +1,13 @@
 # Clean Installation Compatibility
 
 All repository changes must remain compatible with a clean installation run
-through `installation_scripts/install.sh` and this repository's `install.sh`.
-Do not rely on packages, files, settings, or manual steps that exist only on
-the current machine. Add every required dependency, asset, configuration
-step, and migration to the installer so a fresh checkout can reproduce the
-complete setup.
+through this repository's `install.sh`. When also listed by the optional master
+orchestrator (`installation_scripts`), keep the shared component CLI contract
+(`--list-components`, `--select`, `--detect`, `--reconfigure`, `--uninstall`)
+stable so that orchestrator keeps working. Do not rely on packages, files,
+settings, or manual steps that exist only on the current machine. Add every
+required dependency, asset, configuration step, and migration to the installer
+so a fresh checkout can reproduce the complete setup.
 
 Keep installation steps idempotent and verify the clean-install path for every
 change.
@@ -28,15 +30,13 @@ gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
 # Disable the extension first so changes take effect on reload
 gnome-extensions disable Resource_Monitor@Ory0n
 
-# Run each patcher directly (no sudo needed — files are user-owned)
-node scripts/patch_resource_monitor_vram.js \
-  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/panel/containers.js
-node scripts/patch_resource_monitor_disk.js \
-  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/panel/containers.js
-node scripts/patch_resource_monitor_colors.js \
-  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n/extension.js
-python3 scripts/patch_resource_monitor_refresh.py \
-  ~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
+# Build the helper CLI if needed, then run each patcher
+bash scripts/build_rm_monitor.sh
+EXT=~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
+./dist/rm-monitor patch-vram "$EXT/panel/containers.js"
+./dist/rm-monitor patch-disk "$EXT/panel/containers.js"
+./dist/rm-monitor patch-colors "$EXT/extension.js"
+./dist/rm-monitor patch-refresh "$EXT"
 
 # Re-enable the extension
 gnome-extensions enable Resource_Monitor@Ory0n
@@ -56,7 +56,7 @@ gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
 
 - Installing the extension zip to system-wide locations (`/usr/share/gnome-shell/extensions/`)
 - Modifying files owned by root (e.g., `/etc/`, `/usr/lib/`)
-- Running `apt install` or system package management
+- Running `apt install` or system package management (e.g. `cargo` when no toolchain exists)
 
 For routine development and patching, **no sudo is needed**.
 
@@ -84,4 +84,3 @@ yourself first. Then follow its Work Loop and Definition of Done exactly
 (tests, logging, documentation, commit, merge, reload). Do not report the task
 done until that checklist passes. Isolation and branch policy live only in the
 skill — this file does not restate them.
-
