@@ -1,12 +1,33 @@
+# Python (legacy helpers / tests during migration)
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Node (legacy JS patchers during migration)
 node_modules/
+
+# Rust / Cargo
+/target/
+**/*.rs.bk
+# Cargo.lock is committed for reproducible installer builds of this binary.
+
+# Build / packaging outputs
 dist/
 build/
+*.deb
+*.rpm
+
+# Logs and scratch
 *.log
 .log/
 *.tmp
+*.swp
+*~
+
+# Editor / IDE
+.idea/
+.vscode/
+*.code-workspace
 
 # BEGIN programming-prompts-cursor (managed by linux_programming_setup)
 # Managed copies from programming_prompts — do not ignore other .cursor/skills/*
