@@ -14,6 +14,9 @@ def test_core_fails_when_metadata_pin_fails():
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
     assert 'patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999' in core
     assert "9999 || true" not in core
+    # Empty/zero shell version must hard-fail before the pin call.
+    assert 'could not parse GNOME Shell version' in core
+    assert '[ "$shell_version" = "0" ]' in core
 
 
 def test_gnome_extension_module_installs_resource_monitor():

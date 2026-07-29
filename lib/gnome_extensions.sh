@@ -284,12 +284,14 @@ install_resource_monitor_core() {
   rm_monitor patch-refresh "$ext_dir"
 
   shell_version="$(gnome-shell --version 2>/dev/null | awk '{print int($3)}')"
-  if [ -n "$shell_version" ]; then
-    # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
-    # extension over the local patches on shell reload, which previously
-    # reverted the gradient colors back to upstream's threshold coloring.
-    patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999
+  if [ -z "$shell_version" ] || [ "$shell_version" = "0" ]; then
+    msg "ERROR: could not parse GNOME Shell version from 'gnome-shell --version' (needed to pin metadata against EGO overwrite)"
+    return 1
   fi
+  # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
+  # extension over the local patches on shell reload, which previously
+  # reverted the gradient colors back to upstream's threshold coloring.
+  patch_extension_metadata "$ext_dir" metadata.json "$shell_version" 9999
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"

@@ -341,6 +341,7 @@ pub fn run(mode: &str, containers_path: &Path) -> i32 {
         };
         logging::info(message);
         println!("{message}");
+        return 0;
     }
 
     if let Err(err) = fs::write(containers_path, patched) {

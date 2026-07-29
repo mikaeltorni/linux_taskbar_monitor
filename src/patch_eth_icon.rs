@@ -152,6 +152,7 @@ pub fn run(main_gui_path: &Path) -> i32 {
     if !changed {
         logging::info("Ethernet display icon already removed");
         println!("Ethernet display icon already removed");
+        return 0;
     }
 
     if let Err(err) = fs::write(main_gui_path, patched) {
