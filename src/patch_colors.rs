@@ -355,6 +355,11 @@ pub enum ColorsError {
         "Could not find extension class marker in extension.js — unsupported extension version"
     )]
     MissingClass,
+    /// Already-patched marker present but identity detection could not migrate.
+    #[error(
+        "Could not migrate gradient color detection to property identity checks — unsupported extension version"
+    )]
+    MissingIdentityMigration,
 }
 
 /// Patch `extension.js` to override `_getUsageColor` with gradient coloring.
@@ -375,7 +380,13 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ColorsError> 
         if !migrated.contains("colors === this._diskSpaceColors") {
             logging::info("Migrating gradient color detection to property identity checks");
             println!("Migrating gradient color detection to property identity checks");
+            if !migrated.contains(MARKER_ONLY_DETECTION) {
+                return Err(ColorsError::MissingIdentityMigration);
+            }
             migrated = migrated.replacen(MARKER_ONLY_DETECTION, IDENTITY_DETECTION, 1);
+            if !migrated.contains("colors === this._diskSpaceColors") {
+                return Err(ColorsError::MissingIdentityMigration);
+            }
         } else {
             logging::info("Colors already patched — skipping");
             println!("Colors already patched — skipping");
@@ -518,6 +529,15 @@ mod tests {
         assert!(changed);
         assert!(migrated.contains("colors === this._diskSpaceColors"));
         assert!(migrated.contains("colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")"));
+    }
+
+    #[test]
+    fn mismatched_legacy_detection_fails_hard() {
+        let broken = "_gradientGetUsageColor(value, colors) {\n      // unexpected detection body\n      }\n";
+        assert_eq!(
+            patch_extension_js(broken),
+            Err(ColorsError::MissingIdentityMigration)
+        );
     }
 
     #[test]

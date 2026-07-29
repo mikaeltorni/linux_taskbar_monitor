@@ -167,8 +167,11 @@ pub fn run(
     }
 
     if success {
+        logging::info("configure-resource-monitor applied all settings");
         0
     } else {
+        logging::error("configure-resource-monitor failed to apply one or more settings");
+        eprintln!("configure-resource-monitor failed to apply one or more settings");
         1
     }
 }

@@ -872,6 +872,20 @@ fn sibling(containers_path: &Path, relative: &[&str]) -> PathBuf {
 pub fn run(containers_path: &Path) -> i32 {
     logging::info(format!("patch-disk path={}", containers_path.display()));
 
+    let refreshers_path = sibling(containers_path, &["services", "refreshers.js"]);
+    let extension_path = sibling(containers_path, &["extension.js"]);
+
+    // Validate and transform every required target before writing anything so a
+    // mid-run failure cannot leave a half-patched extension tree.
+    if !refreshers_path.exists() {
+        logging::error(format!(
+            "Could not find refreshers.js at: {}",
+            refreshers_path.display()
+        ));
+        eprintln!("Could not find refreshers.js at: {}", refreshers_path.display());
+        return 1;
+    }
+
     let containers_content = match fs::read_to_string(containers_path) {
         Ok(content) => content,
         Err(err) => {
@@ -883,36 +897,6 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
-
-    let patched_containers = match patch_containers(&containers_content) {
-        Ok(content) => content,
-        Err(err) => {
-            logging::error(err.to_string());
-            eprintln!("{err}");
-            return 1;
-        }
-    };
-    if patched_containers != containers_content {
-        if let Err(err) = fs::write(containers_path, &patched_containers) {
-            logging::error(format!(
-                "Could not write {}: {err}",
-                containers_path.display()
-            ));
-            eprintln!("Could not write {}: {err}", containers_path.display());
-            return 1;
-        }
-    }
-
-    let refreshers_path = sibling(containers_path, &["services", "refreshers.js"]);
-    if !refreshers_path.exists() {
-        logging::error(format!(
-            "Could not find refreshers.js at: {}",
-            refreshers_path.display()
-        ));
-        eprintln!("Could not find refreshers.js at: {}", refreshers_path.display());
-        return 1;
-    }
-
     let refreshers_content = match fs::read_to_string(&refreshers_path) {
         Ok(content) => content,
         Err(err) => {
@@ -924,6 +908,30 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
+    let extension_content = if extension_path.exists() {
+        match fs::read_to_string(&extension_path) {
+            Ok(content) => Some(content),
+            Err(err) => {
+                logging::error(format!(
+                    "Could not read {}: {err}",
+                    extension_path.display()
+                ));
+                eprintln!("Could not read {}: {err}", extension_path.display());
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
+    let patched_containers = match patch_containers(&containers_content) {
+        Ok(content) => content,
+        Err(err) => {
+            logging::error(err.to_string());
+            eprintln!("{err}");
+            return 1;
+        }
+    };
     let patched_refreshers = match patch_refreshers(&refreshers_content) {
         Ok(content) => content,
         Err(err) => {
@@ -932,6 +940,31 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
+    let patched_extension = if let Some(ref content) = extension_content {
+        match patch_extension(content) {
+            Ok(content) => Some(content),
+            Err(err) => {
+                logging::error(err.to_string());
+                eprintln!("{err}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut any_changed = false;
+    if patched_containers != containers_content {
+        if let Err(err) = fs::write(containers_path, &patched_containers) {
+            logging::error(format!(
+                "Could not write {}: {err}",
+                containers_path.display()
+            ));
+            eprintln!("Could not write {}: {err}", containers_path.display());
+            return 1;
+        }
+        any_changed = true;
+    }
     if patched_refreshers != refreshers_content {
         if let Err(err) = fs::write(&refreshers_path, &patched_refreshers) {
             logging::error(format!(
@@ -941,31 +974,11 @@ pub fn run(containers_path: &Path) -> i32 {
             eprintln!("Could not write {}: {err}", refreshers_path.display());
             return 1;
         }
+        any_changed = true;
     }
-
-    let extension_path = sibling(containers_path, &["extension.js"]);
-    if extension_path.exists() {
-        let extension_content = match fs::read_to_string(&extension_path) {
-            Ok(content) => content,
-            Err(err) => {
-                logging::error(format!(
-                    "Could not read {}: {err}",
-                    extension_path.display()
-                ));
-                eprintln!("Could not read {}: {err}", extension_path.display());
-                return 1;
-            }
-        };
-        let patched_extension = match patch_extension(&extension_content) {
-            Ok(content) => content,
-            Err(err) => {
-                logging::error(err.to_string());
-                eprintln!("{err}");
-                return 1;
-            }
-        };
-        if patched_extension != extension_content {
-            if let Err(err) = fs::write(&extension_path, &patched_extension) {
+    if let (Some(patched), Some(original)) = (patched_extension, extension_content) {
+        if patched != original {
+            if let Err(err) = fs::write(&extension_path, &patched) {
                 logging::error(format!(
                     "Could not write {}: {err}",
                     extension_path.display()
@@ -973,11 +986,17 @@ pub fn run(containers_path: &Path) -> i32 {
                 eprintln!("Could not write {}: {err}", extension_path.display());
                 return 1;
             }
+            any_changed = true;
         }
     }
 
-    logging::info("Patched Resource Monitor disk free-space and live IO activity display");
-    println!("Patched Resource Monitor disk free-space and live IO activity display");
+    if any_changed {
+        logging::info("Patched Resource Monitor disk free-space and live IO activity display");
+        println!("Patched Resource Monitor disk free-space and live IO activity display");
+    } else {
+        logging::info("Disk free-space and live IO activity display already patched — skipping");
+        println!("Disk free-space and live IO activity display already patched — skipping");
+    }
     0
 }
 
@@ -1203,8 +1222,14 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         fs::create_dir_all(dir.path().join("panel")).expect("panel dir");
         let containers = dir.path().join("panel/containers.js");
-        fs::write(&containers, format!("{ORIGINAL_DISK_CONTAINER}\n")).expect("write");
+        let original = format!("{ORIGINAL_DISK_CONTAINER}\n");
+        fs::write(&containers, &original).expect("write");
         assert_eq!(run(&containers), 1);
+        assert_eq!(
+            fs::read_to_string(&containers).expect("read"),
+            original,
+            "containers.js must stay untouched when refreshers.js is missing"
+        );
     }
 
     #[test]
