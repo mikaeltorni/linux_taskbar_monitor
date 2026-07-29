@@ -112,14 +112,16 @@ pub enum RefreshPatchError {
 ///
 /// Each configured file is read, its legacy upgrades and canonical `(old, new)`
 /// substitutions are applied (skipping any already present so the patch is
-/// idempotent), and written back.
+/// idempotent), and written back only when content changes.
 ///
 /// # Parameters
 /// - `extension_dir`: Installed Resource Monitor extension directory.
 pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
+    let mut any_changed = false;
     for (relative_path, replacements) in REPLACEMENTS {
         let path = extension_dir.join(relative_path);
-        let mut content = fs::read_to_string(&path)?;
+        let original = fs::read_to_string(&path)?;
+        let mut content = original.clone();
 
         if let Some(legacy) = legacy_replacements_for(relative_path) {
             for (old, new) in legacy {
@@ -140,8 +142,20 @@ pub fn patch_extension(extension_dir: &Path) -> Result<(), RefreshPatchError> {
             content = content.replace(old, new);
         }
 
-        fs::write(&path, content)?;
-        logging::info(format!("Patched {relative_path} for sub-second refresh"));
+        if content != original {
+            fs::write(&path, content)?;
+            logging::info(format!("Patched {relative_path} for sub-second refresh"));
+            any_changed = true;
+        } else {
+            logging::info(format!(
+                "{relative_path} already patched for sub-second refresh"
+            ));
+        }
+    }
+
+    if !any_changed {
+        logging::info("Refresh patch already applied; skipping schema compile");
+        return Ok(());
     }
 
     let schemas_dir = extension_dir.join("schemas");
