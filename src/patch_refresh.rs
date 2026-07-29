@@ -112,14 +112,16 @@ pub enum RefreshPatchError {
 ///
 /// Each configured file is read and transformed first; writes happen only after
 /// every target succeeds so a mid-run unsupported file cannot leave a
-/// half-patched tree. Already-applied files are left untouched.
+/// half-patched tree. Already-applied files are left untouched. Schemas are
+/// always compiled after a successful transform pass so a prior
+/// write-then-compile-failure can recover on re-run.
 ///
 /// # Parameters
 /// - `extension_dir`: Installed Resource Monitor extension directory.
 ///
 /// # Returns
-/// `Ok(true)` when at least one file changed (and schemas were compiled),
-/// `Ok(false)` when every file was already patched.
+/// `Ok(true)` when at least one file changed, `Ok(false)` when every file was
+/// already patched (schemas are still compiled in both cases).
 pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> {
     let mut pending: Vec<(std::path::PathBuf, String, &'static str)> = Vec::new();
 
@@ -156,21 +158,24 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         }
     }
 
-    if pending.is_empty() {
-        logging::info("Refresh patch already applied; skipping schema compile");
-        return Ok(false);
-    }
-
+    let any_changed = !pending.is_empty();
     for (path, content, relative_path) in &pending {
         fs::write(path, content)?;
         logging::info(format!("Patched {relative_path} for sub-second refresh"));
     }
 
     let schemas_dir = extension_dir.join("schemas");
-    logging::info(format!(
-        "Compiling Resource Monitor schemas in {}",
-        schemas_dir.display()
-    ));
+    if any_changed {
+        logging::info(format!(
+            "Compiling Resource Monitor schemas in {}",
+            schemas_dir.display()
+        ));
+    } else {
+        logging::info(format!(
+            "Refresh sources already patched; ensuring schemas in {}",
+            schemas_dir.display()
+        ));
+    }
     let status = Command::new("glib-compile-schemas")
         .arg(&schemas_dir)
         .status()
@@ -181,7 +186,7 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         )));
     }
 
-    Ok(true)
+    Ok(any_changed)
 }
 
 /// CLI entry point for the refresh-interval patcher.
@@ -367,6 +372,47 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
             fs::read_to_string(&settings_js).expect("settings after"),
             before_settings,
             "settings.js must stay untouched when a later refresh target is unsupported"
+        );
+    }
+
+    #[test]
+    fn already_patched_sources_still_compile_schemas() {
+        let dir = upstream_extension();
+        // First pass writes patched sources even if schema compile is unavailable.
+        let _ = patch_sources_only(dir.path());
+
+        let bin_dir = tempfile::tempdir().expect("bin dir");
+        let marker = bin_dir.path().join("compiled.marker");
+        let fake = bin_dir.path().join("glib-compile-schemas");
+        fs::write(
+            &fake,
+            format!(
+                "#!/bin/sh\nprintf 'ok' > '{}'\nexit 0\n",
+                marker.display()
+            ),
+        )
+        .expect("fake compiler");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&fake).expect("meta").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&fake, perms).expect("chmod");
+        }
+
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut path = std::ffi::OsString::from(bin_dir.path());
+        path.push(":");
+        path.push(&original_path);
+        // SAFETY: test-only PATH override for the child glib-compile-schemas lookup.
+        unsafe { std::env::set_var("PATH", &path) };
+        let result = patch_extension(dir.path());
+        unsafe { std::env::set_var("PATH", original_path) };
+
+        assert_eq!(result.expect("patch"), false, "sources should already be patched");
+        assert!(
+            marker.is_file(),
+            "already-patched re-run must still invoke glib-compile-schemas"
         );
     }
 
