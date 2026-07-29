@@ -71,8 +71,9 @@ pub fn error(message: impl AsRef<str>) {
 }
 
 /// Log a debug/trace detail for diagnostics.
-// Part of the logger's public level set; kept available for ad-hoc diagnostics
-// even when no subcommand currently emits at this level.
+///
+/// Part of the logger's public level set; kept available for ad-hoc diagnostics
+/// even when no subcommand currently emits at this level.
 #[allow(dead_code)]
 pub fn debug(message: impl AsRef<str>) {
     write_line("DEBUG", message.as_ref());
