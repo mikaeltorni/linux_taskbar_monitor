@@ -24,6 +24,17 @@ _rm_containers_js() { printf '%s/panel/containers.js\n' "$(_rm_ext_root)"; }
 _rm_refreshers_js() { printf '%s/services/refreshers.js\n' "$(_rm_ext_root)"; }
 
 # --- Detection ---------------------------------------------------------------
+# detect_rm_refresh_interval: live check that the installed schema refreshtime
+# matches the configured millisecond interval (converted to seconds).
+detect_rm_refresh_interval() {
+  local ext_dir expected actual
+  ext_dir="$(resource_monitor_ext_dir)"
+  [ -d "$ext_dir/schemas" ] || return 1
+  expected="$(resource_monitor_refresh_seconds)"
+  actual="$(ext_gsettings "$ext_dir" get org.gnome.shell.extensions.resource-monitor refreshtime 2>/dev/null | tr -d "[:space:]'")" || return 1
+  [ -n "$actual" ] && [ "$actual" = "$expected" ]
+}
+
 # detect_rm_gradient_colors: the colors patcher injects the _gradientGetUsageColor
 # override into extension.js. Its presence is the deterministic live signal.
 detect_rm_gradient_colors() {
@@ -48,21 +59,24 @@ detect_rm_vram() {
 }
 
 # detect_rm_panel_spacing: reflects the configured panel-spacing mode.
-# In "stable" mode the stable-width patcher reserves the disk-space secondary
-# activity percentage (via the "Space separator between disk-space activity
-# percent and its unit (stable width)" marker it injects into containers.js);
-# detection is the presence of that marker. In "compact" mode the reservation
-# is intentionally absent, so the component is "installed" (and its *width
-# GSettings are 0) while the marker must be gone.
+# Stable mode is present when either stable-width reservation is in
+# containers.js: the disk-space secondary activity marker (when rm_per_disk
+# applied secondary labels) and/or the GPU VRAM width-split marker (always
+# attempted by patch-stable-width). Compact mode requires both markers gone.
 detect_rm_panel_spacing() {
-  local js stable_marker compact
+  local js disk_marker gpu_marker compact
   js="$(_rm_containers_js)"
-  stable_marker="Space separator between disk-space activity percent and its unit (stable width)"
+  disk_marker="Space separator between disk-space activity percent and its unit (stable width)"
+  gpu_marker="VRAM value (0-99 GB, 2 digits) gets its own tighter reserved"
   compact="$(resource_monitor_spacing_mode 2>/dev/null || echo stable)"
   [ -f "$js" ] || return 1
   case "$compact" in
-    compact) ! grep -q "$stable_marker" "$js" ;;
-    *) grep -q "$stable_marker" "$js" ;;
+    compact)
+      ! grep -q "$disk_marker" "$js" && ! grep -q "$gpu_marker" "$js"
+      ;;
+    *)
+      grep -q "$disk_marker" "$js" || grep -q "$gpu_marker" "$js"
+      ;;
   esac
 }
 # detect_rm_hide_eth_icon: the eth-icon patcher wires the ethernet group to

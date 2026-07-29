@@ -194,6 +194,7 @@ apply_resource_monitor_refresh_interval() {
       return 1
     fi
     msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
+    _isc_mark_installed "rm_refresh_interval" || true
   else
     msg "Resource Monitor is not installed yet; saved update time will apply during installation."
   fi

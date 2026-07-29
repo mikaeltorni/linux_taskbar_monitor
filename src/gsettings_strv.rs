@@ -104,6 +104,7 @@ pub fn format_strv(values: &[String]) -> String {
 pub fn run_cli(action: &str, value: &str) -> Result<(), i32> {
     crate::logging::info(format!("gsettings-strv {action} value={value}"));
     if action != "append" && action != "remove" {
+        crate::logging::error(format!("gsettings-strv invalid action={action}"));
         eprintln!("Usage: rm-monitor gsettings-strv append|remove <value>");
         return Err(2);
     }
