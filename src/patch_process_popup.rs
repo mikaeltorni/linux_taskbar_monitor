@@ -180,6 +180,7 @@ const NEW_TOOLTIP: &str = r#"_("Left-click shows per-process CPU and RAM usage."
 
 /// Failure while applying the process-popup patch.
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::enum_variant_names)] // Missing* names mirror the absent snippet
 pub enum ProcessPopupError {
     /// The `PanelMenu` import anchor is missing.
     #[error("ERROR: PanelMenu import not found; upstream layout changed — aborting.")]

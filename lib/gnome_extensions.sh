@@ -8,11 +8,15 @@
 #     components declared in installer/components.sh.
 #
 # Sourced by install.sh after rm_monitor_bin.sh and extension_installation.sh.
-# Also sources those helpers so pytest / test_lifecycle.sh can load this file alone.
+# When loaded alone (pytest / test_lifecycle.sh), source the helpers if missing.
 # Depends on: msg, run_as_target, append_gsettings_list, need_cmd, rm_monitor.
 
-source "$SCRIPT_DIR/lib/extension_installation.sh"
-source "$SCRIPT_DIR/lib/window_rules_extension.sh"
+if ! declare -F enable_shell_extension >/dev/null 2>&1; then
+  source "$SCRIPT_DIR/lib/extension_installation.sh"
+fi
+if ! declare -F configure_window_rules_extension >/dev/null 2>&1; then
+  source "$SCRIPT_DIR/lib/window_rules_extension.sh"
+fi
 
 # ── Enable GNOME Shell extension (idempotent) ────────────────────────────────
 ext_gsettings() {
@@ -81,8 +85,9 @@ resource_monitor_spacing_persist() {
 # apply_resource_monitor_spacing_mode - Apply the configured spacing mode to the
 # installed Resource Monitor. Sets the *width GSettings (left to upstream
 # defaults when compact) and runs the patch-stable-width CLI in the matching
-# mode so the secondary disk-activity reservation and GPU VRAM split follow.
-# Safe before installation: it only acts when the extension dir is present.
+# mode so the secondary disk-activity reservation (when rm_per_disk applied it)
+# and GPU VRAM split follow. Safe before installation: only acts when the
+# extension dir is present.
 apply_resource_monitor_spacing_mode() {
   local ext_dir mode
   ext_dir="$(resource_monitor_ext_dir)"
@@ -91,6 +96,7 @@ apply_resource_monitor_spacing_mode() {
     msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation."
     return 0
   fi
+  msg "Applying Resource Monitor panel spacing mode: ${mode}"
   case "$mode" in
     compact)
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 0
@@ -234,10 +240,10 @@ resource_monitor_ext_dir() {
 # are split into separately selectable components below.
 install_resource_monitor_core() {
   msg "Installing Resource Monitor taskbar CPU/RAM/disk/ethernet/GPU indicator (core)"
-  need_cmd curl
-  need_cmd unzip
-  need_cmd gsettings
-  need_cmd glib-compile-schemas
+  need_cmd curl || { msg "ERROR: curl is required to download Resource Monitor"; return 1; }
+  need_cmd unzip || { msg "ERROR: unzip is required to extract Resource Monitor"; return 1; }
+  need_cmd gsettings || { msg "ERROR: gsettings is required to configure Resource Monitor"; return 1; }
+  need_cmd glib-compile-schemas || { msg "ERROR: glib-compile-schemas is required after schema patches"; return 1; }
 
   local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"

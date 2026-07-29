@@ -14,6 +14,10 @@
 //! - `stable` (default): apply the fixed-width reservations.
 //! - `compact`: remove them so the value labels are adaptive again, taking less
 //!   horizontal space at the cost of slight panel shifting.
+//!
+//! The disk-space secondary reservation only applies when the per-disk patch
+//! has already injected secondary activity labels. Without those labels the
+//! disk section is skipped and the GPU VRAM width split still runs.
 
 use std::fs;
 use std::path::Path;
@@ -133,6 +137,7 @@ const GPU_PATCHED_SET: &str = r#"      } else {
 
 /// Failure while applying or reverting the stable-width reservations.
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::enum_variant_names)] // Missing* names mirror the absent snippet
 pub enum StableWidthError {
     /// The compact-mode revert could not find the disk-space edit to remove.
     #[error("Could not find disk-space stable-width edit to remove in containers.js")]
@@ -211,21 +216,33 @@ pub fn patch_containers(
             println!("Disk-space activity percent width already compact");
         }
     } else if !content.contains(DISK_MARKER) {
-        content = replace_or(
-            &content,
-            DISK_UPSTREAM_ADD,
-            DISK_PATCHED_ADD,
-            StableWidthError::MissingDiskAdd,
-        )?;
-        content = replace_or(
-            &content,
-            DISK_UPSTREAM_INIT,
-            DISK_PATCHED_INIT,
-            StableWidthError::MissingDiskInit,
-        )?;
-        changed = true;
-        logging::info("Reserved disk-space activity percent width (stable-width patch)");
-        println!("Reserved disk-space activity percent width (stable-width patch)");
+        // The secondary activity labels only exist after the per-disk patch.
+        // When rm_per_disk was not selected, skip this reservation and still
+        // apply the GPU VRAM width split below.
+        if content.contains(DISK_UPSTREAM_ADD) {
+            content = replace_or(
+                &content,
+                DISK_UPSTREAM_ADD,
+                DISK_PATCHED_ADD,
+                StableWidthError::MissingDiskAdd,
+            )?;
+            content = replace_or(
+                &content,
+                DISK_UPSTREAM_INIT,
+                DISK_PATCHED_INIT,
+                StableWidthError::MissingDiskInit,
+            )?;
+            changed = true;
+            logging::info("Reserved disk-space activity percent width (stable-width patch)");
+            println!("Reserved disk-space activity percent width (stable-width patch)");
+        } else {
+            logging::info(
+                "Disk-space secondary activity labels absent; skipping disk stable-width (select rm_per_disk for that reservation)",
+            );
+            println!(
+                "Disk-space secondary activity labels absent; skipping disk stable-width (select rm_per_disk for that reservation)"
+            );
+        }
     }
 
     // ── 2. GPU VRAM width split from GPU usage ──────────────────────────────
@@ -382,11 +399,23 @@ mod tests {
     }
 
     #[test]
-    fn missing_disk_target_fails_fast() {
+    fn stable_mode_skips_disk_when_per_disk_patch_absent() {
         let source = format!("{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n");
+        let (patched, changed) = patch_containers(&source, false).expect("gpu-only");
+        assert!(changed);
+        assert!(!patched.contains(DISK_MARKER));
+        assert!(patched.contains(GPU_MARKER));
+        assert!(patched.contains("this._gpuMemoryWidth = 16;"));
+    }
+
+    #[test]
+    fn disk_add_without_init_fails_fast() {
+        // Secondary labels present but DiskContainerSpace._init missing is unsupported.
+        let source =
+            format!("{DISK_UPSTREAM_ADD}\n\n{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n");
         assert!(matches!(
             patch_containers(&source, false),
-            Err(StableWidthError::MissingDiskAdd)
+            Err(StableWidthError::MissingDiskInit)
         ));
     }
 

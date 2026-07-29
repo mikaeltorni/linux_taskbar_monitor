@@ -58,7 +58,7 @@ python3 -m pytest tests -q
 - `install.sh` — downloads, patches, configures, and enables Resource Monitor.
 - `src/` — Rust sources for the `rm-monitor` CLI (see `rm-monitor --help`).
 - `scripts/build_rm_monitor.sh` — build into `dist/rm-monitor` (cargo or container).
-- `lib/` — Bash installer modules (extension install, components, lifecycle).
+- `lib/` — Bash installer modules (extension install, patch wrappers, lifecycle).
 - `installer/components.sh` — selectable component manifest for the shared menu.
 - `installation_configs/` — default/empty selection snapshots for the orchestrator.
 - `tests/` — installer contract tests; patch behavior is covered by `cargo test`.

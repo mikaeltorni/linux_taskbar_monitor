@@ -12,7 +12,7 @@
 # copy on every run: receipt-based detection would report "already installed"
 # and skip re-applying the patches, leaving the extension unpatched.
 
-RM_SCHEMA="org.gnome.shell.extensions.resource-monitor"
+# Source-patch components have no GSettings uninstall (core re-extract reverts them).
 rm_ext_dir() { printf '%s\n' "$TARGET_HOME/.local/share/gnome-shell/extensions/$1"; }
 
 # Resolve the installed Resource Monitor extension's source files through the
@@ -92,7 +92,10 @@ uninstall_rm_panel_spacing() {
   fi
 }
 
-uninstall_rm_vram()     { msg "Disabling Resource Monitor VRAM display"; run_as_target gsettings reset "$RM_SCHEMA" gpumemorymonitor 2>/dev/null || true; }
+# Source patches (rm_vram, rm_gradient_colors, rm_per_disk, …) have no uninstall
+# handlers: install_resource_monitor_core re-extracts a clean zip every run, so
+# deselecting a patch and re-installing reverts it. Do not reset unrelated
+# GSettings keys as a fake uninstall.
 
 uninstall_window_rules() {
   msg "Removing app window-rules extension"
