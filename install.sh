@@ -165,17 +165,55 @@ source "$SCRIPT_DIR/lib/lifecycle.sh"
 # ── Component selection runtime and manifest ─────────────────────────────────
 # The manifest maps each component id to a configure_*/install_* function from
 # the lib files sourced above.
-# Load the shared installer component framework. Its single source of truth is
-# the linux_installation_scripts_functions repository (cloned as a sibling by
-# installation_scripts, or downloaded on demand) -- no per-repo vendored copy.
-for __isc_d in "${ISC_FUNCTIONS_DIR:-}" \
-               "$SCRIPT_DIR/../linux_installation_scripts_functions" \
-               "$HOME/projects/linux_installation_scripts_functions"; do
-  [ -n "$__isc_d" ] && [ -f "$__isc_d/component_loader.sh" ] && { source "$__isc_d/component_loader.sh"; break; }
+# Prefer the shared linux_installation_scripts_functions framework (sibling
+# checkout or on-demand download). When that framework is unreachable — private
+# GitHub raw URLs, offline host, missing sibling — load the built-in fallback so
+# this repository remains a working standalone installer for core +
+# list/detect/default/select/uninstall/reconfigure.
+ISC_FRAMEWORK_ACTIVE=0
+if [ -n "${ISC_FUNCTIONS_DIR:-}" ]; then
+  # Explicit override is exclusive so callers can force the built-in fallback
+  # (e.g. ISC_FUNCTIONS_DIR=/nonexistent) without the sibling search winning.
+  __isc_search_paths=("$ISC_FUNCTIONS_DIR")
+else
+  __isc_search_paths=(
+    "$SCRIPT_DIR/../linux_installation_scripts_functions"
+    "$HOME/projects/linux_installation_scripts_functions"
+  )
+fi
+for __isc_d in "${__isc_search_paths[@]}"; do
+  if [ -n "$__isc_d" ] && [ -f "$__isc_d/component_loader.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$__isc_d/component_loader.sh"
+    if declare -F isc_activate_components >/dev/null 2>&1 \
+       && isc_activate_components; then
+      ISC_FRAMEWORK_ACTIVE=1
+      break
+    fi
+  fi
 done
-declare -F isc_activate_components >/dev/null 2>&1 || \
-  source <(curl -fsSL "https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${ISC_FUNCTIONS_REF:-master}/component_loader.sh")
-isc_activate_components
+unset __isc_search_paths
+if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ]; then
+  __isc_ref="${ISC_FUNCTIONS_REF:-master}"
+  __isc_url="https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${__isc_ref}/component_loader.sh"
+  if need_cmd curl && __isc_body="$(curl -fsSL "$__isc_url" 2>/dev/null)" \
+     && [ -n "$__isc_body" ]; then
+    # shellcheck source=/dev/null
+    source <(printf '%s\n' "$__isc_body")
+    if declare -F isc_activate_components >/dev/null 2>&1 \
+       && isc_activate_components; then
+      ISC_FRAMEWORK_ACTIVE=1
+    fi
+  fi
+  unset __isc_ref __isc_url __isc_body
+fi
+if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ]; then
+  # Warnings on stderr only — stdout is reserved for --list-components / --detect.
+  msg "WARN: installer component framework unavailable; using built-in standalone fallback." >&2
+  msg "      Clone linux_installation_scripts_functions as a sibling (or set ISC_FUNCTIONS_DIR) for the full menu." >&2
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib/standalone_component_fallback.sh"
+fi
 source "$SCRIPT_DIR/installer/components.sh"
 
 # ── Main installer logic ─────────────────────────────────────────────────────
