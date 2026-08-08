@@ -271,6 +271,20 @@ def test_default_json_lists_every_default_on_component():
     assert set(ids) == set(default["components"].keys())
     for cid in ids:
         assert default["components"][cid]["on"] == 1, cid
+    # window_rules stays optional / default-off and is not in the default snapshot.
+    assert "window_rules" not in default["components"]
+    assert re.search(
+        r'"window_rules\|[^"]+\|off\|',
+        components,
+    ), "window_rules must default off for public installs"
+
+
+def test_window_rules_ships_empty_rules_not_personal_policy():
+    source = (ROOT_DIR / "lib" / "window_rules_extension.sh").read_text(encoding="utf-8")
+    assert "const RULES = [];" in source
+    assert "gitkraken" not in source.lower()
+    assert "monkeytype" not in source.lower()
+    assert "window-rules-skipped-x11" in source
 
 
 def test_dead_dash_to_panel_helpers_are_gone():

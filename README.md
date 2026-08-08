@@ -192,7 +192,7 @@ runs before component selection on fresh installs). Optional default-on componen
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |
 | `rm_process_popup` | Per-process CPU popup (left-click) | on |
-| `window_rules` | App window-rules extension (Wayland) | on |
+| `window_rules` | App window-rules extension (Wayland; empty rules) | off |
 
 ## Troubleshooting
 
