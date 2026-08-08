@@ -129,7 +129,7 @@ uninstall_window_rules() {
   # fails, so a deleted tree is not left referenced as enabled.
   if declare -F remove_gsettings_list >/dev/null 2>&1; then
     remove_gsettings_list org.gnome.shell enabled-extensions "app-rules@local" \
-      || msg "WARN: could not remove app-rules@local from enabled-extensions"
+      || msg "WARN: could not remove app-rules@local from enabled-extensions" >&2
   fi
   run_as_target rm -rf "$(rm_ext_dir app-rules@local)"
   if declare -F window_rules_skip_marker >/dev/null 2>&1; then

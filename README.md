@@ -119,9 +119,9 @@ python3 -m pytest tests -q
 | `--schema-dir PATH` | Extension schemas directory (auto-detected when omitted) |
 
 `--disk-space-perc` remains as a hidden legacy alias for `--disk-space-gb`.
-Passing `--disk-space-gb` without `--gpu-memory-perc` also sets `gpumemoryunit` to
-numeric (the upstream default); pass both flags together when configuring GPU and
-disk in one call.
+Passing `--disk-space-gb` alone does not change `gpumemoryunit`; pass
+`--gpu-memory-perc` when you want GPU memory shown as a percentage. The
+installer sets `gpumemoryunit` to numeric itself after configure.
 
 ## Configuration
 
