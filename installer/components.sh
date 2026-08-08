@@ -19,7 +19,20 @@
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
 ISC_REPO_LABEL="Linux Taskbar Monitor"
 
+# Fail early (before optional components) when the session bus cannot be read —
+# enable_shell_extension also fail-hards, but preflight surfaces the problem
+# before patch work for selectable components.
+ISC_PREFLIGHT="isc_preflight_session_bus"
 ISC_POSTFLIGHT="report_sudo_required"
+
+# isc_preflight_session_bus — Verify org.gnome.shell enabled-extensions is readable.
+isc_preflight_session_bus() {
+  if ! run_as_target gsettings get org.gnome.shell enabled-extensions >/dev/null; then
+    msg "ERROR: cannot read org.gnome.shell enabled-extensions (session bus unavailable?)"
+    return 1
+  fi
+  return 0
+}
 
 # The Resource Monitor extension is the program's mandatory core: install.sh
 # installs it unconditionally (install_resource_monitor_core) before this

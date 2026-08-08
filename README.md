@@ -201,8 +201,16 @@ runs before component selection on fresh installs). Optional default-on componen
 
 If `nvidia-smi` is unavailable, GPU device list configuration is skipped.
 
+If `curl`, `unzip`, or `glib-compile-schemas` are missing, re-run with
+`sudo bash install.sh` so apt can install `curl`, `unzip`, and `libglib2.0-bin`
+(or install those packages yourself).
+
 If `rm-monitor` cannot build, install `cargo` (`sudo apt install cargo` or
 rustup) or provide Docker/Podman for `scripts/build_rm_monitor.sh`.
+
+If enable fails with “refusing to rewrite list”, the user session D-Bus is not
+reachable from the installer (common over SSH without the session bus). Run the
+installer from the logged-in desktop session instead.
 
 If GNOME Shell does not show the updated indicator immediately, log out and
 back in. Do not reload GNOME Shell extensions from an active Wayland session
