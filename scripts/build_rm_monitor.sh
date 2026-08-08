@@ -46,8 +46,20 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# have_binary PATH — True when PATH is an executable file.
-have_binary() { [ -x "$1" ]; }
+# reclaim_build_artifacts_for_invoker — When this script runs under sudo, cargo
+# writes root-owned dist/ and target/. Hand them back to SUDO_USER so a later
+# non-root `bash install.sh` can rebuild without permission errors.
+reclaim_build_artifacts_for_invoker() {
+  local owner
+  [ "$(id -u)" -eq 0 ] || return 0
+  owner="${SUDO_USER:-}"
+  [ -n "$owner" ] && [ "$owner" != root ] || return 0
+  for path in "$DIST_DIR" "$REPO_ROOT/target" "$REPO_ROOT/.cargo-container"; do
+    [ -e "$path" ] || continue
+    chown -R "$owner:$owner" "$path" 2>/dev/null || \
+      log "WARNING: could not chown $path to $owner"
+  done
+}
 
 # sources_newer_than_dist — True when Cargo.toml, Cargo.lock, or any src/*.rs
 # is newer than dist/rm-monitor. Used only for the no-cargo fallback path.
@@ -149,6 +161,8 @@ main() {
     log "Build finished but $DIST_BIN is missing or not executable."
     exit 1
   fi
+
+  reclaim_build_artifacts_for_invoker
 
   if [ "$PRINT_ONLY" -eq 1 ]; then
     printf '%s\n' "$DIST_BIN"

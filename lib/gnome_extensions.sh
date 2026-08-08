@@ -282,6 +282,8 @@ install_resource_monitor_core() {
   curl -fL "$RESOURCE_MONITOR_EXTENSION_URL" -o "$zip_file"
   if [ -n "$RESOURCE_MONITOR_EXTENSION_SHA256" ]; then
     printf "%s  %s\n" "$RESOURCE_MONITOR_EXTENSION_SHA256" "$zip_file" | sha256sum -c -
+  else
+    msg "WARNING: RESOURCE_MONITOR_EXTENSION_SHA256 is empty; skipping zip integrity check"
   fi
 
   # Stage extract + refresh patch + metadata pin BEFORE touching the live tree

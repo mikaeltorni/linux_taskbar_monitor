@@ -137,6 +137,12 @@ apt_install() {
   DEBIAN_FRONTEND=noninteractive apt install -y "${missing[@]}"
 }
 
+# ensure_runtime_deps — Apt-install tools required by the Resource Monitor core
+# path when running as root. Non-root runs note the missing packages instead.
+ensure_runtime_deps() {
+  apt_install curl unzip libglib2.0-bin
+}
+
 # ensure_rm_monitor_tools: Build or locate the rm-monitor Rust CLI used for every
 # Resource Monitor patch/config helper. Prefers an existing dist/ binary, then
 # local cargo, then a Docker/Podman rust image (see scripts/build_rm_monitor.sh).
@@ -146,6 +152,7 @@ apt_install() {
 # Returns:
 #   0 when dist/rm-monitor is ready, 1 when it could not be produced.
 ensure_rm_monitor_tools() {
+  ensure_runtime_deps
   if ensure_rm_monitor_bin; then
     return 0
   fi
