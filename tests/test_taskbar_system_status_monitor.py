@@ -47,6 +47,17 @@ def test_core_fails_when_metadata_pin_fails():
     assert 'ISC_REPO_LABEL="Linux Taskbar Monitor"' in components
 
 
+def test_core_publishes_via_new_dir_then_rename():
+    """Live replace must not rm -rf before a successful staged copy."""
+    core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    assert 'publish_dir="${ext_dir}.new"' in core
+    assert 'mv "$publish_dir" "$ext_dir"' in core
+    # Destructive wipe of the live tree must come after the staged copy.
+    assert core.index('cp -a "$staging/." "$publish_dir/"') < core.index(
+        'rm -rf "$ext_dir"'
+    )
+
+
 def test_gnome_extension_module_installs_resource_monitor():
     """Resource Monitor core should patch and configure the downloaded extension."""
     source = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
@@ -307,15 +318,16 @@ def test_dead_dash_to_panel_helpers_are_gone():
 
 
 def test_source_patch_vram_has_no_fake_gsettings_uninstall():
-    """rm_vram uninstall must not reset gpumemorymonitor (wrong key / no-op)."""
+    """rm_vram uninstall must fail hard (core re-extract), not reset gsettings."""
     components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
     lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
     vram_row = [
         line for line in components.splitlines() if line.strip().startswith('"rm_vram|')
     ][0]
-    assert "uninstall_rm_vram" not in vram_row
-    assert "uninstall_rm_vram" not in lifecycle
+    assert "uninstall_rm_vram" in vram_row
+    assert "uninstall_rm_source_patch" in lifecycle
     assert "gpumemorymonitor" not in lifecycle
+    assert "core re-extract" in lifecycle
 
 
 def test_refresh_interval_has_live_detect():

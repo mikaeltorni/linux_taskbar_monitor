@@ -26,15 +26,23 @@ window_rules_skip_marker() {
 configure_window_rules_extension() {
   msg "Installing local GNOME Shell window rules (Wayland workspace/sticky)"
 
-  if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
-    msg "X11 session detected; skipping custom window-rules extension."
-    local marker dir
-    marker="$(window_rules_skip_marker)"
-    dir="$(dirname "$marker")"
-    run_as_target mkdir -p "$dir"
-    printf 'skipped\n' | run_as_target tee "$marker" >/dev/null
-    return 0
-  fi
+  case "${SESSION_TYPE:-}" in
+    wayland)
+      ;;
+    x11|xorg)
+      msg "X11 session detected; skipping custom window-rules extension."
+      local marker dir
+      marker="$(window_rules_skip_marker)"
+      dir="$(dirname "$marker")"
+      run_as_target mkdir -p "$dir"
+      printf 'skipped\n' | run_as_target tee "$marker" >/dev/null
+      return 0
+      ;;
+    *)
+      msg "ERROR: SESSION_TYPE=${SESSION_TYPE:-unset}; refusing window-rules (need wayland)." >&2
+      return 1
+      ;;
+  esac
 
   # Installing on Wayland: clear any prior X11 skip marker.
   run_as_target rm -f "$(window_rules_skip_marker)" 2>/dev/null || true

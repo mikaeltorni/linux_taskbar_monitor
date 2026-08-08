@@ -84,12 +84,13 @@ mkdir -p "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"
 detect_window_rules || fail "detect_window_rules should accept an installed app-rules@local"
 rm -rf "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"
 detect_window_rules && fail "detect_window_rules should reject removed app-rules@local"
-# X11 skip marker must satisfy detect so configure no-ops do not loop as absent.
+# X11 skip marker must satisfy detect on X11 so configure no-ops do not loop.
 mkdir -p "$TARGET_HOME/.config/taskbar-system-status-monitor"
 printf 'skipped\n' >"$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11"
-detect_window_rules || fail "detect_window_rules should accept the X11 skip marker"
+SESSION_TYPE=x11 detect_window_rules || fail "detect_window_rules should accept the X11 skip marker on X11"
+SESSION_TYPE=wayland detect_window_rules && fail "detect_window_rules must ignore X11 skip marker on Wayland"
 rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11"
-detect_window_rules && fail "detect_window_rules should reject after skip marker removal"
+SESSION_TYPE=x11 detect_window_rules && fail "detect_window_rules should reject after skip marker removal"
 
 # --- Refresh interval detect compares schema value to configured ms --------
 mkdir -p "$EXT_DIR/schemas"

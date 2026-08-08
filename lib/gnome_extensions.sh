@@ -110,18 +110,18 @@ apply_resource_monitor_width_gsettings() {
 }
 
 # apply_resource_monitor_spacing_mode - Apply the configured spacing mode to the
-# installed Resource Monitor. Sets the *width GSettings (left to upstream
-# defaults when compact) and runs the patch-stable-width CLI in the matching
+# installed Resource Monitor. Sets the *width GSettings to reserved values
+# (stable) or 0 (compact) and runs the patch-stable-width CLI in the matching
 # mode so the secondary disk-activity reservation (when rm_per_disk applied it)
-# and GPU VRAM split follow. Safe before installation: only acts when the
-# extension dir is present.
+# and GPU VRAM split follow. Returns 1 when the extension schemas are missing
+# so --reconfigure does not mark a false success.
 apply_resource_monitor_spacing_mode() {
   local ext_dir mode
   ext_dir="$(resource_monitor_ext_dir)"
   mode="$(resource_monitor_spacing_mode)"
   if [ ! -d "$ext_dir/schemas" ]; then
-    msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation." >&2
-    return 0
+    msg "Resource Monitor is not installed yet; cannot apply spacing mode." >&2
+    return 1
   fi
   msg "Applying Resource Monitor panel spacing mode: ${mode}"
   apply_resource_monitor_width_gsettings "$ext_dir" "$mode"
@@ -140,10 +140,13 @@ configure_resource_monitor_spacing() {
     read -r -e -i "$current" -p "Resource Monitor panel spacing [stable|compact]: " value </dev/tty || return 1
     case "$value" in
       stable|compact)
-        if persist_resource_monitor_spacing_mode "$value"; then
-          apply_resource_monitor_spacing_mode
-          return 0
+        persist_resource_monitor_spacing_mode "$value" || return 1
+        if [ -d "$(resource_monitor_ext_dir)/schemas" ]; then
+          apply_resource_monitor_spacing_mode || return 1
+        else
+          msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation." >&2
         fi
+        return 0
         ;;
       *) msg "Type 'stable' or 'compact'." >&2 ;;
     esac
@@ -194,22 +197,23 @@ persist_resource_monitor_refresh_interval() {
 }
 
 # apply_resource_monitor_refresh_interval - Apply the persisted interval to an
-# installed Resource Monitor schema. It is safe before installation: the core
-# installer will consume the persisted value when it creates the schema.
+# installed Resource Monitor schema. Returns 1 when schemas are missing so
+# --reconfigure does not mark a false success; configure persists anyway and
+# skips apply until core install.
 apply_resource_monitor_refresh_interval() {
   local ext_dir seconds
   ext_dir="$(resource_monitor_ext_dir)"
   seconds="$(resource_monitor_refresh_seconds)"
-  if [ -d "$ext_dir/schemas" ]; then
-    if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
-      msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
-      return 1
-    fi
-    msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
-    _isc_mark_installed "rm_refresh_interval" || true
-  else
-    msg "Resource Monitor is not installed yet; saved update time will apply during installation." >&2
+  if [ ! -d "$ext_dir/schemas" ]; then
+    msg "Resource Monitor is not installed yet; cannot apply update time." >&2
+    return 1
   fi
+  if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
+    msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
+    return 1
+  fi
+  msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
+  _isc_mark_installed "rm_refresh_interval" || true
 }
 
 # configure_resource_monitor_refresh_interval - Open a typeable field prefilled
@@ -222,7 +226,11 @@ configure_resource_monitor_refresh_interval() {
     value=""
     read -r -e -i "$current" -p "Resource Monitor update time in ms (100-2000): " value </dev/tty || return 1
     if persist_resource_monitor_refresh_interval "$value"; then
-      apply_resource_monitor_refresh_interval
+      if [ -d "$(resource_monitor_ext_dir)/schemas" ]; then
+        apply_resource_monitor_refresh_interval || return 1
+      else
+        msg "Resource Monitor is not installed yet; saved update time will apply during installation." >&2
+      fi
       return 0
     fi
   done
@@ -304,17 +312,21 @@ install_resource_monitor_core() {
   patch_extension_metadata "$staging" metadata.json "$shell_version" 9999
 
   run_as_target mkdir -p "$(dirname "$ext_dir")"
-  run_as_target rm -rf "$ext_dir"
-  run_as_target mkdir -p "$ext_dir"
-  # Cross-device-safe publish: copy staged tree into the live extension path.
+  # Atomic-ish publish: stage into $ext_dir.new, then replace the live tree so a
+  # failed cp cannot leave an empty half-deleted extension directory.
+  local publish_dir="${ext_dir}.new"
+  run_as_target rm -rf "$publish_dir"
+  run_as_target mkdir -p "$publish_dir"
   if declare -F run_as_target >/dev/null 2>&1; then
-    run_as_target cp -a "$staging/." "$ext_dir/"
+    run_as_target cp -a "$staging/." "$publish_dir/"
   else
-    cp -a "$staging/." "$ext_dir/"
+    cp -a "$staging/." "$publish_dir/"
   fi
   if [ "$(id -u)" -eq 0 ]; then
-    chown -R "$TARGET_USER:$TARGET_USER" "$ext_dir"
+    chown -R "$TARGET_USER:$TARGET_USER" "$publish_dir"
   fi
+  run_as_target rm -rf "$ext_dir"
+  run_as_target mv "$publish_dir" "$ext_dir"
   rm -rf "$tmpdir"
   trap - RETURN
 
