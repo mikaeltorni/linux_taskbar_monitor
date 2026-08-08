@@ -116,5 +116,11 @@ uninstall_rm_panel_spacing() {
 uninstall_window_rules() {
   msg "Removing app window-rules extension"
   run_as_target gnome-extensions disable app-rules@local 2>/dev/null || true
+  # Drop the UUID from enabled-extensions even when gnome-extensions disable
+  # fails, so a deleted tree is not left referenced as enabled.
+  if declare -F remove_gsettings_list >/dev/null 2>&1; then
+    remove_gsettings_list org.gnome.shell enabled-extensions "app-rules@local" \
+      || msg "WARN: could not remove app-rules@local from enabled-extensions"
+  fi
   run_as_target rm -rf "$(rm_ext_dir app-rules@local)"
 }
