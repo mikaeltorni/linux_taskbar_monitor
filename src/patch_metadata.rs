@@ -44,7 +44,7 @@ fn load(path: &Path) -> Result<Value, MetadataError> {
 }
 
 fn store(path: &Path, data: &Value) -> Result<(), MetadataError> {
-    fs::write(path, python_json_dumps(data))?;
+    crate::patch_text::write_atomic(path, &python_json_dumps(data))?;
     Ok(())
 }
 

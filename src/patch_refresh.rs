@@ -160,7 +160,7 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
 
     let any_changed = !pending.is_empty();
     for (path, content, relative_path) in &pending {
-        fs::write(path, content)?;
+        crate::patch_text::write_atomic(path, content)?;
         logging::info(format!("Patched {relative_path} for sub-second refresh"));
     }
 

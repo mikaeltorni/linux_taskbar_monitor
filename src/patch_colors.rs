@@ -388,7 +388,7 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ColorsError> 
             if !migrated.contains("colors === this._diskSpaceColors") {
                 return Err(ColorsError::MissingIdentityMigration);
             }
-        } else {
+        } else if migrated == content {
             logging::info("Colors already patched — skipping");
             println!("Colors already patched — skipping");
         }
@@ -450,7 +450,7 @@ pub fn run(extension_path: &Path) -> i32 {
         return 0;
     }
 
-    if let Err(err) = fs::write(extension_path, patched) {
+    if let Err(err) = crate::patch_text::write_atomic(extension_path, &patched) {
         logging::error(format!(
             "Could not write {}: {err}",
             extension_path.display()

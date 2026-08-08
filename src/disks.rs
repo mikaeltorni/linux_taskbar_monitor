@@ -51,12 +51,12 @@ pub fn parse_df_output(output: &str) -> Vec<Device> {
         }
 
         let filesystem = parts[0];
-        let mount_point = parts[5];
+        let mount_point = parts[5..].join(" ");
         if !filesystem.starts_with("/dev/") {
             continue;
         }
 
-        entries.push(build_disk_device_entry(filesystem, mount_point));
+        entries.push(build_disk_device_entry(filesystem, &mount_point));
     }
 
     entries
@@ -180,10 +180,14 @@ tmpfs              3276800     22000   3254800       1% /run\n\
     }
 
     #[test]
-    fn parse_handles_header_only_and_empty_input() {
-        assert!(parse_df_output("").is_empty());
-        assert!(parse_df_output("Filesystem 1024-blocks Used Available Capacity Mounted on")
-            .is_empty());
+    fn parse_preserves_mount_points_with_spaces() {
+        let output = "\
+Filesystem     1024-blocks Used Available Capacity Mounted on
+/dev/sda2           100000  50   99950      1% /mnt/my data
+";
+        let entries = parse_df_output(output);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].to_json().contains(r#""mountPoint": "/mnt/my data""#), true);
     }
 
     #[test]

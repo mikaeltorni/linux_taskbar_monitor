@@ -167,8 +167,10 @@ const FIXED_DISK_CONTAINER: &str = r#"export const DiskContainerSpace = GObject.
   }
 );"#;
 
-/// Marker proving `containers.js` already carries the current disk patch.
-const DISK_CONTAINER_MARKER: &str = "this._elementsSecondaryUnit[filesystem].style = style;";
+/// Marker proving `containers.js` already carries the current disk patch
+/// (secondary unit is `%`, not the older broken `"GB"` form).
+const DISK_CONTAINER_MARKER: &str =
+    "this._elementsSecondaryUnit[filesystem] = _createUnitLabel(\"%\", [";
 
 /// Required by both container migrations: the patched `_init` field list.
 const SECONDARY_INIT_MARKER: &str = "this._elementsSecondaryValue = [];";
@@ -288,11 +290,25 @@ const DISK_ACTIVITY_HELPER_BODY: &str = r#"function getDiskSpaceActivityPercent(
     }
 
     const diskName = filesystem.replace(/^\/dev\//, "");
+    const names = [diskName];
+    // LVM/mapper paths show as /dev/mapper/foo while diskstats uses dm-N.
+    try {
+      const linkTarget = GLib.file_read_link(filesystem);
+      if (linkTarget) {
+        const base = String(linkTarget).replace(/^.*\//, "");
+        if (base && !names.includes(base)) {
+          names.push(base);
+        }
+      }
+    } catch (_linkError) {
+      // Not a symlink — keep the basename match only.
+    }
+
     const diskStatsLine = new TextDecoder()
       .decode(diskStatsContents)
       .split("\n")
       .map((line) => line.trim().split(/\s+/))
-      .find((fields) => fields.length >= 13 && fields[2] === diskName);
+      .find((fields) => fields.length >= 13 && names.includes(fields[2]));
 
     if (!diskStatsLine) {
       return 0;
@@ -496,7 +512,7 @@ const FIXED_DISK_REFRESH_RESULT: &str = r#"        return {
           usedPercent: size > 0 ? Math.round((100 * (size - free)) / size) : 0,
         };"#;
 
-const DISK_ROW_KEY_MARKER: &str = "filesystem: device.mountPoint || device.device";
+const DISK_ROW_KEY_MARKER: &str = "devicePath: device.device,";
 
 const ACTIVITY_HELPER_MARKER: &str =
     "function getDiskSpaceActivityPercent(indicator, filesystem)";
@@ -955,7 +971,7 @@ pub fn run(containers_path: &Path) -> i32 {
 
     let mut any_changed = false;
     if patched_containers != containers_content {
-        if let Err(err) = fs::write(containers_path, &patched_containers) {
+        if let Err(err) = crate::patch_text::write_atomic(containers_path, &patched_containers) {
             logging::error(format!(
                 "Could not write {}: {err}",
                 containers_path.display()
@@ -966,7 +982,7 @@ pub fn run(containers_path: &Path) -> i32 {
         any_changed = true;
     }
     if patched_refreshers != refreshers_content {
-        if let Err(err) = fs::write(&refreshers_path, &patched_refreshers) {
+        if let Err(err) = crate::patch_text::write_atomic(&refreshers_path, &patched_refreshers) {
             logging::error(format!(
                 "Could not write {}: {err}",
                 refreshers_path.display()
@@ -978,7 +994,7 @@ pub fn run(containers_path: &Path) -> i32 {
     }
     if let (Some(patched), Some(original)) = (patched_extension, extension_content) {
         if patched != original {
-            if let Err(err) = fs::write(&extension_path, &patched) {
+            if let Err(err) = crate::patch_text::write_atomic(&extension_path, &patched) {
                 logging::error(format!(
                     "Could not write {}: {err}",
                     extension_path.display()
@@ -1038,20 +1054,17 @@ mod tests {
     }
 
     #[test]
-    fn broken_patched_container_only_gains_the_missing_unit_style() {
-        // This older form already carries the marker, so the snippet rewrite
-        // short-circuits and only the style normalization applies — matching
-        // the JavaScript patcher this module replaces.
+    fn broken_patched_container_migrates_to_fixed_form() {
+        // Older broken form already had secondary units but lacked _init /
+        // cleanup and used "GB" for the secondary unit. The marker must not
+        // short-circuit that migration.
         let patched = patch_containers(BROKEN_PATCHED_DISK_CONTAINER).expect("patch");
-        assert_eq!(
-            patched,
-            BROKEN_PATCHED_DISK_CONTAINER.replacen(
-                UNIT_TEXT_LINE,
-                &format!("{UNIT_TEXT_LINE}{UNIT_STYLE_LINE}"),
-                1
-            )
-        );
         assert!(patched.contains(DISK_CONTAINER_MARKER));
+        assert!(patched.contains("cleanup_elements()"));
+        assert!(patched.contains(r#"_createUnitLabel("%""#));
+        assert!(!patched.contains(
+            "this._elementsSecondaryUnit[filesystem] = _createUnitLabel(\"GB\""
+        ));
     }
 
     #[test]
