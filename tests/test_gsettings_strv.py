@@ -54,6 +54,17 @@ def test_installer_uses_rm_monitor_gsettings_strv():
     assert "scripts/gsettings_strv.py" not in installer
 
 
+def test_append_gsettings_list_never_invents_empty_on_get_failure():
+    """Failed gsettings get must not become CURRENT=[] (would wipe enabled-extensions)."""
+    installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+    assert 'echo "[]"' not in installer
+    assert "|| echo" not in installer.split("append_gsettings_list()")[1].split(
+        "remove_gsettings_list()"
+    )[0]
+    assert "refusing to rewrite list" in installer
+    assert "remove_gsettings_list()" in installer
+
+
 def test_rm_monitor_forwards_current_under_sudo():
     """CURRENT must survive sudo env_reset or enabled-extensions can be wiped."""
     helper = (ROOT / "lib" / "rm_monitor_bin.sh").read_text(encoding="utf-8")

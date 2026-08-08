@@ -97,10 +97,35 @@ report_sudo_required() {
   msg "Apply them with: sudo bash install.sh"
 }
 
+# append_gsettings_list SCHEMA KEY VALUE — Append VALUE to a GSettings `as` list.
+# Reads the live list first. Never invents an empty list on read failure: a
+# missing session bus / failed `gsettings get` must abort so we cannot wipe
+# org.gnome.shell enabled-extensions down to only the UUID being enabled.
 append_gsettings_list() {
   local schema="$1" key="$2" value="$3" current newlist
-  current="$(run_as_target gsettings get "$schema" "$key" 2>/dev/null || echo "[]")"
-  newlist="$(CURRENT="$current" rm_monitor gsettings-strv append "$value")"
+  if ! current="$(run_as_target gsettings get "$schema" "$key")"; then
+    msg "ERROR: gsettings get $schema $key failed (session bus unavailable?); refusing to rewrite list"
+    return 1
+  fi
+  if ! newlist="$(CURRENT="$current" rm_monitor gsettings-strv append "$value")"; then
+    msg "ERROR: gsettings-strv append failed for $schema $key (CURRENT was not a parseable list)"
+    return 1
+  fi
+  run_as_target gsettings set "$schema" "$key" "$newlist"
+}
+
+# remove_gsettings_list SCHEMA KEY VALUE — Remove VALUE from a GSettings `as` list.
+# Same fail-hard read policy as append_gsettings_list.
+remove_gsettings_list() {
+  local schema="$1" key="$2" value="$3" current newlist
+  if ! current="$(run_as_target gsettings get "$schema" "$key")"; then
+    msg "ERROR: gsettings get $schema $key failed (session bus unavailable?); refusing to rewrite list"
+    return 1
+  fi
+  if ! newlist="$(CURRENT="$current" rm_monitor gsettings-strv remove "$value")"; then
+    msg "ERROR: gsettings-strv remove failed for $schema $key (CURRENT was not a parseable list)"
+    return 1
+  fi
   run_as_target gsettings set "$schema" "$key" "$newlist"
 }
 
