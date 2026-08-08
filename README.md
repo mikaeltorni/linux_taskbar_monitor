@@ -1,12 +1,20 @@
-# Ubuntu 24.04 Taskbar System Status Monitor
+# Linux Taskbar Monitor
 
-Standalone installer for the GNOME Shell Resource Monitor taskbar status setup
-used on Ubuntu 24.04. Tested on Ubuntu 24.04 LTS.
+Standalone installer that patches the GNOME Shell **Resource Monitor** extension
+into a compact taskbar status strip (CPU, RAM, `/home` disk usage/activity,
+ethernet, GPU/VRAM).
 
-It downloads Resource Monitor v27, patches the extension display for GPU VRAM,
-disk usage rows, gradient colors, ethernet icon, process popup, and configurable
-100–2000 ms refreshes (500 ms by default), and configures the panel to show
-CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
+## Supported platforms
+
+**Tested on:** Ubuntu 24.04 LTS with GNOME Shell 46 (the version shipped by that
+release).
+
+**Not guaranteed elsewhere.** Other Ubuntu versions, other distributions, or
+other GNOME Shell major versions may work if they can run Resource Monitor v27
+and accept the same patch shapes, but they are untested. Treat anything outside
+Ubuntu 24.04 + GNOME 46 as best-effort: run the installer on a throwaway session
+first, and expect patch or schema mismatches if upstream Resource Monitor or
+Shell APIs differ.
 
 This repository is **fully standalone**: `bash install.sh` is enough. Soft
 loading of
@@ -15,6 +23,19 @@ loading of
 missing sibling never blocks installation. The optional master orchestrator
 `installation_scripts` may also invoke this installer — the component CLI
 contract (`--list-components`, `--select`, …) stays stable for that path.
+
+> **Rename note:** the intended GitHub repository name is `linux_taskbar_monitor`.
+> Until that rename lands, clones and orchestrator entries may still use the
+> historical directory name `ubuntu_2404_taskbar_system_status_monitor`. Machine
+> identifiers (`ISC_REPO_NAME`, `installation_configs` `repo` field) stay on the
+> historical name until the GitHub rename and orchestrator update happen together.
+
+## What it installs
+
+It downloads Resource Monitor v27, patches the extension display for GPU VRAM,
+disk usage rows, gradient colors, ethernet icon, process popup, and configurable
+100–2000 ms refreshes (500 ms by default), and configures the panel to show
+CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
 
 ## Technology Stack
 
@@ -205,7 +226,8 @@ financial-critical, or other high-risk use cases.
 
 The authors and copyright holders make no guarantees regarding security,
 reliability, availability, correctness, compliance, non-infringement, or
-fitness for any particular purpose.
+fitness for any particular purpose — including on platforms other than the
+tested Ubuntu 24.04 LTS / GNOME Shell 46 combination above.
 
 This notice is intended to clarify the nature of the project and does not
 impose additional restrictions beyond the MIT License.

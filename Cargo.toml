@@ -2,7 +2,7 @@
 name = "rm_monitor"
 version = "0.1.0"
 edition = "2021"
-description = "Standalone helpers for the Ubuntu taskbar Resource Monitor installer"
+description = "Standalone helpers for the Linux Taskbar Monitor Resource Monitor installer"
 license = "MIT"
 publish = false
 

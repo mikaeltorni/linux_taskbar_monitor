@@ -34,6 +34,17 @@ def test_core_fails_when_metadata_pin_fails():
     assert "gnome-shell" in readme
     assert "9999" in readme
     assert "staging directory" in readme
+    assert "Linux Taskbar Monitor" in readme
+    assert "Supported platforms" in readme
+    assert "Ubuntu 24.04 LTS" in readme
+    assert "Not guaranteed elsewhere" in readme
+    assert "GNOME Shell 46" in readme
+    # Machine id stays historical until the GitHub rename + orchestrator update.
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"' in components
+    assert 'ISC_REPO_LABEL="Linux Taskbar Monitor"' in components
 
 
 def test_gnome_extension_module_installs_resource_monitor():

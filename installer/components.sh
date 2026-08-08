@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# components.sh - Component manifest for ubuntu_2404_taskbar_system_status_monitor.
+# components.sh - Component manifest for Linux Taskbar Monitor.
 #
 # Maps each taskbar/extension component to the function (defined in lib/) that
 # installs it. install.sh defines its inline helpers and sources the lib files
@@ -11,9 +11,13 @@
 # Nested configurators are discovered when configure_fn (field 8) is non-empty.
 # Field 6 is an optional menu section heading — never a keyword like
 # "configurable".
+#
+# ISC_REPO_NAME stays on the historical GitHub slug until the repository is
+# renamed to linux_taskbar_monitor and the master orchestrator is updated in the
+# same change. ISC_REPO_LABEL is the user-facing display name.
 
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
-ISC_REPO_LABEL="Taskbar system status monitor"
+ISC_REPO_LABEL="Linux Taskbar Monitor"
 
 ISC_POSTFLIGHT="report_sudo_required"
 

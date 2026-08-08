@@ -1,5 +1,5 @@
-//! `rm-monitor` — standalone helpers for the Ubuntu taskbar Resource Monitor
-//! installer.
+//! `rm-monitor` — standalone helpers for the Linux Taskbar Monitor Resource
+//! Monitor installer (tested on Ubuntu 24.04 / GNOME Shell 46).
 //!
 //! One binary replaces the Python and Node helper scripts the installer used to
 //! shell out to, so a clean install needs no `python3` or `node` runtime. Each

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# install.sh - Install and configure the Ubuntu 24.04 taskbar system status monitor
-#              and related GNOME Shell extensions.
+# install.sh - Install and configure Linux Taskbar Monitor (Resource Monitor
+#              patches) and related GNOME Shell extensions.
+#
+# Tested on Ubuntu 24.04 LTS / GNOME Shell 46. Other distros or Shell majors
+# are untested — see README.md "Supported platforms".
 #
 # Mandatory core (always installed):
 #   - Resource Monitor extension (CPU/RAM/disk/GPU indicator)
@@ -164,7 +167,7 @@ case "${1:-}" in
     ;;
 esac
 
-msg "=== Taskbar System Status Monitor & GNOME Extensions Setup ==="
+msg "=== Linux Taskbar Monitor & GNOME Extensions Setup ==="
 # Build the Rust helper CLI before any patch/config step. Listing/detect modes
 # above already returned, so this never pollutes --list-components output.
 ensure_rm_monitor_tools || {
@@ -175,5 +178,5 @@ ensure_rm_monitor_tools || {
 # works regardless of which optional components the user selects below.
 install_resource_monitor_core
 component_main "$@"
-msg "=== Taskbar Setup Complete ==="
+msg "=== Linux Taskbar Monitor Setup Complete ==="
 msg "Log out and back in before testing GNOME Shell extension changes."
