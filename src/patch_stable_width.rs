@@ -145,9 +145,10 @@ pub enum StableWidthError {
     /// The compact-mode revert could not find the disk width constant.
     #[error("Could not find DiskContainerSpace._init stable-width constant to remove")]
     MissingDiskCompactInit,
-    /// The stable-mode patch could not find the disk-space `add_element` body.
+    /// The stable-mode patch could not find the disk-space `add_element` body
+    /// (and no stable-width marker is present, so this is not already-patched).
     #[error(
-        "Could not find disk-space target code in containers.js - patch may be already applied or unsupported version"
+        "Could not find disk-space target code in containers.js - unsupported Resource Monitor version (or rm_per_disk not applied yet)"
     )]
     MissingDiskAdd,
     /// The stable-mode patch could not find `DiskContainerSpace._init`.

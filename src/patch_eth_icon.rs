@@ -76,14 +76,16 @@ const NEW_SNIPPET: &str = r#"  _replaceGroupChildren(indicator._ethGroup, (addCh
 /// Failure while applying the ethernet-icon patch.
 #[derive(Debug, thiserror::Error)]
 pub enum EthIconError {
-    /// `_appendSimpleChildren` could not be located.
+    /// `_appendSimpleChildren` could not be located (and the null-icon guard
+    /// marker is also absent, so this is not the already-patched case).
     #[error(
-        "Could not find _appendSimpleChildren in mainGui.js - patch may be already applied or unsupported version"
+        "Could not find _appendSimpleChildren in mainGui.js - unsupported Resource Monitor version"
     )]
     MissingAppendSimpleChildren,
-    /// The ethernet group wiring could not be located.
+    /// The ethernet group wiring could not be located (and the eth-icon marker
+    /// is also absent, so this is not the already-patched case).
     #[error(
-        "Could not find ethernet group wiring in mainGui.js - patch may be already applied or unsupported version"
+        "Could not find ethernet group wiring in mainGui.js - unsupported Resource Monitor version"
     )]
     MissingEthWiring,
 }

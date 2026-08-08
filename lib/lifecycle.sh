@@ -100,7 +100,11 @@ detect_window_rules() {
   # Installed extension tree, or an explicit X11 skip marker so --detect does
   # not keep reporting absent after a successful X11 no-op configure.
   [ -d "$(rm_ext_dir app-rules@local)" ] && return 0
-  [ -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" ] && return 0
+  if declare -F window_rules_skip_marker >/dev/null 2>&1; then
+    [ -f "$(window_rules_skip_marker)" ] && return 0
+  else
+    [ -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" ] && return 0
+  fi
   return 1
 }
 
@@ -109,9 +113,8 @@ detect_window_rules() {
 # (reserved widths, no taskbar shift) and clear the persisted compact choice.
 uninstall_rm_panel_spacing() {
   msg "Reverting Resource Monitor panel spacing to stable (default)"
-  if persist_resource_monitor_spacing_mode stable; then
-    apply_resource_monitor_spacing_mode
-  fi
+  persist_resource_monitor_spacing_mode stable || return 1
+  apply_resource_monitor_spacing_mode
 }
 
 # Source patches (rm_vram, rm_gradient_colors, rm_per_disk, …) have no uninstall
@@ -129,6 +132,10 @@ uninstall_window_rules() {
       || msg "WARN: could not remove app-rules@local from enabled-extensions"
   fi
   run_as_target rm -rf "$(rm_ext_dir app-rules@local)"
-  run_as_target rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" \
-    2>/dev/null || true
+  if declare -F window_rules_skip_marker >/dev/null 2>&1; then
+    run_as_target rm -f "$(window_rules_skip_marker)" 2>/dev/null || true
+  else
+    run_as_target rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" \
+      2>/dev/null || true
+  fi
 }
