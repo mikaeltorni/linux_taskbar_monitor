@@ -19,10 +19,12 @@ Shell APIs differ.
 This repository is **fully standalone**: `bash install.sh` is enough. Soft
 loading of
 [`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions)
-(sibling checkout or on-demand download) powers the optional component menu; a
-missing sibling never blocks installation. The optional master orchestrator
-`installation_scripts` may also invoke this installer — the component CLI
-contract (`--list-components`, `--select`, …) stays stable for that path.
+(sibling checkout or on-demand download) powers the interactive component menu
+and config export. When that framework is unreachable (private raw URL, offline
+host, or no sibling), the installer loads a built-in fallback that still
+supports `--default` / `--all` / `--select` / `--list-components` / `--detect` /
+`--reconfigure` / `--uninstall`. Set `ISC_FUNCTIONS_DIR` to an explicit checkout
+to force the full framework, or to a missing path to force the fallback.
 
 > **Rename note:** the intended GitHub repository name is `linux_taskbar_monitor`.
 > Until that rename lands, clones and orchestrator entries may still use the
@@ -130,7 +132,7 @@ Environment overrides (used when no persisted file exists yet):
 | `RESOURCE_MONITOR_SPACING_MODE` | `stable` or `compact` (seed; file wins if present) |
 | `RESOURCE_MONITOR_REFRESH_INTERVAL_MS` | 100–2000 (default 500; file wins if present) |
 | `RM_MONITOR_RUST_IMAGE` | Container image for builds (default `rust:1-bookworm`) |
-| `ISC_FUNCTIONS_DIR` | Override path to `linux_installation_scripts_functions` |
+| `ISC_FUNCTIONS_DIR` | Explicit framework checkout (exclusive when set; missing path forces built-in fallback) |
 | `ISC_FUNCTIONS_REF` | Git ref for the on-demand framework download (default `master`) |
 
 Persisted under `~/.config/taskbar-system-status-monitor/` once chosen in the
