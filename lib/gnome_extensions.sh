@@ -120,7 +120,7 @@ apply_resource_monitor_spacing_mode() {
   ext_dir="$(resource_monitor_ext_dir)"
   mode="$(resource_monitor_spacing_mode)"
   if [ ! -d "$ext_dir/schemas" ]; then
-    msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation."
+    msg "Resource Monitor is not installed yet; saved spacing mode will apply during installation." >&2
     return 0
   fi
   msg "Applying Resource Monitor panel spacing mode: ${mode}"
@@ -208,7 +208,7 @@ apply_resource_monitor_refresh_interval() {
     msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
     _isc_mark_installed "rm_refresh_interval" || true
   else
-    msg "Resource Monitor is not installed yet; saved update time will apply during installation."
+    msg "Resource Monitor is not installed yet; saved update time will apply during installation." >&2
   fi
 }
 

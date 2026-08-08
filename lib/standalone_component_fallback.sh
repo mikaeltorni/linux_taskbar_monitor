@@ -9,10 +9,15 @@
 # master orchestrator and README document. Interactive TTY menus and
 # installation_config JSON export still require the full framework.
 #
-# Depends on: msg, ISC_COMPONENTS (after installer/components.sh is sourced),
-#             ISC_REPO_NAME, ISC_REPO_LABEL, ISC_POSTFLIGHT (optional),
-#             TARGET_HOME, and the install/detect/uninstall functions named in
-#             the manifest.
+# Depends on: msg, run_as_target, ISC_COMPONENTS (after installer/components.sh
+# is sourced), ISC_REPO_NAME, ISC_REPO_LABEL, ISC_PREFLIGHT / ISC_POSTFLIGHT
+# (optional), TARGET_HOME, and the install/detect/uninstall functions named in
+# the manifest.
+
+# Framework-compatible aliases so patch helpers that call _isc_mark_installed
+# keep working when only the fallback is loaded.
+_isc_mark_installed() { _sc_mark_installed "$@"; }
+_isc_clear_receipt() { _sc_clear_receipt "$@"; }
 
 # _sc_field ID INDEX — Print pipe-field INDEX (0-based) for component ID.
 _sc_field() {
@@ -54,12 +59,24 @@ _sc_receipt_dir() {
 _sc_mark_installed() {
   local id="$1" dir
   dir="$(_sc_receipt_dir)"
-  mkdir -p "$dir" 2>/dev/null || return 0
-  printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" >"$dir/$id" 2>/dev/null || true
+  if declare -F run_as_target >/dev/null 2>&1; then
+    run_as_target mkdir -p "$dir" 2>/dev/null || return 0
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \
+      | run_as_target tee "$dir/$id" >/dev/null 2>/dev/null || true
+  else
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" >"$dir/$id" 2>/dev/null || true
+  fi
 }
 
 _sc_clear_receipt() {
-  rm -f "$(_sc_receipt_dir)/$1" 2>/dev/null || true
+  local path
+  path="$(_sc_receipt_dir)/$1"
+  if declare -F run_as_target >/dev/null 2>&1; then
+    run_as_target rm -f "$path" 2>/dev/null || true
+  else
+    rm -f "$path" 2>/dev/null || true
+  fi
 }
 
 _sc_is_installed() {
@@ -83,18 +100,18 @@ _sc_run_selected() {
     if (( ran == 0 )) && [[ -n "${ISC_PREFLIGHT:-}" ]] \
        && declare -F "$ISC_PREFLIGHT" >/dev/null 2>&1; then
       "$ISC_PREFLIGHT" || {
-        msg "WARN: preflight '$ISC_PREFLIGHT' reported a problem (continuing)"
+        msg "WARN: preflight '$ISC_PREFLIGHT' reported a problem (continuing)" >&2
       }
     fi
     ran=$((ran + 1))
     if [[ -z "$fn" ]] || ! declare -F "$fn" >/dev/null 2>&1; then
-      msg "WARN: install function for '$id' is missing — skipping"
+      msg "WARN: install function for '$id' is missing — skipping" >&2
       failed+=("$id")
       continue
     fi
     msg "[${ISC_REPO_NAME:-installer}] Installing component: $label ($id)"
     if ! "$fn"; then
-      msg "WARN: component '$id' failed (continuing)"
+      msg "WARN: component '$id' failed (continuing)" >&2
       failed+=("$id")
     else
       _sc_mark_installed "$id"
@@ -108,7 +125,7 @@ _sc_run_selected() {
     msg "[${ISC_REPO_NAME:-installer}] No components selected — nothing to do."
   fi
   if (( ${#failed[@]} > 0 )); then
-    msg "[${ISC_REPO_NAME:-installer}] Components with failures: ${failed[*]}"
+    msg "[${ISC_REPO_NAME:-installer}] Components with failures: ${failed[*]}" >&2
     return 1
   fi
   return 0
@@ -192,7 +209,7 @@ EOF
 component_main() {
   local mode="${1:-}" ids
   if [[ -z "${ISC_COMPONENTS[*]:-}" ]]; then
-    msg "ERROR: ISC_COMPONENTS manifest is not defined."
+    msg "ERROR: ISC_COMPONENTS manifest is not defined." >&2
     return 1
   fi
 
@@ -205,14 +222,36 @@ component_main() {
       _sc_list_components
       return 0
       ;;
-    --list-configurable-components|--list-select-configure-components|--list-component-config-values)
-      # Full configurator discovery needs the framework; empty stdout is valid
-      # for the master orchestrator when nothing is configurable here.
+    --list-configurable-components)
+      local id
+      while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        [[ -n "$(_sc_field "$id" 8)" ]] && printf '%s\n' "$id"
+      done < <(_sc_all_ids)
+      return 0
+      ;;
+    --list-select-configure-components)
+      local id
+      while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        [[ "$(_sc_field "$id" 10)" == "select_configure" ]] && printf '%s\n' "$id"
+      done < <(_sc_all_ids)
+      return 0
+      ;;
+    --list-component-config-values)
+      local id status value
+      while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        status="$(_sc_field "$id" 9)"
+        [[ -n "$status" ]] && declare -F "$status" >/dev/null 2>&1 || continue
+        value="$("$status" 2>/dev/null || true)"
+        [[ -n "$value" ]] && printf '%s\t%s\n' "$id" "$value"
+      done < <(_sc_all_ids)
       return 0
       ;;
     --configure-component|--configure-component=*|--export-selection)
-      msg "ERROR: $mode requires the linux_installation_scripts_functions framework."
-      msg "       Clone it as a sibling or set ISC_FUNCTIONS_DIR, then re-run."
+      msg "ERROR: $mode requires the linux_installation_scripts_functions framework." >&2
+      msg "       Clone it as a sibling or set ISC_FUNCTIONS_DIR, then re-run." >&2
       return 1
       ;;
     --detect)
@@ -226,7 +265,7 @@ component_main() {
         shift
         ids="${1:-}"
       fi
-      [[ -n "$ids" ]] || { msg "ERROR: --uninstall needs component ids"; return 1; }
+      [[ -n "$ids" ]] || { msg "ERROR: --uninstall needs component ids" >&2; return 1; }
       _sc_uninstall_selected "$ids"
       return $?
       ;;
@@ -237,7 +276,7 @@ component_main() {
         shift
         ids="${1:-}"
       fi
-      [[ -n "$ids" ]] || { msg "ERROR: --reconfigure needs component ids"; return 1; }
+      [[ -n "$ids" ]] || { msg "ERROR: --reconfigure needs component ids" >&2; return 1; }
       _sc_run_selected "$ids"
       return $?
       ;;
@@ -258,12 +297,12 @@ component_main() {
         shift
         ids="${1:-}"
       fi
-      [[ -n "$ids" ]] || { msg "ERROR: --select needs component ids"; return 1; }
+      [[ -n "$ids" ]] || { msg "ERROR: --select needs component ids" >&2; return 1; }
       _sc_run_selected "$ids"
       return $?
       ;;
     *)
-      msg "ERROR: unknown argument '$mode' (standalone fallback)."
+      msg "ERROR: unknown argument '$mode' (standalone fallback)." >&2
       _sc_usage >&2
       return 1
       ;;

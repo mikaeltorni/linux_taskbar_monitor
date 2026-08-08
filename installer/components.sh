@@ -19,9 +19,10 @@
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
 ISC_REPO_LABEL="Linux Taskbar Monitor"
 
-# Fail early (before optional components) when the session bus cannot be read —
-# enable_shell_extension also fail-hards, but preflight surfaces the problem
-# before patch work for selectable components.
+# Warn once before the first optional component when the session bus cannot be
+# read — enable_shell_extension also fail-hards, but preflight surfaces the
+# problem earlier. Framework preflight continues after a warning; core enable
+# still aborts hard on rewrite refusal.
 ISC_PREFLIGHT="isc_preflight_session_bus"
 ISC_POSTFLIGHT="report_sudo_required"
 

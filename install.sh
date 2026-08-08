@@ -8,10 +8,10 @@
 # Mandatory core (always installed):
 #   - Resource Monitor extension (CPU/RAM/disk/GPU indicator)
 #
-# Optional components (selectable; all default-on — see installer/components.sh):
+# Optional components (selectable; most default-on — see installer/components.sh):
 #   - Resource Monitor refresh interval, gradient colors, VRAM, per-disk,
 #     panel spacing, ethernet-icon hide, per-process CPU popup
-#   - Window Rules extension (app-rules@local — workspace/sticky rules)
+#   - Window Rules extension (app-rules@local — default-off; Wayland only)
 #
 # Desktop-wide features that used to live here were moved to owning repos:
 #   auto-move-windows → linux_workspaces_setup; Dash-to-Panel / PWA icons →
@@ -43,7 +43,7 @@ if [ -z "$SESSION_TYPE" ]; then
             x11|wayland) printf '%s\n' "$typ"; break ;;
           esac
         done
-  )"
+  )" || true
 fi
 SESSION_TYPE="${SESSION_TYPE:-unknown}"
 
@@ -249,4 +249,4 @@ ensure_rm_monitor_tools || {
 install_resource_monitor_core
 component_main "$@"
 msg "=== Linux Taskbar Monitor Setup Complete ==="
-msg "Log out and back in before testing GNOME Shell extension changes."
+msg "On X11, reload the Shell with Alt+F2, type r, Enter (or log out/in). On Wayland, log out and back in."

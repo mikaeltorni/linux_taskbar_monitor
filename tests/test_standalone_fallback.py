@@ -60,6 +60,34 @@ def test_fallback_list_components_stdout_is_clean():
         assert "rm_gradient_colors" in ids
 
 
+def test_fallback_list_configurable_components():
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "home"
+        home.mkdir()
+        env = {
+            **os.environ,
+            "HOME": str(home),
+            "ISC_FUNCTIONS_DIR": str(Path(tmp) / "missing-framework"),
+            "PATH": str(Path(tmp) / "bin") + ":" + os.environ.get("PATH", ""),
+        }
+        bin_dir = Path(tmp) / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "curl").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        (bin_dir / "curl").chmod(0o755)
+
+        completed = subprocess.run(
+            ["bash", str(INSTALL), "--list-configurable-components"],
+            check=True,
+            text=True,
+            capture_output=True,
+            env=env,
+            cwd=str(ROOT),
+        )
+        ids = {ln.strip() for ln in completed.stdout.splitlines() if ln.strip()}
+        assert "rm_refresh_interval" in ids
+        assert "rm_panel_spacing" in ids
+
+
 def test_fallback_detect_contract():
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp) / "home"
