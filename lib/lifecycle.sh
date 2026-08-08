@@ -97,14 +97,19 @@ detect_rm_process_popup() {
   [ -f "$js" ] && grep -q "Process popup: total CPU/RAM aggregated per process name" "$js"
 }
 detect_window_rules() {
-  # Installed extension tree, or an explicit X11 skip marker so --detect does
-  # not keep reporting absent after a successful X11 no-op configure.
+  # Installed extension tree counts as installed on any session. The X11 skip
+  # marker only satisfies detect while still on X11/XOrg — otherwise a leftover
+  # marker would hide a missing install after switching to Wayland.
   [ -d "$(rm_ext_dir app-rules@local)" ] && return 0
-  if declare -F window_rules_skip_marker >/dev/null 2>&1; then
-    [ -f "$(window_rules_skip_marker)" ] && return 0
-  else
-    [ -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" ] && return 0
-  fi
+  case "${SESSION_TYPE:-}" in
+    x11|xorg)
+      if declare -F window_rules_skip_marker >/dev/null 2>&1; then
+        [ -f "$(window_rules_skip_marker)" ] && return 0
+      else
+        [ -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" ] && return 0
+      fi
+      ;;
+  esac
   return 1
 }
 
@@ -117,10 +122,20 @@ uninstall_rm_panel_spacing() {
   apply_resource_monitor_spacing_mode
 }
 
-# Source patches (rm_vram, rm_gradient_colors, rm_per_disk, …) have no uninstall
-# handlers: install_resource_monitor_core re-extracts a clean zip every run, so
-# deselecting a patch and re-installing reverts it. Do not reset unrelated
-# GSettings keys as a fake uninstall.
+# Source patches (rm_vram, rm_gradient_colors, rm_per_disk, …) cannot be
+# uninstalled in place: markers stay until core re-extract. Explicit uninstall
+# helpers fail hard so --uninstall does not clear receipts while --detect still
+# reports installed.
+uninstall_rm_source_patch() {
+  local id="$1"
+  msg "ERROR: $id is a source patch; re-run install without it so core re-extract reverts the change." >&2
+  return 1
+}
+uninstall_rm_gradient_colors() { uninstall_rm_source_patch rm_gradient_colors; }
+uninstall_rm_vram() { uninstall_rm_source_patch rm_vram; }
+uninstall_rm_per_disk() { uninstall_rm_source_patch rm_per_disk; }
+uninstall_rm_hide_eth_icon() { uninstall_rm_source_patch rm_hide_eth_icon; }
+uninstall_rm_process_popup() { uninstall_rm_source_patch rm_process_popup; }
 
 uninstall_window_rules() {
   msg "Removing app window-rules extension"

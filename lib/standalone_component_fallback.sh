@@ -134,8 +134,8 @@ _sc_run_selected() {
 # _sc_uninstall_selected IDS — Reverse-order uninstall when a handler exists.
 _sc_uninstall_selected() {
   local selected=" $(tr ',\n' '  ' <<<"$1") "
-  local -a order=()
-  local entry id i un label
+  local -a order=() failed=()
+  local entry id i un label ran=0
   for entry in "${ISC_COMPONENTS[@]}"; do
     IFS='|' read -r id _ <<<"$entry"
     order+=("$id")
@@ -145,6 +145,7 @@ _sc_uninstall_selected() {
     [[ "$selected" == *" $id "* ]] || continue
     label="$(_sc_field "$id" 1)"
     un="$(_sc_field "$id" 5)"
+    ran=$((ran + 1))
     if [[ -z "$un" ]]; then
       msg "[${ISC_REPO_NAME:-installer}] '$label' ($id) has no uninstall step — clearing receipt only." >&2
       _sc_clear_receipt "$id"
@@ -152,6 +153,7 @@ _sc_uninstall_selected() {
     fi
     if ! declare -F "$un" >/dev/null 2>&1; then
       msg "WARN: uninstall function '$un' for '$id' is not defined — skipping" >&2
+      failed+=("$id")
       continue
     fi
     msg "[${ISC_REPO_NAME:-installer}] Uninstalling component: $label ($id)"
@@ -159,8 +161,16 @@ _sc_uninstall_selected() {
       _sc_clear_receipt "$id"
     else
       msg "WARN: uninstall of '$id' failed (continuing)" >&2
+      failed+=("$id")
     fi
   done
+  if (( ran == 0 )); then
+    msg "[${ISC_REPO_NAME:-installer}] No components selected to uninstall — nothing to do."
+  fi
+  if (( ${#failed[@]} > 0 )); then
+    msg "[${ISC_REPO_NAME:-installer}] Components with uninstall failures: ${failed[*]}" >&2
+    return 1
+  fi
   return 0
 }
 
