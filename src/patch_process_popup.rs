@@ -220,8 +220,23 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ProcessPopupE
         changed = true;
     }
 
-    // ── 2. Popup-menu methods, inserted before _clickManager ─────────────
-    if !content.contains(MARKER) {
+    // ── 2. Popup-menu methods, inserted (or upgraded) before _clickManager ─
+    const METHODS_START: &str =
+        "    // ── Process popup: total CPU/RAM aggregated per process name ──";
+    if content.contains(MARKER) {
+        // Marker-only skip left stale bodies (e.g. finish-error without
+        // clearing "Loading…"). Replace the whole injected block when it
+        // differs from the current METHODS snippet.
+        if let Some(start) = content.find(METHODS_START) {
+            if let Some(rel_end) = content[start..].find(CLICK_MANAGER_ANCHOR) {
+                let end = start + rel_end;
+                if &content[start..end] != METHODS {
+                    content = format!("{}{}{}", &content[..start], METHODS, &content[end..]);
+                    changed = true;
+                }
+            }
+        }
+    } else {
         if !content.contains(CLICK_MANAGER_ANCHOR) {
             return Err(ProcessPopupError::MissingClickManager);
         }
@@ -370,6 +385,35 @@ mod tests {
         let (twice, changed) = patch_extension_js(&once).expect("second");
         assert!(!changed);
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn stale_finish_error_body_is_upgraded() {
+        let (once, _) = patch_extension_js(&upstream()).expect("first");
+        let stale = once.replacen(
+            r#"          loadingItem.label.text = _("Unable to read process list.");
+          return;
+        }
+
+        if (this._destroyed || !this.menu || !this.menu.isOpen) {"#,
+            r#"          return;
+        }
+
+        if (this._destroyed || !this.menu || !this.menu.isOpen) {"#,
+            1,
+        );
+        assert!(stale.contains(MARKER));
+        assert!(!stale.contains(
+            "Error reading ps output: ${error}`\n          );\n          loadingItem.label.text"
+        ));
+        let (upgraded, changed) = patch_extension_js(&stale).expect("upgrade");
+        assert!(changed);
+        assert!(upgraded.contains(
+            "Error reading ps output: ${error}`\n          );\n          loadingItem.label.text"
+        ));
+        let (again, changed_again) = patch_extension_js(&upgraded).expect("idempotent");
+        assert!(!changed_again);
+        assert_eq!(upgraded, again);
     }
 
     #[test]
