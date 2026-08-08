@@ -284,6 +284,10 @@ def test_build_script_reclaims_sudo_owned_artifacts():
     assert "reclaim_build_artifacts_for_invoker" in script
     assert 'chown -R "$owner:$owner"' in script
     assert "SUDO_USER" in script
+    # have_binary must stay defined — reclaim commit once deleted it and every
+    # build exited 1 after a successful cargo compile.
+    assert "have_binary() { [ -x \"$1\" ]; }" in script or "have_binary()" in script
+    assert script.index("have_binary()") < script.index('have_binary "$DIST_BIN"')
 
 
 def test_installer_apt_installs_runtime_deps():
