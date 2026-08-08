@@ -61,6 +61,9 @@ reclaim_build_artifacts_for_invoker() {
   done
 }
 
+# have_binary PATH — True when PATH is an executable file.
+have_binary() { [ -x "$1" ]; }
+
 # sources_newer_than_dist — True when Cargo.toml, Cargo.lock, or any src/*.rs
 # is newer than dist/rm-monitor. Used only for the no-cargo fallback path.
 sources_newer_than_dist() {
