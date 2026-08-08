@@ -581,16 +581,66 @@ pub fn normalize_disk_container_styles(content: &str) -> String {
     collapsed
 }
 
+/// Current-body marker: LVM/mapper paths need `file_read_link` to match dm-N
+/// names in `/proc/diskstats`. Older patched helpers omit this.
+const ACTIVITY_HELPER_CURRENT_MARKER: &str = "GLib.file_read_link(filesystem)";
+
+/// Replace a top-level `function name(...) { ... }` whose header matches
+/// `header_marker` with `replacement` (full function text including braces).
+///
+/// Returns `None` when the header is absent or braces are unbalanced.
+fn replace_js_function(content: &str, header_marker: &str, replacement: &str) -> Option<String> {
+    let start = content.find(header_marker)?;
+    let brace_rel = content[start..].find('{')?;
+    let brace_start = start + brace_rel;
+    let mut depth = 0usize;
+    let mut end = None;
+    for (i, ch) in content[brace_start..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    end = Some(brace_start + i + 1);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end?;
+    let mut out = String::with_capacity(content.len() - (end - start) + replacement.len());
+    out.push_str(&content[..start]);
+    out.push_str(replacement);
+    out.push_str(&content[end..]);
+    Some(out)
+}
+
 /// Ensure refreshers.js defines both the disk-activity and disk-usage-colour
-/// helpers, injecting whichever is missing at the appropriate anchor.
+/// helpers, injecting whichever is missing at the appropriate anchor, and
+/// upgrading a stale activity helper body when the LVM/mapper fix is absent.
 ///
 /// # Parameters
 /// - `content`: `refreshers.js` content.
 pub fn ensure_disk_activity_helper(content: &str) -> String {
+    let mut content = content.to_string();
+
+    if content.contains(ACTIVITY_HELPER_MARKER)
+        && !content.contains(ACTIVITY_HELPER_CURRENT_MARKER)
+    {
+        if let Some(upgraded) =
+            replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY)
+        {
+            logging::info("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
+            println!("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
+            content = upgraded;
+        }
+    }
+
     let has_activity = content.contains(ACTIVITY_HELPER_MARKER);
     let has_color = content.contains(COLOR_HELPER_MARKER);
     if has_activity && has_color {
-        return content.to_string();
+        return content;
     }
 
     if has_activity && !has_color {
@@ -1160,6 +1210,46 @@ mod tests {
         let patched = ensure_disk_activity_helper(&source);
         assert!(patched.contains(COLOR_HELPER_MARKER));
         assert!(patched.find(COLOR_HELPER_MARKER) < patched.find(ACTIVITY_HELPER_MARKER));
+    }
+
+    #[test]
+    fn stale_activity_helper_is_upgraded_with_lvm_mapper_resolution() {
+        let legacy = DISK_ACTIVITY_HELPER_BODY.replacen(
+            r#"    const diskName = filesystem.replace(/^\/dev\//, "");
+    const names = [diskName];
+    // LVM/mapper paths show as /dev/mapper/foo while diskstats uses dm-N.
+    try {
+      const linkTarget = GLib.file_read_link(filesystem);
+      if (linkTarget) {
+        const base = String(linkTarget).replace(/^.*\//, "");
+        if (base && !names.includes(base)) {
+          names.push(base);
+        }
+      }
+    } catch (_linkError) {
+      // Not a symlink — keep the basename match only.
+    }
+
+    const diskStatsLine = new TextDecoder()
+      .decode(diskStatsContents)
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/))
+      .find((fields) => fields.length >= 13 && names.includes(fields[2]));"#,
+            r#"    const diskName = filesystem.replace(/^\/dev\//, "");
+    const diskStatsLine = new TextDecoder()
+      .decode(diskStatsContents)
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/))
+      .find((fields) => fields.length >= 13 && fields[2] === diskName);"#,
+            1,
+        );
+        assert!(!legacy.contains(ACTIVITY_HELPER_CURRENT_MARKER));
+        let source = format!("{DISK_USAGE_STYLE_HELPER}\n\n{legacy}\n");
+        let patched = ensure_disk_activity_helper(&source);
+        assert!(patched.contains(ACTIVITY_HELPER_CURRENT_MARKER));
+        assert!(patched.contains("names.includes(fields[2])"));
+        let twice = ensure_disk_activity_helper(&patched);
+        assert_eq!(patched, twice);
     }
 
     #[test]
