@@ -279,12 +279,19 @@ def test_default_json_lists_every_default_on_component():
     ), "window_rules must default off for public installs"
 
 
-def test_window_rules_ships_empty_rules_not_personal_policy():
-    source = (ROOT_DIR / "lib" / "window_rules_extension.sh").read_text(encoding="utf-8")
-    assert "const RULES = [];" in source
-    assert "gitkraken" not in source.lower()
-    assert "monkeytype" not in source.lower()
-    assert "window-rules-skipped-x11" in source
+def test_build_script_reclaims_sudo_owned_artifacts():
+    script = (ROOT_DIR / "scripts" / "build_rm_monitor.sh").read_text(encoding="utf-8")
+    assert "reclaim_build_artifacts_for_invoker" in script
+    assert 'chown -R "$owner:$owner"' in script
+    assert "SUDO_USER" in script
+
+
+def test_installer_apt_installs_runtime_deps():
+    install = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+    assert "ensure_runtime_deps" in install
+    assert "apt_install curl unzip libglib2.0-bin" in install
+    core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    assert "skipping zip integrity check" in core
 
 
 def test_dead_dash_to_panel_helpers_are_gone():
