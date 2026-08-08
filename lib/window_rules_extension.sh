@@ -4,9 +4,20 @@
 # Components:
 #   - configure_window_rules_extension(): Install and enable app-rules@local.
 #
+# Default-off optional component: ships with an empty RULES list so public
+# installs do not apply personal desktop policy. Edit RULES in the installed
+# extension.js (or this template) before enabling, or pass --select window_rules
+# after customizing.
+#
 # Sourced by install.sh and by lib/gnome_extensions.sh for standalone tests.
 # Depends on: msg, run_as_target, enable_shell_extension, SESSION_TYPE,
 #             TARGET_HOME, TARGET_USER
+
+# window_rules_skip_marker — Path written when X11 skips install so --detect
+# treats the component as satisfied and does not loop forever.
+window_rules_skip_marker() {
+  printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11"
+}
 
 # configure_window_rules_extension — Install the local window-rules extension.
 # Skips on X11/XOrg (Wayland-only). Writes metadata.json + extension.js under
@@ -17,8 +28,16 @@ configure_window_rules_extension() {
 
   if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
     msg "X11 session detected; skipping custom window-rules extension."
+    local marker dir
+    marker="$(window_rules_skip_marker)"
+    dir="$(dirname "$marker")"
+    run_as_target mkdir -p "$dir"
+    printf 'skipped\n' | run_as_target tee "$marker" >/dev/null
     return 0
   fi
+
+  # Installing on Wayland: clear any prior X11 skip marker.
+  run_as_target rm -f "$(window_rules_skip_marker)" 2>/dev/null || true
 
   local ext_id="app-rules@local"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
@@ -39,14 +58,10 @@ import Shell from 'gi://Shell';
 import Meta from 'gi://Meta';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const RULES = [
-  { appIds: ['gitkraken.desktop', 'gitkraken_gitkraken.desktop'], workspace: 2 },
-  { appIds: ['monkeytype.desktop'], workspace: 7 },
-  { appIds: ['chatgpt.desktop'], workspace: 0 },
-  { appIds: ['com.obsproject.Studio.desktop', 'obs.desktop'], workspace: 7 },
-  { appIds: ['discord_discord.desktop'], sticky: true },
-  { appIds: ['spotify.desktop', 'spotify_spotify.desktop'], sticky: true },
-];
+// Empty by default — add entries such as:
+//   { appIds: ['org.example.App.desktop'], workspace: 1 },
+//   { appIds: ['spotify.desktop'], sticky: true },
+const RULES = [];
 
 function getAppId(win) {
   try {
@@ -118,5 +133,4 @@ export default class AppRulesExtension extends Extension {
 EOF
 
   enable_shell_extension "$ext_id"
-  _isc_mark_installed "window_rules" || true
 }

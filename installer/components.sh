@@ -34,7 +34,7 @@ ISC_COMPONENTS=(
   "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon"
   "rm_process_popup|Resource Monitor per-process CPU popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup"
-  "window_rules|App window-rules extension (Wayland)|on|configure_window_rules_extension|detect_window_rules|uninstall_window_rules"
+  "window_rules|App window-rules extension (Wayland)|off|configure_window_rules_extension|detect_window_rules|uninstall_window_rules"
 )
 # Note: this repo owns only the Resource Monitor system-status extension and its
 # window-rules helper. Features that are desktop-wide behavior were moved to their

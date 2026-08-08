@@ -96,7 +96,13 @@ detect_rm_process_popup() {
   local js; js="$(_rm_extension_js)"
   [ -f "$js" ] && grep -q "Process popup: total CPU/RAM aggregated per process name" "$js"
 }
-detect_window_rules() { [ -d "$(rm_ext_dir app-rules@local)" ]; }
+detect_window_rules() {
+  # Installed extension tree, or an explicit X11 skip marker so --detect does
+  # not keep reporting absent after a successful X11 no-op configure.
+  [ -d "$(rm_ext_dir app-rules@local)" ] && return 0
+  [ -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" ] && return 0
+  return 1
+}
 
 # --- Uninstall ---------------------------------------------------------------
 # uninstall_rm_panel_spacing - Revert the panel to the default stable spacing
@@ -123,4 +129,6 @@ uninstall_window_rules() {
       || msg "WARN: could not remove app-rules@local from enabled-extensions"
   fi
   run_as_target rm -rf "$(rm_ext_dir app-rules@local)"
+  run_as_target rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" \
+    2>/dev/null || true
 }
