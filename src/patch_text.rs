@@ -3,12 +3,30 @@
 //! Used by the Rust disk / text patchers so replacements stay fail-fast and
 //! migration-aware (older patched forms can be upgraded to the current form).
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use thiserror::Error;
 
 /// Fail-fast error when a required upstream snippet cannot be located.
 #[derive(Debug, Error)]
 #[error("Could not find target code in {0}")]
 pub struct PatchTargetMissing(pub String);
+
+/// Write `content` to `path` via a sibling `.tmp` file then rename.
+///
+/// Avoids leaving a truncated target when the process dies mid-write. Same-
+/// filesystem rename is atomic on Linux for the final replace step.
+pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    let tmp = {
+        let mut os = path.as_os_str().to_owned();
+        os.push(".tmp");
+        PathBuf::from(os)
+    };
+    fs::write(&tmp, content)?;
+    fs::rename(&tmp, path)?;
+    Ok(())
+}
 
 /// Migration from an older patched form to the current form.
 ///

@@ -99,7 +99,7 @@ pub fn run(containers_path: &Path) -> i32 {
         return 0;
     }
 
-    if let Err(err) = fs::write(containers_path, patched) {
+    if let Err(err) = crate::patch_text::write_atomic(containers_path, &patched) {
         logging::error(format!(
             "Could not write {}: {err}",
             containers_path.display()

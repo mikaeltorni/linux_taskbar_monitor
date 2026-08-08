@@ -84,6 +84,7 @@ const METHODS: &str = r#"    // ── Process popup: total CPU/RAM aggregated p
           this._logger.error(
             `[Resource_Monitor] Error reading ps output: ${error}`
           );
+          loadingItem.label.text = _("Unable to read process list.");
           return;
         }
 
@@ -296,7 +297,7 @@ pub fn run(extension_path: &Path) -> i32 {
         return 0;
     }
 
-    if let Err(err) = fs::write(extension_path, patched) {
+    if let Err(err) = crate::patch_text::write_atomic(extension_path, &patched) {
         logging::error(format!(
             "Could not write {}: {err}",
             extension_path.display()

@@ -106,9 +106,13 @@ pub fn run(
     disk_space_perc_home_only: bool,
     schema_dir: Option<PathBuf>,
 ) -> i32 {
-    if disk_space_gb && disk_space_perc_home_only {
-        logging::error("--disk-space-gb and --disk-space-perc-home-only are mutually exclusive.");
-        eprintln!("--disk-space-gb and --disk-space-perc-home-only are mutually exclusive.");
+    if (disk_space_gb || disk_space_perc) && disk_space_perc_home_only {
+        logging::error(
+            "--disk-space-gb/--disk-space-perc and --disk-space-perc-home-only are mutually exclusive.",
+        );
+        eprintln!(
+            "--disk-space-gb/--disk-space-perc and --disk-space-perc-home-only are mutually exclusive."
+        );
         return 1;
     }
 
@@ -131,6 +135,20 @@ pub fn run(
     } else {
         None
     };
+
+    if configure_disk_space {
+        match &disk_devices {
+            Some(devices) if devices.is_empty() => {
+                logging::warn(
+                    "No disk devices detected; disk unit keys will apply but diskdeviceslist stays unchanged",
+                );
+                eprintln!(
+                    "Warning: no disk devices detected; diskdeviceslist was not updated"
+                );
+            }
+            _ => {}
+        }
+    }
 
     let gpu_devices = if gpu_memory_perc {
         Some(get_gpu_devices())

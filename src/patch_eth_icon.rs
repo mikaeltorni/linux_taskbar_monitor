@@ -157,7 +157,7 @@ pub fn run(main_gui_path: &Path) -> i32 {
         return 0;
     }
 
-    if let Err(err) = fs::write(main_gui_path, patched) {
+    if let Err(err) = crate::patch_text::write_atomic(main_gui_path, &patched) {
         logging::error(format!(
             "Could not write {}: {err}",
             main_gui_path.display()
