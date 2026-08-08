@@ -113,12 +113,15 @@ python3 -m pytest tests -q
 
 | Flag | Effect |
 |---|---|
-| `--disk-space-gb` | Free space in GB (installer default) |
+| `--disk-space-gb` | Free space in GB for `/home` only (installer default) |
 | `--disk-space-perc-home-only` | `/home` used percentage |
 | `--gpu-memory-perc` | GPU memory as used/total % |
 | `--schema-dir PATH` | Extension schemas directory (auto-detected when omitted) |
 
 `--disk-space-perc` remains as a hidden legacy alias for `--disk-space-gb`.
+Passing `--disk-space-gb` without `--gpu-memory-perc` also sets `gpumemoryunit` to
+numeric (the upstream default); pass both flags together when configuring GPU and
+disk in one call.
 
 ## Configuration
 
