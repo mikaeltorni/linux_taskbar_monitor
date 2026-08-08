@@ -80,6 +80,12 @@ _sc_run_selected() {
   for entry in "${ISC_COMPONENTS[@]}"; do
     IFS='|' read -r id label def fn _ <<<"$entry"
     [[ "$selected" == *" $id "* ]] || continue
+    if (( ran == 0 )) && [[ -n "${ISC_PREFLIGHT:-}" ]] \
+       && declare -F "$ISC_PREFLIGHT" >/dev/null 2>&1; then
+      "$ISC_PREFLIGHT" || {
+        msg "WARN: preflight '$ISC_PREFLIGHT' reported a problem (continuing)"
+      }
+    fi
     ran=$((ran + 1))
     if [[ -z "$fn" ]] || ! declare -F "$fn" >/dev/null 2>&1; then
       msg "WARN: install function for '$id' is missing — skipping"
