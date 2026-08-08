@@ -200,8 +200,6 @@ pub fn build_gsettings_args(
 
     if mode.gpu_memory_perc {
         commands.push(gsettings_set(ext_dir, schema, "gpumemoryunit", "'perc'"));
-    } else {
-        commands.push(gsettings_set(ext_dir, schema, "gpumemoryunit", "'numeric'"));
     }
 
     if mode.disk_space_perc_home_only {
@@ -361,11 +359,9 @@ mod tests {
     }
 
     #[test]
-    fn gpu_numeric_mode_is_the_default_command() {
+    fn gpu_unit_untouched_when_no_gpu_flag() {
         let commands = build_gsettings_args("schema", "/ext", DisplayMode::default(), None, None);
-        assert_eq!(commands.len(), 1);
-        assert_eq!(commands[0][5], "gpumemoryunit");
-        assert_eq!(commands[0][6], "'numeric'");
+        assert!(commands.is_empty(), "disk/gpu-less configure must not touch settings");
     }
 
     #[test]
@@ -375,6 +371,8 @@ mod tests {
             ..DisplayMode::default()
         };
         let commands = build_gsettings_args("schema", "/ext", mode, None, None);
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0][5], "gpumemoryunit");
         assert_eq!(commands[0][6], "'perc'");
     }
 
@@ -389,14 +387,17 @@ mod tests {
         assert_eq!(
             keys,
             vec![
-                "gpumemoryunit",
                 "diskstatsstatus",
                 "diskspaceunit",
                 "diskspaceunitmeasure",
                 "diskspacemonitor",
             ]
         );
-        assert_eq!(commands[4][6], "'free'");
+        assert_eq!(commands[3][6], "'free'");
+        assert!(
+            !keys.contains(&"gpumemoryunit"),
+            "disk-only configure must not reset gpumemoryunit"
+        );
     }
 
     #[test]
@@ -421,14 +422,13 @@ mod tests {
         assert_eq!(
             keys,
             vec![
-                "gpumemoryunit",
                 "diskstatsstatus",
                 "diskspaceunit",
                 "diskspacemonitor",
                 "diskdeviceslist",
             ]
         );
-        let device_list = &commands[4][6];
+        let device_list = &commands[3][6];
         assert!(device_list.contains("/home"));
         assert_eq!(device_list.matches("\\\"mountPoint").count(), 0);
         assert_eq!(device_list.matches("mountPoint").count(), 1);

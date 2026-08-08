@@ -146,19 +146,19 @@ _sc_uninstall_selected() {
     label="$(_sc_field "$id" 1)"
     un="$(_sc_field "$id" 5)"
     if [[ -z "$un" ]]; then
-      msg "[${ISC_REPO_NAME:-installer}] '$label' ($id) has no uninstall step — clearing receipt only."
+      msg "[${ISC_REPO_NAME:-installer}] '$label' ($id) has no uninstall step — clearing receipt only." >&2
       _sc_clear_receipt "$id"
       continue
     fi
     if ! declare -F "$un" >/dev/null 2>&1; then
-      msg "WARN: uninstall function '$un' for '$id' is not defined — skipping"
+      msg "WARN: uninstall function '$un' for '$id' is not defined — skipping" >&2
       continue
     fi
     msg "[${ISC_REPO_NAME:-installer}] Uninstalling component: $label ($id)"
     if "$un"; then
       _sc_clear_receipt "$id"
     else
-      msg "WARN: uninstall of '$id' failed (continuing)"
+      msg "WARN: uninstall of '$id' failed (continuing)" >&2
     fi
   done
   return 0
