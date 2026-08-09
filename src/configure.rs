@@ -142,9 +142,7 @@ pub fn run(
                 logging::warn(
                     "No disk devices detected; disk unit keys will apply but diskdeviceslist stays unchanged",
                 );
-                eprintln!(
-                    "Warning: no disk devices detected; diskdeviceslist was not updated"
-                );
+                eprintln!("Warning: no disk devices detected; diskdeviceslist was not updated");
             }
             _ => {}
         }

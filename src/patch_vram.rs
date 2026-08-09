@@ -39,9 +39,7 @@ const NEW_CODE: &str = r#"        // Space separator between GPU usage and VRAM 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum VramError {
     /// Neither the upstream bracket snippet nor the space-separator marker.
-    #[error(
-        "Could not find target code in containers.js - unsupported extension version"
-    )]
+    #[error("Could not find target code in containers.js - unsupported extension version")]
     MissingTarget,
 }
 

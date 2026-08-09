@@ -187,7 +187,9 @@ Filesystem     1024-blocks Used Available Capacity Mounted on
 ";
         let entries = parse_df_output(output);
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].to_json().contains(r#""mountPoint": "/mnt/my data""#), true);
+        assert!(entries[0]
+            .to_json()
+            .contains(r#""mountPoint": "/mnt/my data""#));
     }
 
     #[test]

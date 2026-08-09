@@ -365,6 +365,16 @@ def test_readonly_cli_flags_early_exit_before_core_install():
     assert "install_resource_monitor_core" not in early
 
 
+def test_unknown_dash_args_abort_before_core_install():
+    """Typos like --list-configurable must not re-extract the live extension."""
+    install = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+    main = install.split("# ── Main installer logic")[1]
+    early, _after = main.split("ensure_rm_monitor_tools", 1)
+    assert '-*)' in early
+    assert "unknown argument" in early
+    assert "--default|--all|--select|--select=*|" in early.replace("\n", "")
+
+
 def test_panel_spacing_manifest_section_is_empty():
     """Field 6 is a menu section heading, not the word 'configurable'."""
     components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")

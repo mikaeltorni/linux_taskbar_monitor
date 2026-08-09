@@ -184,7 +184,10 @@ mod tests {
 
     #[test]
     fn append_dedupes() {
-        assert_eq!(append_strv(Some("['a']"), "a").unwrap(), vec!["a".to_string()]);
+        assert_eq!(
+            append_strv(Some("['a']"), "a").unwrap(),
+            vec!["a".to_string()]
+        );
         assert_eq!(
             append_strv(Some("['a']"), "b").unwrap(),
             vec!["a".to_string(), "b".to_string()]
@@ -211,6 +214,9 @@ mod tests {
         assert_eq!(try_parse_strv(None).unwrap(), Vec::<String>::new());
         assert_eq!(try_parse_strv(Some("")).unwrap(), Vec::<String>::new());
         assert_eq!(try_parse_strv(Some("[]")).unwrap(), Vec::<String>::new());
-        assert_eq!(try_parse_strv(Some("@as []")).unwrap(), Vec::<String>::new());
+        assert_eq!(
+            try_parse_strv(Some("@as []")).unwrap(),
+            Vec::<String>::new()
+        );
     }
 }

@@ -135,12 +135,10 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
     let code = match cli.command {
-        Command::GsettingsStrv { action, value } => {
-            match gsettings_strv::run(&action, &value) {
-                Ok(()) => 0,
-                Err(code) => code,
-            }
-        }
+        Command::GsettingsStrv { action, value } => match gsettings_strv::run(&action, &value) {
+            Ok(()) => 0,
+            Err(code) => code,
+        },
         Command::ReportCudaDevices => report_cuda::run(),
         Command::ConfigureResourceMonitor {
             gpu_memory_perc,
@@ -190,8 +188,16 @@ mod tests {
             vec!["rm-monitor", "gsettings-strv", "append", "value"],
             vec!["rm-monitor", "gsettings-strv", "remove", "value"],
             vec!["rm-monitor", "report-cuda-devices"],
-            vec!["rm-monitor", "configure-resource-monitor", "--gpu-memory-perc"],
-            vec!["rm-monitor", "configure-resource-monitor", "--disk-space-gb"],
+            vec![
+                "rm-monitor",
+                "configure-resource-monitor",
+                "--gpu-memory-perc",
+            ],
+            vec![
+                "rm-monitor",
+                "configure-resource-monitor",
+                "--disk-space-gb",
+            ],
             vec![
                 "rm-monitor",
                 "configure-resource-monitor",

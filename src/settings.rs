@@ -231,7 +231,10 @@ pub fn build_gsettings_args(
         ));
     }
 
-    if let Some(devices) = disk_devices.as_deref().filter(|devices| !devices.is_empty()) {
+    if let Some(devices) = disk_devices
+        .as_deref()
+        .filter(|devices| !devices.is_empty())
+    {
         commands.push(gsettings_set(
             ext_dir,
             schema,
@@ -361,7 +364,10 @@ mod tests {
     #[test]
     fn gpu_unit_untouched_when_no_gpu_flag() {
         let commands = build_gsettings_args("schema", "/ext", DisplayMode::default(), None, None);
-        assert!(commands.is_empty(), "disk/gpu-less configure must not touch settings");
+        assert!(
+            commands.is_empty(),
+            "disk/gpu-less configure must not touch settings"
+        );
     }
 
     #[test]
@@ -448,9 +454,7 @@ mod tests {
     fn apply_settings_reports_process_success_and_failure() {
         assert!(apply_settings(&["true".to_string()]));
         assert!(!apply_settings(&["false".to_string()]));
-        assert!(!apply_settings(&[
-            "rm-monitor-no-such-binary".to_string()
-        ]));
+        assert!(!apply_settings(&["rm-monitor-no-such-binary".to_string()]));
         assert!(!apply_settings(&[]));
     }
 }

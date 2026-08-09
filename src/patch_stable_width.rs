@@ -187,10 +187,7 @@ fn replace_or(
 /// - `compact`: When true, release the reservations instead of applying them.
 ///
 /// Returns the patched content and whether anything changed.
-pub fn patch_containers(
-    content: &str,
-    compact: bool,
-) -> Result<(String, bool), StableWidthError> {
+pub fn patch_containers(content: &str, compact: bool) -> Result<(String, bool), StableWidthError> {
     let mut content = content.to_string();
     let mut changed = false;
 
@@ -306,7 +303,10 @@ pub fn run(mode: &str, containers_path: &Path) -> i32 {
     ));
 
     if !MODES.contains(&mode) {
-        let message = format!("Invalid --mode \"{mode}\". Use one of: {}", MODES.join(", "));
+        let message = format!(
+            "Invalid --mode \"{mode}\". Use one of: {}",
+            MODES.join(", ")
+        );
         logging::error(&message);
         eprintln!("{message}");
         return 1;
@@ -413,8 +413,7 @@ mod tests {
     #[test]
     fn disk_add_without_init_fails_fast() {
         // Secondary labels present but DiskContainerSpace._init missing is unsupported.
-        let source =
-            format!("{DISK_UPSTREAM_ADD}\n\n{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n");
+        let source = format!("{DISK_UPSTREAM_ADD}\n\n{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n");
         assert!(matches!(
             patch_containers(&source, false),
             Err(StableWidthError::MissingDiskInit)

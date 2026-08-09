@@ -325,8 +325,10 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
         let dir = upstream_extension();
         fs::write(
             dir.path().join("extension.js"),
-            UPSTREAM_EXTENSION_JS
-                .replace("GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;", "GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;"),
+            UPSTREAM_EXTENSION_JS.replace(
+                "GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;",
+                "GPU_MIN_REFRESH_INTERVAL_SECONDS = 0.5;",
+            ),
         )
         .expect("write legacy");
         fs::write(
@@ -386,10 +388,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
         let fake = bin_dir.path().join("glib-compile-schemas");
         fs::write(
             &fake,
-            format!(
-                "#!/bin/sh\nprintf 'ok' > '{}'\nexit 0\n",
-                marker.display()
-            ),
+            format!("#!/bin/sh\nprintf 'ok' > '{}'\nexit 0\n", marker.display()),
         )
         .expect("fake compiler");
         #[cfg(unix)]
