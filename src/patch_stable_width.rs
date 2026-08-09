@@ -172,6 +172,18 @@ pub enum StableWidthError {
     /// The stable-mode patch could not find `set_element_width`'s else branch.
     #[error("Could not find GpuContainer.set_element_width else-branch in containers.js")]
     MissingGpuSet,
+    /// A disk stable-width marker is present but the patched bodies are missing
+    /// or incomplete (marker-only / drifted tree).
+    #[error(
+        "Disk stable-width marker present but patched bodies missing in containers.js — re-extract core or re-apply rm_per_disk before rm_panel_spacing"
+    )]
+    StaleDiskMarker,
+    /// A GPU stable-width marker is present but the patched bodies are missing
+    /// or incomplete (marker-only / drifted tree).
+    #[error(
+        "GPU stable-width marker present but patched bodies missing in containers.js — re-extract core before rm_panel_spacing"
+    )]
+    StaleGpuMarker,
 }
 
 fn replace_or(
@@ -219,7 +231,14 @@ pub fn patch_containers(content: &str, compact: bool) -> Result<(String, bool), 
             logging::info("Disk-space activity percent width already compact");
             println!("Disk-space activity percent width already compact");
         }
-    } else if !content.contains(DISK_MARKER) {
+    } else if content.contains(DISK_MARKER) {
+        // Marker alone is not enough: a half-applied or hand-edited tree can
+        // keep the comment while the width assignments are gone. Fail hard so
+        // detect cannot report spacing installed without the reservations.
+        if !(content.contains(DISK_PATCHED_ADD) && content.contains(DISK_PATCHED_INIT)) {
+            return Err(StableWidthError::StaleDiskMarker);
+        }
+    } else {
         // The secondary activity labels only exist after the per-disk patch.
         // When rm_per_disk was not selected, skip this reservation and still
         // apply the GPU VRAM width split below.
@@ -271,7 +290,11 @@ pub fn patch_containers(content: &str, compact: bool) -> Result<(String, bool), 
             logging::info("GPU VRAM width already compact");
             println!("GPU VRAM width already compact");
         }
-    } else if !content.contains(GPU_MARKER) {
+    } else if content.contains(GPU_MARKER) {
+        if !(content.contains(GPU_PATCHED_SET) && content.contains(GPU_PATCHED_INIT)) {
+            return Err(StableWidthError::StaleGpuMarker);
+        }
+    } else {
         // The class header makes the init snippet unique: the same field list
         // appears in cleanup_elements without the class declaration prefix.
         content = replace_or(
@@ -489,6 +512,35 @@ mod tests {
         assert!(matches!(
             patch_containers(&source, false),
             Err(StableWidthError::MissingGpuInit)
+        ));
+    }
+
+    #[test]
+    fn marker_without_patched_disk_bodies_fails_fast() {
+        // Marker comment alone must not count as reserved widths.
+        let source = format!("// {DISK_MARKER}\n{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n");
+        assert!(matches!(
+            patch_containers(&source, false),
+            Err(StableWidthError::StaleDiskMarker)
+        ));
+    }
+
+    #[test]
+    fn marker_without_patched_gpu_bodies_fails_fast() {
+        let source = format!(
+            "{DISK_PATCHED_INIT}\n\n{DISK_PATCHED_ADD}\n\n// {GPU_MARKER}\n{GPU_UPSTREAM_INIT}\n\n{GPU_UPSTREAM_SET}\n"
+        );
+        assert!(
+            source.contains(GPU_MARKER),
+            "fixture must retain the GPU marker while lacking patched bodies"
+        );
+        assert!(
+            !source.contains(GPU_PATCHED_SET) && !source.contains(GPU_PATCHED_INIT),
+            "fixture must not already contain the patched GPU bodies"
+        );
+        assert!(matches!(
+            patch_containers(&source, false),
+            Err(StableWidthError::StaleGpuMarker)
         ));
     }
 

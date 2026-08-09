@@ -56,6 +56,13 @@ def test_patches_guard_on_rm_monitor():
         body = source.split(f"{fn}()", 1)[1].split("\n}", 1)[0]
         assert "ensure_rm_monitor_bin ||" in body, f"{fn} must guard on ensure_rm_monitor_bin"
         assert f"rm_monitor {subcommand}" in body, f"{fn} must call rm_monitor {subcommand}"
+        assert f"if ! rm_monitor {subcommand}" in body or (
+            f"if ! rm_monitor {subcommand}" in body.replace("\\\n", " ")
+        ), f"{fn} must fail hard when rm_monitor {subcommand} fails"
+        assert "_isc_mark_installed" in body
+        assert body.index(f"rm_monitor {subcommand}") < body.index("_isc_mark_installed")
+        # Mark only after a successful patch (the if ! guard precedes mark).
+        assert "return 1" in body.split("_isc_mark_installed", 1)[0]
 
 
 def test_build_script_rebuilds_when_sources_are_newer():

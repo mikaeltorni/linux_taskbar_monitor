@@ -214,6 +214,7 @@ mod tests {
     fn gpu_memory_perc_query_failure_is_a_hard_error() {
         // An installed-but-broken nvidia-smi must fail the whole `run` rather
         // than silently falling back to an empty GPU device list.
+        let _guard = crate::env_test_lock::lock();
         let bin_dir = tempfile::tempdir().expect("bin dir");
         let fake = bin_dir.path().join("nvidia-smi");
         fs::write(&fake, "#!/bin/sh\nexit 1\n").expect("fake nvidia-smi");
@@ -226,7 +227,9 @@ mod tests {
         }
 
         let original_path = std::env::var_os("PATH").unwrap_or_default();
-        // SAFETY: test-only PATH override, restored immediately after `run`.
+        // SAFETY: test-only PATH override, restored immediately after `run`
+        // (serialized crate-wide via env_test_lock, since PATH is global
+        // per-process state that other tests also mutate concurrently).
         unsafe { std::env::set_var("PATH", bin_dir.path()) };
         let schema_dir = tempfile::tempdir().expect("schema dir");
         let result = run(

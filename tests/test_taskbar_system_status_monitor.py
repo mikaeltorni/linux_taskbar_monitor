@@ -267,9 +267,11 @@ def test_panel_spacing_is_a_selectable_component():
     assert "detect_rm_panel_spacing" in components
     # The apply function forwards the configured mode to rm-monitor.
     assert 'rm_monitor patch-stable-width --mode "$mode"' in lib
-    # Uninstall reverts to the stable baseline spacing.
+    apply_fn = lib.split("apply_resource_monitor_spacing_mode() {")[1].split("\n}\n")[0]
+    assert "if ! rm_monitor patch-stable-width" in apply_fn
+    # Uninstall fails hard: stable-width markers are a source patch until core re-extract.
     lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
-    assert "uninstall_rm_panel_spacing" in lifecycle
+    assert "uninstall_rm_panel_spacing() { uninstall_rm_source_patch rm_panel_spacing; }" in lifecycle
 
 
 def test_default_json_lists_every_default_on_component():
@@ -302,6 +304,10 @@ def test_build_script_reclaims_sudo_owned_artifacts():
     assert "reclaim_build_artifacts_for_invoker" in script
     assert 'chown -R "$owner:$owner"' in script
     assert "SUDO_USER" in script
+    reclaim_fn = script.split("reclaim_build_artifacts_for_invoker() {")[1].split("\n}\n")[0]
+    assert "WARNING: could not chown" not in reclaim_fn
+    assert "ERROR: could not chown" in reclaim_fn
+    assert "return 1" in reclaim_fn
     # have_binary must stay defined — reclaim commit once deleted it and every
     # build exited 1 after a successful cargo compile.
     assert "have_binary() { [ -x \"$1\" ]; }" in script or "have_binary()" in script
@@ -317,7 +323,7 @@ def test_installer_apt_installs_runtime_deps():
 
 
 def test_core_syncs_user_schema_for_refreshtime():
-    """Patched double refreshtime must be mirrored into user glib schemas."""
+    """Patched double refreshtime schema must be mirrored into user glib schemas."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
     assert "sync_resource_monitor_user_schema() {" in core
     # Hard-fail on missing src / compile failure (no soft WARN+return 0).
@@ -330,10 +336,17 @@ def test_core_syncs_user_schema_for_refreshtime():
     )[0]
     publish_mv = core_fn.index('mv "$publish_dir" "$ext_dir"')
     sync_call = core_fn.index('sync_resource_monitor_user_schema "$ext_dir" || return 1')
-    refreshtime = core_fn.index(
+    assert publish_mv < sync_call
+    # Live refreshtime is owned by rm_refresh_interval, not core.
+    assert (
         'ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime'
+        not in core_fn
     )
-    assert publish_mv < sync_call < refreshtime
+    apply_fn = core.split("apply_resource_monitor_refresh_interval() {")[1].split("\n}\n")[0]
+    assert (
+        'set org.gnome.shell.extensions.resource-monitor refreshtime' in apply_fn
+    )
+    assert "persist_resource_monitor_refresh_interval" in apply_fn
     assert "glib-2.0/schemas" in core
     assert "org.gnome.shell.extensions.resource-monitor.gschema.xml" in core
     assert "uninstall_rm_refresh_interval" in (
@@ -415,9 +428,13 @@ def test_refresh_interval_has_live_detect():
     lifecycle = (ROOT_DIR / "lib" / "lifecycle.sh").read_text(encoding="utf-8")
     assert "detect_rm_refresh_interval" in components
     assert "detect_rm_refresh_interval()" in lifecycle
+    detect_fn = lifecycle.split("detect_rm_refresh_interval() {")[1].split("\n}\n")[0]
+    assert "resource_monitor_refresh_interval_file" in detect_fn
     assert '_isc_mark_installed "rm_refresh_interval"' in (
         ROOT_DIR / "lib" / "gnome_extensions.sh"
     ).read_text(encoding="utf-8")
+    readme = (ROOT_DIR / "README.md").read_text(encoding="utf-8")
+    assert "bash scripts/check.sh" in readme
 
 
 def test_readonly_cli_flags_early_exit_before_core_install():

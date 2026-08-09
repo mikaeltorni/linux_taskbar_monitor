@@ -48,7 +48,9 @@ done
 
 # reclaim_build_artifacts_for_invoker — When this script runs under sudo, cargo
 # writes root-owned dist/ and target/. Hand them back to SUDO_USER so a later
-# non-root `bash install.sh` can rebuild without permission errors.
+# non-root `bash install.sh` can rebuild without permission errors. Fail hard
+# if chown fails: a soft WARNING leaves root-owned trees that break the next
+# non-root build with a confusing permission error far from this script.
 reclaim_build_artifacts_for_invoker() {
   local owner
   [ "$(id -u)" -eq 0 ] || return 0
@@ -56,8 +58,10 @@ reclaim_build_artifacts_for_invoker() {
   [ -n "$owner" ] && [ "$owner" != root ] || return 0
   for path in "$DIST_DIR" "$REPO_ROOT/target" "$REPO_ROOT/.cargo-container"; do
     [ -e "$path" ] || continue
-    chown -R "$owner:$owner" "$path" 2>/dev/null || \
-      log "WARNING: could not chown $path to $owner"
+    if ! chown -R "$owner:$owner" "$path"; then
+      log "ERROR: could not chown $path to $owner (sudo-built artifacts would block later non-root rebuilds)"
+      return 1
+    fi
   done
 }
 
@@ -165,7 +169,7 @@ main() {
     exit 1
   fi
 
-  reclaim_build_artifacts_for_invoker
+  reclaim_build_artifacts_for_invoker || exit 1
 
   if [ "$PRINT_ONLY" -eq 1 ]; then
     printf '%s\n' "$DIST_BIN"

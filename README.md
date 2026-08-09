@@ -72,18 +72,13 @@ changes (on X11, agents may use the sanctioned in-place Shell reload instead).
 ## Development Workflow
 
 ```bash
-# Rust unit/integration tests (primary — covers every patcher and helper)
-source "$HOME/.cargo/env"   # if using rustup
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release --bin rm-monitor
+# Full local / CI gate (fmt, clippy, cargo test, bash -n, pytest, lifecycle)
+bash scripts/check.sh
 
-# Installer contract / shell checks
-bash -n install.sh
+# Build the helper CLI when iterating on patchers
 bash scripts/build_rm_monitor.sh
-bash tests/test_lifecycle.sh
-python3 -m pytest tests -q
+
+# Installer surface smoke (after a successful check)
 ./install.sh --list-components
 ./install.sh --list-configurable-components
 ./install.sh --detect

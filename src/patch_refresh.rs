@@ -324,11 +324,6 @@ pub fn run(extension_dir: &Path) -> i32 {
 mod tests {
     use super::*;
 
-    /// Serializes tests that mutate the process-wide `PATH`/`HOME` env vars,
-    /// so they cannot race each other under cargo's default parallel test
-    /// execution within this binary.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     // Indentation is load-bearing: several substitutions match on the exact
     // leading whitespace of the upstream source.
     const UPSTREAM_EXTENSION_JS: &str = r#"const GPU_MIN_REFRESH_INTERVAL_SECONDS = 5;
@@ -383,15 +378,40 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     /// Patch the sources without invoking `glib-compile-schemas`, which is not
     /// guaranteed to exist in a test environment.
+    ///
+    /// `patch_extension` unconditionally calls `sync_user_schemas` after a
+    /// successful schema compile, and that reads the live `HOME` env var. On
+    /// a machine with `glib-compile-schemas` installed (true for most dev/CI
+    /// hosts), skipping this override would let the real compile succeed and
+    /// write this test's fabricated schema into the *actual* developer's
+    /// `~/.local/share/glib-2.0/schemas/` — exactly the kind of real-user-state
+    /// mutation tests must never cause. Every caller must already hold
+    /// [`crate::env_test_lock::lock`] (this function does not acquire it
+    /// itself so a caller that already holds it, e.g.
+    /// `already_patched_sources_still_compile_schemas`, cannot deadlock on
+    /// re-entry into the non-reentrant `Mutex`).
     fn patch_sources_only(root: &Path) -> Result<(), RefreshPatchError> {
-        match patch_extension(root) {
+        let original_home = std::env::var_os("HOME");
+        let home_dir = tempfile::tempdir().expect("home dir");
+        // SAFETY: test-only HOME override, restored below. Caller holds
+        // env_test_lock for the duration of this call.
+        unsafe { std::env::set_var("HOME", home_dir.path()) };
+        let result = match patch_extension(root) {
             Err(RefreshPatchError::SchemaCompile(_)) | Ok(_) => Ok(()),
             Err(other) => Err(other),
+        };
+        unsafe {
+            match original_home {
+                Some(home) => std::env::set_var("HOME", home),
+                None => std::env::remove_var("HOME"),
+            }
         }
+        result
     }
 
     #[test]
     fn rewrites_every_target_file() {
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
         patch_sources_only(dir.path()).expect("patch");
 
@@ -421,6 +441,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn re_running_the_patch_is_idempotent() {
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
         patch_sources_only(dir.path()).expect("first patch");
         let first = fs::read_to_string(dir.path().join("extension.js")).expect("read");
@@ -431,6 +452,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn legacy_five_hundred_millisecond_patch_is_upgraded() {
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
         fs::write(
             dir.path().join("extension.js"),
@@ -464,6 +486,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn unsupported_source_fails_fast() {
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
         let extension_js = dir.path().join("extension.js");
         let settings_js = dir.path().join("services/settings.js");
@@ -488,7 +511,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn already_patched_sources_still_compile_schemas() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
         // First pass writes patched sources even if schema compile is unavailable.
         let _ = patch_sources_only(dir.path());
@@ -518,7 +541,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
         path.push(":");
         path.push(&original_path);
         // SAFETY: test-only PATH/HOME override, restored below before this
-        // test returns (and serialized via ENV_LOCK across the whole file).
+        // test returns (and serialized crate-wide via env_test_lock).
         unsafe {
             std::env::set_var("PATH", &path);
             std::env::set_var("HOME", home_dir.path());
@@ -546,7 +569,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn syncs_compiled_schema_to_user_glib_schema_dir() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::env_test_lock::lock();
         let dir = upstream_extension();
 
         let bin_dir = tempfile::tempdir().expect("bin dir");
@@ -567,7 +590,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
         path.push(":");
         path.push(&original_path);
         // SAFETY: test-only PATH/HOME override, restored below (serialized
-        // across the file via ENV_LOCK).
+        // crate-wide via env_test_lock).
         unsafe {
             std::env::set_var("PATH", &path);
             std::env::set_var("HOME", home_dir.path());
@@ -600,7 +623,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn re_syncing_an_identical_user_schema_is_a_no_op_copy() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::env_test_lock::lock();
         let extension_dir = upstream_extension();
         // Skip the extension's own patch entirely: sync_user_schemas only
         // cares about the already-compiled schemas/ directory contents.
@@ -619,10 +642,11 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
             .expect("mtime");
 
         let original_home = std::env::var_os("HOME");
-        // SAFETY: test-only HOME override, restored below (serialized across
-        // the file via ENV_LOCK). PATH is left as-is on purpose: an absent or
-        // failing glib-compile-schemas here must stay a soft warning, not a
-        // panic, since this test does not assert on the compile step.
+        // SAFETY: test-only HOME override, restored below (serialized
+        // crate-wide via env_test_lock). PATH is left as-is on purpose: an
+        // absent or failing glib-compile-schemas here must stay a soft
+        // warning, not a panic, since this test does not assert on the
+        // compile step.
         unsafe { std::env::set_var("HOME", home_dir.path()) };
         sync_user_schemas(&schemas_dir);
         unsafe {
@@ -646,13 +670,14 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn missing_home_env_is_a_soft_no_op() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::env_test_lock::lock();
         let extension_dir = upstream_extension();
         let schemas_dir = extension_dir.path().join("schemas");
 
         let original_home = std::env::var_os("HOME");
-        // SAFETY: test-only HOME removal, restored below (serialized via
-        // ENV_LOCK). Must not panic or otherwise abort the caller.
+        // SAFETY: test-only HOME removal, restored below (serialized
+        // crate-wide via env_test_lock). Must not panic or otherwise abort
+        // the caller.
         unsafe { std::env::remove_var("HOME") };
         sync_user_schemas(&schemas_dir);
         unsafe {

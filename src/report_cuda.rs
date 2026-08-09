@@ -159,8 +159,12 @@ mod tests {
 
     #[test]
     fn get_gpu_devices_result_reflects_probe_availability_and_success() {
-        // Sequential within one test (not split across tests) so the PATH
-        // mutation below cannot race with another test's PATH override.
+        // Being sequential within this one test only prevents this test's
+        // own PATH mutations from racing each other; it does nothing to stop
+        // a *different* module's test from mutating PATH concurrently on
+        // another cargo-test worker thread. Hold the crate-wide lock for the
+        // whole mutate-use-restore span below.
+        let _guard = crate::env_test_lock::lock();
         let original_path = std::env::var_os("PATH").unwrap_or_default();
 
         let empty_path_dir = tempfile::tempdir().expect("empty path dir");

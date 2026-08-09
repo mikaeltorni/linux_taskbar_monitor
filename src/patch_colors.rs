@@ -22,12 +22,30 @@ use crate::gradient_colors::{
     DISK_USAGE_MAX_PERCENT, ETHERNET_MAX_MBPS, GPU_MEMORY_MAX_GB, RAM_MAX_GB,
 };
 use crate::logging;
+use crate::patch_text;
 
 /// Presence of this identifier means the gradient patch is already applied.
 const ALREADY_PATCHED_MARKER: &str = "_gradientGetUsageColor";
 
 /// Anchor the support block is injected before.
 const CLASS_MARKER: &str = "export default class";
+
+/// First line of [`support_block`], also the start marker used to relocate
+/// the block for a stale-body upgrade.
+const SUPPORT_BLOCK_START_MARKER: &str =
+    "// ── Gradient color support (patched by rm-monitor patch-colors) ──";
+
+/// First line of [`REPLACEMENT`], also the start marker used to relocate the
+/// gradient-override method block for a stale-body upgrade.
+const REPLACEMENT_START_MARKER: &str =
+    "    // ── Gradient-based color override (patched by rm-monitor patch-colors) ──";
+
+/// Final method inside [`REPLACEMENT`]. Stable regardless of how the
+/// gradient math changes, since `_getUsageColor` must always forward to
+/// `_gradientGetUsageColor` — used as the inclusive end-of-block anchor.
+const REPLACEMENT_TAIL: &str = r#"    _getUsageColor(value, colors) {
+      return this._gradientGetUsageColor(value, colors);
+    }"#;
 
 const ORIGINAL_METHOD: &str = r#"    _getUsageColor(value, colors) {
       return getUsageColor(value, colors, COLOR_LIST_SEPARATOR);
@@ -392,6 +410,46 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ColorsError> 
             logging::info("Colors already patched — skipping");
             println!("Colors already patched — skipping");
         }
+
+        // The targeted migrations above only cover known older forms. A
+        // manual edit (or a codegen pass this patcher does not yet know
+        // about) can leave the marker in place while the support block or
+        // the gradient-override method body itself has drifted from the
+        // current constants. Catch that by comparing each block's current
+        // bounds against the up-to-date form and upgrading in place. When
+        // the anchors cannot be located (e.g. a minimal/legacy fixture that
+        // predates the support block or CLASS_MARKER), there is nothing
+        // reliable to compare against, so this leaves that block untouched
+        // rather than rejecting an otherwise-successful migration.
+        if migrated.contains(SUPPORT_BLOCK_START_MARKER) {
+            if let patch_text::StaleBlockOutcome::Replaced(updated) =
+                patch_text::replace_stale_block(
+                    &migrated,
+                    SUPPORT_BLOCK_START_MARKER,
+                    CLASS_MARKER,
+                    &support_block(),
+                )
+            {
+                migrated = updated;
+                logging::info("Upgraded stale gradient color support block");
+                println!("Upgraded stale gradient color support block");
+            }
+        }
+        if migrated.contains(REPLACEMENT_START_MARKER) {
+            if let patch_text::StaleBlockOutcome::Replaced(updated) =
+                patch_text::replace_stale_block_including_anchor(
+                    &migrated,
+                    REPLACEMENT_START_MARKER,
+                    REPLACEMENT_TAIL,
+                    REPLACEMENT,
+                )
+            {
+                migrated = updated;
+                logging::info("Upgraded stale gradient _getUsageColor override body");
+                println!("Upgraded stale gradient _getUsageColor override body");
+            }
+        }
+
         let changed = migrated != content;
         return Ok((migrated, changed));
     }
@@ -486,6 +544,16 @@ mod tests {
     }
 
     #[test]
+    fn stale_body_anchors_match_the_current_constants() {
+        // The stale-body upgrade logic locates each block by these anchors;
+        // if either constant's text ever drifts from REPLACEMENT/support_block
+        // the anchors would silently stop matching, so pin the invariant here.
+        assert!(support_block().starts_with(SUPPORT_BLOCK_START_MARKER));
+        assert!(REPLACEMENT.starts_with(REPLACEMENT_START_MARKER));
+        assert!(REPLACEMENT.ends_with(REPLACEMENT_TAIL));
+    }
+
+    #[test]
     fn patches_upstream_extension_source() {
         let (patched, changed) = patch_extension_js(&upstream()).expect("patched");
         assert!(changed);
@@ -555,6 +623,47 @@ mod tests {
         assert!(migrated.contains("function getGreenYellowRedGradientColor("));
         assert!(migrated.contains(NEW_RETURN));
         assert!(!migrated.contains(OLD_RETURN));
+    }
+
+    #[test]
+    fn stale_support_block_body_is_upgraded_when_marker_present() {
+        let (once, _) = patch_extension_js(&upstream()).expect("first patch");
+        // Simulate drift: the injected RAM_MAX_GB constant no longer matches
+        // the shared Rust constant, but the marker (_gradientGetUsageColor)
+        // is still present elsewhere in the file.
+        let stale = once.replacen("const RAM_MAX_GB = 64;", "const RAM_MAX_GB = 32;", 1);
+        assert_ne!(stale, once);
+        assert!(stale.contains(ALREADY_PATCHED_MARKER));
+
+        let (upgraded, changed) = patch_extension_js(&stale).expect("upgrade");
+        assert!(changed);
+        assert_eq!(upgraded, once);
+
+        let (again, changed_again) = patch_extension_js(&upgraded).expect("idempotent");
+        assert!(!changed_again);
+        assert_eq!(upgraded, again);
+    }
+
+    #[test]
+    fn stale_replacement_method_body_is_upgraded_when_marker_present() {
+        let (once, _) = patch_extension_js(&upstream()).expect("first patch");
+        // Simulate drift: a manual edit dropped the gpuMemory branch from the
+        // gradient detection, while the marker and forwarding tail survive.
+        let stale = once.replacen(
+            "      } else if (colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")) {\n        config = GRADIENT_CONFIGS.gpuMemory;\n",
+            "",
+            1,
+        );
+        assert_ne!(stale, once);
+        assert!(stale.contains(ALREADY_PATCHED_MARKER));
+
+        let (upgraded, changed) = patch_extension_js(&stale).expect("upgrade");
+        assert!(changed);
+        assert_eq!(upgraded, once);
+
+        let (again, changed_again) = patch_extension_js(&upgraded).expect("idempotent");
+        assert!(!changed_again);
+        assert_eq!(upgraded, again);
     }
 
     #[test]
