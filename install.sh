@@ -31,18 +31,28 @@ RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")"
 DISPLAY_VAL="${DISPLAY:-:0}"
 USER_BUS="unix:path=${RUNTIME_DIR}/bus"
 # Prefer the installer process env; under sudo that is often empty, so fall back
-# to the target user's active session type (loginctl) before defaulting unknown.
+# to the target user's sessions. Prefer wayland when any session reports it
+# (avoids a leftover x11 session making window_rules skip-install on Wayland).
 SESSION_TYPE="${XDG_SESSION_TYPE:-}"
 if [ -z "$SESSION_TYPE" ]; then
   SESSION_TYPE="$(
-    loginctl show-user "$TARGET_USER" -p Sessions --value 2>/dev/null \
-      | tr ' ' '\n' | while read -r sid; do
-          [ -n "$sid" ] || continue
-          typ="$(loginctl show-session "$sid" -p Type --value 2>/dev/null || true)"
-          case "$typ" in
-            x11|wayland) printf '%s\n' "$typ"; break ;;
-          esac
-        done
+    {
+      loginctl show-user "$TARGET_USER" -p Sessions --value 2>/dev/null \
+        | tr ' ' '\n' | while read -r sid; do
+            [ -n "$sid" ] || continue
+            typ="$(loginctl show-session "$sid" -p Type --value 2>/dev/null || true)"
+            state="$(loginctl show-session "$sid" -p State --value 2>/dev/null || true)"
+            printf '%s %s\n' "$state" "$typ"
+          done
+    } | awk '
+      $2=="wayland"{wl=1}
+      $2=="x11"||$2=="xorg"{x11=1}
+      $1=="active" && ($2=="wayland"||$2=="x11"||$2=="xorg"){active=$2}
+      END{
+        if(active!=""){print active; exit}
+        if(wl){print "wayland"; exit}
+        if(x11){print "x11"; exit}
+      }'
   )" || true
 fi
 SESSION_TYPE="${SESSION_TYPE:-unknown}"

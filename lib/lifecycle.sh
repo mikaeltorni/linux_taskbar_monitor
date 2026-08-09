@@ -24,11 +24,14 @@ _rm_refreshers_js() { printf '%s/services/refreshers.js\n' "$(resource_monitor_e
 _rm_main_gui_js() { printf '%s/panel/mainGui.js\n' "$(resource_monitor_ext_dir)"; }
 
 # --- Detection ---------------------------------------------------------------
-# detect_rm_refresh_interval: live check that the installed schema refreshtime
-# matches the configured millisecond interval (converted to seconds). Compare
+# detect_rm_refresh_interval: live check that the component persist file exists
+# and the installed schema refreshtime matches the configured millisecond
+# interval (converted to seconds). Core no longer writes refreshtime, so a
+# deselected component cannot look installed via schema alone. Compare
 # numerically so gsettings' `0.5` still matches the helper's `0.500`.
 detect_rm_refresh_interval() {
   local ext_dir expected actual
+  [ -f "$(resource_monitor_refresh_interval_file)" ] || return 1
   ext_dir="$(resource_monitor_ext_dir)"
   [ -d "$ext_dir/schemas" ] || return 1
   expected="$(resource_monitor_refresh_seconds)"
@@ -100,10 +103,15 @@ detect_rm_process_popup() {
   [ -f "$js" ] && grep -q "Process popup: total CPU/RAM aggregated per process name" "$js"
 }
 detect_window_rules() {
-  # Installed extension tree counts as installed on any session. The X11 skip
-  # marker only satisfies detect while still on X11/XOrg — otherwise a leftover
-  # marker would hide a missing install after switching to Wayland.
-  [ -d "$(rm_ext_dir app-rules@local)" ] && return 0
+  # Require a real extension tree (metadata.json), not an empty leftover dir.
+  # The X11 skip marker only satisfies detect while still on X11/XOrg —
+  # otherwise a leftover marker would hide a missing install after switching
+  # to Wayland.
+  local ext
+  ext="$(rm_ext_dir app-rules@local)"
+  if [ -f "$ext/metadata.json" ]; then
+    return 0
+  fi
   case "${SESSION_TYPE:-}" in
     x11|xorg)
       if declare -F window_rules_skip_marker >/dev/null 2>&1; then
@@ -117,13 +125,11 @@ detect_window_rules() {
 }
 
 # --- Uninstall ---------------------------------------------------------------
-# uninstall_rm_panel_spacing - Revert the panel to the default stable spacing
-# (reserved widths, no taskbar shift) and clear the persisted compact choice.
-uninstall_rm_panel_spacing() {
-  msg "Reverting Resource Monitor panel spacing to stable (default)"
-  persist_resource_monitor_spacing_mode stable || return 1
-  apply_resource_monitor_spacing_mode
-}
+# uninstall_rm_panel_spacing - Source patch (stable-width markers). Applying
+# stable leaves detect green for the default mode, so fail hard like other
+# source patches: re-run install without the component so core re-extract
+# reverts containers.js.
+uninstall_rm_panel_spacing() { uninstall_rm_source_patch rm_panel_spacing; }
 
 # Source patches (rm_vram, rm_gradient_colors, rm_per_disk, …) cannot be
 # uninstalled in place: markers stay until core re-extract. Explicit uninstall
@@ -161,19 +167,31 @@ uninstall_rm_refresh_interval() {
 }
 
 uninstall_window_rules() {
+  local marker failures=0
   msg "Removing app window-rules extension"
   run_as_target gnome-extensions disable app-rules@local 2>/dev/null || true
   # Drop the UUID from enabled-extensions even when gnome-extensions disable
   # fails, so a deleted tree is not left referenced as enabled.
   if declare -F remove_gsettings_list >/dev/null 2>&1; then
-    remove_gsettings_list org.gnome.shell enabled-extensions "app-rules@local" \
-      || msg "WARN: could not remove app-rules@local from enabled-extensions" >&2
+    if ! remove_gsettings_list org.gnome.shell enabled-extensions "app-rules@local"; then
+      msg "ERROR: could not remove app-rules@local from enabled-extensions" >&2
+      failures=1
+    fi
   fi
   run_as_target rm -rf "$(rm_ext_dir app-rules@local)"
   if declare -F window_rules_skip_marker >/dev/null 2>&1; then
-    run_as_target rm -f "$(window_rules_skip_marker)" 2>/dev/null || true
+    marker="$(window_rules_skip_marker)"
   else
-    run_as_target rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11" \
-      2>/dev/null || true
+    marker="$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11"
   fi
+  run_as_target rm -f "$marker"
+  if [ -f "$marker" ]; then
+    msg "ERROR: could not remove window-rules skip marker at $marker" >&2
+    failures=1
+  fi
+  if [ -f "$(rm_ext_dir app-rules@local)/metadata.json" ]; then
+    msg "ERROR: app-rules@local tree still present after uninstall" >&2
+    failures=1
+  fi
+  return "$failures"
 }

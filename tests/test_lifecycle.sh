@@ -85,9 +85,11 @@ printf '// Resource Monitor panel spacing: compact (no reserved widths)\n' >"$EX
 RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing || fail "detect_rm_panel_spacing should report compact when compact marker is present"
 RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing && fail "detect_rm_panel_spacing must reject compact marker in stable mode"
 
-# --- Window rules directory presence ---------------------------------------
+# --- Window rules requires a real extension tree (metadata.json) ------------
 mkdir -p "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"
-detect_window_rules || fail "detect_window_rules should accept an installed app-rules@local"
+detect_window_rules && fail "detect_window_rules should reject a bare app-rules@local dir without metadata.json"
+printf '{}\n' >"$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local/metadata.json"
+detect_window_rules || fail "detect_window_rules should accept app-rules@local with metadata.json"
 rm -rf "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"
 detect_window_rules && fail "detect_window_rules should reject removed app-rules@local"
 # X11 skip marker must satisfy detect on X11 so configure no-ops do not loop.
@@ -98,8 +100,10 @@ SESSION_TYPE=wayland detect_window_rules && fail "detect_window_rules must ignor
 rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/window-rules-skipped-x11"
 SESSION_TYPE=x11 detect_window_rules && fail "detect_window_rules should reject after skip marker removal"
 
-# --- Refresh interval detect compares schema value to configured ms --------
+# --- Refresh interval detect needs persist file + matching schema value ----
 mkdir -p "$EXT_DIR/schemas"
+mkdir -p "$TARGET_HOME/.config/taskbar-system-status-monitor"
+printf '500\n' >"$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
 ext_gsettings() {
   # $1 = ext_dir; remaining args are gsettings argv. Stub refreshtime get.
   shift
@@ -114,8 +118,16 @@ STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
 # gsettings often prints `0.5` for the same double; string equality must not fail.
 STUB_REFRESHTIME=0.5 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
   detect_rm_refresh_interval || fail "detect_rm_refresh_interval should treat 0.5 and 0.500 as equal"
-STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=1000 \
+# Persist file wins over ENV, so rewrite the file to force a schema mismatch.
+printf '1000\n' >"$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
+STUB_REFRESHTIME=0.500 \
   detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject a mismatched refreshtime"
+printf '500\n' >"$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
+# Schema match alone is not enough when the component persist file is absent.
+rm -f "$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
+STUB_REFRESHTIME=0.500 RESOURCE_MONITOR_REFRESH_INTERVAL_MS=500 \
+  detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject when persist file is missing"
+printf '500\n' >"$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
 rm -rf "$EXT_DIR/schemas"
 detect_rm_refresh_interval && fail "detect_rm_refresh_interval should reject a missing schemas dir"
 

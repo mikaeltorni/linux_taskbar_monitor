@@ -112,8 +112,10 @@ _sc_run_selected() {
     fi
     msg "[${ISC_REPO_NAME:-installer}] Installing component: $label ($id)"
     if ! "$fn"; then
-      msg "WARN: component '$id' failed (continuing)" >&2
+      msg "ERROR: component '$id' failed" >&2
       failed+=("$id")
+      msg "[${ISC_REPO_NAME:-installer}] Components with failures: ${failed[*]}" >&2
+      return 1
     else
       _sc_mark_installed "$id"
     fi

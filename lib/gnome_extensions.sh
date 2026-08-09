@@ -158,9 +158,12 @@ apply_resource_monitor_spacing_mode() {
     return 1
   fi
   msg "Applying Resource Monitor panel spacing mode: ${mode}"
-  apply_resource_monitor_width_gsettings "$ext_dir" "$mode"
+  apply_resource_monitor_width_gsettings "$ext_dir" "$mode" || return 1
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping stable-width patch (build with scripts/build_rm_monitor.sh and re-run)"; return 1; }
-  rm_monitor patch-stable-width --mode "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"
+  if ! rm_monitor patch-stable-width --mode "$mode" "$(resource_monitor_ext_dir)/panel/containers.js"; then
+    msg "ERROR: patch-stable-width failed for mode ${mode}" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_panel_spacing" || true
 }
 
@@ -235,19 +238,23 @@ persist_resource_monitor_refresh_interval() {
 # --reconfigure does not mark a false success; configure persists anyway and
 # skips apply until core install.
 apply_resource_monitor_refresh_interval() {
-  local ext_dir seconds
+  local ext_dir seconds ms
   ext_dir="$(resource_monitor_ext_dir)"
+  ms="$(resource_monitor_refresh_interval_ms)"
   seconds="$(resource_monitor_refresh_seconds)"
   if [ ! -d "$ext_dir/schemas" ]; then
     msg "Resource Monitor is not installed yet; cannot apply update time." >&2
     return 1
   fi
+  # Persist so detect/uninstall have a component-owned signal beyond the live
+  # schema value (core no longer writes refreshtime itself).
+  persist_resource_monitor_refresh_interval "$ms" || return 1
   sync_resource_monitor_user_schema "$ext_dir" || return 1
   if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
     msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
     return 1
   fi
-  msg "Applied Resource Monitor update time: $(resource_monitor_refresh_interval_ms) ms."
+  msg "Applied Resource Monitor update time: ${ms} ms."
   _isc_mark_installed "rm_refresh_interval" || true
 }
 
@@ -337,8 +344,9 @@ install_resource_monitor_core() {
     chown -R "$TARGET_USER:$TARGET_USER" "$staging"
   fi
 
-  # Sub-second refresh capability (schema/type widening + GPU poll floor). The
-  # actual interval is applied below from the persisted installer setting.
+  # Sub-second refresh capability (schema/type widening + GPU poll floor).
+  # The live refreshtime value is owned by the rm_refresh_interval component
+  # (apply_resource_monitor_refresh_interval), not by core.
   rm_monitor patch-refresh "$staging"
 
   # Pin the version high (9999) so GNOME never auto-updates the EGO-sourced
@@ -383,7 +391,9 @@ install_resource_monitor_core() {
 
   sync_resource_monitor_user_schema "$ext_dir" || return 1
 
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
+  # refreshtime value is owned by the rm_refresh_interval component
+  # (apply_resource_monitor_refresh_interval). Core only patches capability via
+  # patch-refresh above so deselected refresh does not leave detect green.
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
@@ -427,7 +437,11 @@ install_resource_monitor_core() {
   local gpu_devices=""
   gpu_devices="$(rm_monitor report-cuda-devices)" || gpu_rc=$?
   if (( gpu_rc != 0 )); then
-    msg "WARN: report-cuda-devices failed (exit $gpu_rc); leaving gpudeviceslist unchanged."
+    # Clear stale UUIDs rather than leaving a previous successful probe's list
+    # in place when nvidia-smi / the helper failed this run.
+    msg "WARN: report-cuda-devices failed (exit $gpu_rc); clearing gpudeviceslist."
+    ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "[]" \
+      || msg "WARN: could not clear gpudeviceslist after report-cuda-devices failure"
   elif [ "$gpu_devices" = "[]" ]; then
     ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "[]"
     msg "No NVIDIA GPU reported by nvidia-smi; Resource Monitor GPU list set empty."
@@ -437,7 +451,7 @@ install_resource_monitor_core() {
 
   enable_shell_extension "$ext_id"
   RESOURCE_MONITOR_EXT_DIR="$ext_dir"
-  msg "Resource Monitor core installed with a $(resource_monitor_refresh_interval_ms) ms refresh interval."
+  msg "Resource Monitor core installed (refresh interval applied by rm_refresh_interval when selected)."
 }
 
 # ── Optional Resource Monitor tweaks (selectable components) ──────────────────
@@ -451,7 +465,10 @@ install_resource_monitor_core() {
 patch_resource_monitor_gradient_colors() {
   msg "Applying Resource Monitor gradient colors patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping gradient colors patch"; return 1; }
-  rm_monitor patch-colors "$(resource_monitor_ext_dir)/extension.js"
+  if ! rm_monitor patch-colors "$(resource_monitor_ext_dir)/extension.js"; then
+    msg "ERROR: patch-colors failed" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_gradient_colors" || true
 }
 
@@ -459,7 +476,10 @@ patch_resource_monitor_gradient_colors() {
 patch_resource_monitor_vram() {
   msg "Applying Resource Monitor VRAM display patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping VRAM display patch"; return 1; }
-  rm_monitor patch-vram "$(resource_monitor_ext_dir)/panel/containers.js"
+  if ! rm_monitor patch-vram "$(resource_monitor_ext_dir)/panel/containers.js"; then
+    msg "ERROR: patch-vram failed" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_vram" || true
 }
 
@@ -469,7 +489,10 @@ patch_resource_monitor_vram() {
 patch_resource_monitor_eth_icon() {
   msg "Applying Resource Monitor ethernet-icon removal patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping ethernet-icon patch"; return 1; }
-  rm_monitor patch-eth-icon "$(resource_monitor_ext_dir)/panel/mainGui.js"
+  if ! rm_monitor patch-eth-icon "$(resource_monitor_ext_dir)/panel/mainGui.js"; then
+    msg "ERROR: patch-eth-icon failed" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_hide_eth_icon" || true
 }
 
@@ -480,7 +503,10 @@ patch_resource_monitor_eth_icon() {
 patch_resource_monitor_process_popup() {
   msg "Applying Resource Monitor process-popup (left-click) patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping process-popup patch"; return 1; }
-  rm_monitor patch-process-popup "$(resource_monitor_ext_dir)/extension.js"
+  if ! rm_monitor patch-process-popup "$(resource_monitor_ext_dir)/extension.js"; then
+    msg "ERROR: patch-process-popup failed" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_process_popup" || true
 }
 
@@ -488,6 +514,9 @@ patch_resource_monitor_process_popup() {
 patch_resource_monitor_per_disk() {
   msg "Applying Resource Monitor per-disk display patch"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping per-disk display patch"; return 1; }
-  rm_monitor patch-disk "$(resource_monitor_ext_dir)/panel/containers.js"
+  if ! rm_monitor patch-disk "$(resource_monitor_ext_dir)/panel/containers.js"; then
+    msg "ERROR: patch-disk failed" >&2
+    return 1
+  fi
   _isc_mark_installed "rm_per_disk" || true
 }

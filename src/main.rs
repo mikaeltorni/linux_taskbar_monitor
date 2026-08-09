@@ -11,6 +11,8 @@
 
 mod configure;
 mod disks;
+#[cfg(test)]
+mod env_test_lock;
 mod gradient_colors;
 mod gsettings_strv;
 mod logging;
