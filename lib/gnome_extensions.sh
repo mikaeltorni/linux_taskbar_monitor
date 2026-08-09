@@ -25,20 +25,31 @@ ext_gsettings() {
   run_as_target gsettings --schemadir "$ext_dir/schemas" "$@"
 }
 
-# clear_stale_resource_monitor_user_schema — Drop a leftover copy under
-# ~/.local/share/glib-2.0/schemas that shadows the extension's patched schema.
-# A stale integer refreshtime (range 1–60) makes bare `gsettings get` disagree
-# with `gsettings --schemadir <ext>/schemas` (double 0.1–60) and can confuse
-# prefs tooling. The extension directory remains the source of truth.
-clear_stale_resource_monitor_user_schema() {
-  local schema_dir="$TARGET_HOME/.local/share/glib-2.0/schemas"
-  local schema_xml="$schema_dir/org.gnome.shell.extensions.resource-monitor.gschema.xml"
-  if [ ! -f "$schema_xml" ]; then
+# sync_resource_monitor_user_schema — Keep ~/.local/share/glib-2.0/schemas in
+# lockstep with the extension's patched schema. A leftover integer refreshtime
+# (range 1–60) shadows bare `gsettings` against the extension schemadir's
+# double 0.1–60 range; copying the patched XML and recompiling fixes that
+# without relying on callers to pass --schemadir.
+sync_resource_monitor_user_schema() {
+  local ext_dir="${1:-}"
+  local src schema_dir dest
+  if [ -z "$ext_dir" ]; then
+    ext_dir="$(resource_monitor_ext_dir)"
+  fi
+  src="$ext_dir/schemas/org.gnome.shell.extensions.resource-monitor.gschema.xml"
+  schema_dir="$TARGET_HOME/.local/share/glib-2.0/schemas"
+  dest="$schema_dir/org.gnome.shell.extensions.resource-monitor.gschema.xml"
+  if [ ! -f "$src" ]; then
+    msg "WARN: extension schema missing at $src; cannot sync user glib schemas"
     return 0
   fi
-  msg "Removing stale user schema that shadows Resource Monitor refreshtime: $schema_xml"
-  run_as_target rm -f "$schema_xml"
-  if [ -d "$schema_dir" ] && need_cmd glib-compile-schemas; then
+  run_as_target mkdir -p "$schema_dir"
+  if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
+    return 0
+  fi
+  msg "Syncing Resource Monitor schema into user glib schemas: $dest"
+  run_as_target cp -f "$src" "$dest"
+  if need_cmd glib-compile-schemas; then
     run_as_target glib-compile-schemas "$schema_dir" \
       || msg "WARN: glib-compile-schemas failed for $schema_dir (extension schemadir still authoritative)"
   fi
@@ -227,6 +238,7 @@ apply_resource_monitor_refresh_interval() {
     msg "Resource Monitor is not installed yet; cannot apply update time." >&2
     return 1
   fi
+  sync_resource_monitor_user_schema "$ext_dir"
   if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
     msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
     return 1
@@ -349,7 +361,7 @@ install_resource_monitor_core() {
   rm -rf "$tmpdir"
   trap - RETURN
 
-  clear_stale_resource_monitor_user_schema
+  sync_resource_monitor_user_schema "$ext_dir"
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"

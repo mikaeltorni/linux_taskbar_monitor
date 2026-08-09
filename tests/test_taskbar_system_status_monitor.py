@@ -309,12 +309,13 @@ def test_installer_apt_installs_runtime_deps():
     assert "skipping zip integrity check" in core
 
 
-def test_core_clears_stale_user_schema_shadowing_refreshtime():
-    """A leftover ~/.local/share/glib-2.0 integer schema must not shadow doubles."""
+def test_core_syncs_user_schema_for_refreshtime():
+    """Patched double refreshtime must be mirrored into user glib schemas."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
-    assert "clear_stale_resource_monitor_user_schema" in core
+    assert "sync_resource_monitor_user_schema" in core
+    assert "clear_stale_resource_monitor_user_schema" not in core
     # Called after publish, before refreshtime is written via extension schemadir.
-    publish = core.split("clear_stale_resource_monitor_user_schema", 1)[1]
+    publish = core.split("sync_resource_monitor_user_schema", 1)[1]
     assert "refreshtime" in publish
     assert "glib-2.0/schemas" in core
     assert "org.gnome.shell.extensions.resource-monitor.gschema.xml" in core
