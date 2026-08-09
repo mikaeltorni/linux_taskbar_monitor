@@ -25,6 +25,25 @@ ext_gsettings() {
   run_as_target gsettings --schemadir "$ext_dir/schemas" "$@"
 }
 
+# clear_stale_resource_monitor_user_schema — Drop a leftover copy under
+# ~/.local/share/glib-2.0/schemas that shadows the extension's patched schema.
+# A stale integer refreshtime (range 1–60) makes bare `gsettings get` disagree
+# with `gsettings --schemadir <ext>/schemas` (double 0.1–60) and can confuse
+# prefs tooling. The extension directory remains the source of truth.
+clear_stale_resource_monitor_user_schema() {
+  local schema_dir="$TARGET_HOME/.local/share/glib-2.0/schemas"
+  local schema_xml="$schema_dir/org.gnome.shell.extensions.resource-monitor.gschema.xml"
+  if [ ! -f "$schema_xml" ]; then
+    return 0
+  fi
+  msg "Removing stale user schema that shadows Resource Monitor refreshtime: $schema_xml"
+  run_as_target rm -f "$schema_xml"
+  if [ -d "$schema_dir" ] && need_cmd glib-compile-schemas; then
+    run_as_target glib-compile-schemas "$schema_dir" \
+      || msg "WARN: glib-compile-schemas failed for $schema_dir (extension schemadir still authoritative)"
+  fi
+}
+
 # RESOURCE_MONITOR_EXT_DIR is published by install_resource_monitor_core so the
 # optional patch components (gradient colors, VRAM, per-disk) can locate the
 # extracted extension after the mandatory core has installed it.
@@ -329,6 +348,8 @@ install_resource_monitor_core() {
   run_as_target mv "$publish_dir" "$ext_dir"
   rm -rf "$tmpdir"
   trap - RETURN
+
+  clear_stale_resource_monitor_user_schema
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
