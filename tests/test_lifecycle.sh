@@ -60,9 +60,11 @@ detect_rm_hide_eth_icon || fail "detect_rm_hide_eth_icon should accept the eth-i
 # --- Panel spacing detection is mode-aware ----------------------------------
 # Stable is present when either reservation marker is in containers.js: the
 # disk-space secondary activity marker and/or the GPU VRAM width-split marker
-# (GPU-only happens when rm_per_disk was not selected). Compact requires both gone.
+# (GPU-only happens when rm_per_disk was not selected). Compact requires the
+# positive compact marker from patch-stable-width --mode compact.
 DISK_MARKER='Space separator between disk-space activity percent and its unit (stable width)'
 GPU_MARKER='VRAM value (0-99 GB, 2 digits) gets its own tighter reserved'
+COMPACT_MARKER='Resource Monitor panel spacing: compact (no reserved widths)'
 printf '%s\n' "$DISK_MARKER" >"$EXT_DIR/panel/containers.js"
 RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing || fail "detect_rm_panel_spacing should report installed via disk marker"
 rm -f "$EXT_DIR/panel/containers.js"
@@ -74,10 +76,14 @@ RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing && fail "detect_rm
 printf '%s\n' "$GPU_MARKER" >"$EXT_DIR/panel/containers.js"
 RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing || fail "detect_rm_panel_spacing should report installed via GPU marker alone"
 RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing && fail "detect_rm_panel_spacing must treat a present GPU marker as NOT installed in compact mode"
-# Compact with neither marker: considered applied.
+# Marker-free upstream must NOT count as compact (false-positive fix).
 printf '// no stable-width markers\n' >"$EXT_DIR/panel/containers.js"
-RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing || fail "detect_rm_panel_spacing should report compact when both markers are absent"
+RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing && fail "detect_rm_panel_spacing must reject marker-free containers in compact mode"
 RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing && fail "detect_rm_panel_spacing must reject marker-free containers in stable mode"
+# Positive compact marker with no stable markers => installed.
+printf '// Resource Monitor panel spacing: compact (no reserved widths)\n' >"$EXT_DIR/panel/containers.js"
+RESOURCE_MONITOR_SPACING_MODE=compact detect_rm_panel_spacing || fail "detect_rm_panel_spacing should report compact when compact marker is present"
+RESOURCE_MONITOR_SPACING_MODE=stable detect_rm_panel_spacing && fail "detect_rm_panel_spacing must reject compact marker in stable mode"
 
 # --- Window rules directory presence ---------------------------------------
 mkdir -p "$TARGET_HOME/.local/share/gnome-shell/extensions/app-rules@local"

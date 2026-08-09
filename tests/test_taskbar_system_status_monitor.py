@@ -3,6 +3,7 @@
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -319,18 +320,60 @@ def test_core_syncs_user_schema_for_refreshtime():
     """Patched double refreshtime must be mirrored into user glib schemas."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
     assert "sync_resource_monitor_user_schema() {" in core
+    # Hard-fail on missing src / compile failure (no soft WARN+return 0).
+    sync_fn = core.split("sync_resource_monitor_user_schema() {")[1].split("\n}\n")[0]
+    assert "return 1" in sync_fn
+    assert "WARN: extension schema missing" not in sync_fn
     # Scope to install_resource_monitor_core so apply_* call sites do not confuse order.
     core_fn = core.split("install_resource_monitor_core()")[1].split(
         "# ── Optional Resource Monitor tweaks"
     )[0]
     publish_mv = core_fn.index('mv "$publish_dir" "$ext_dir"')
-    sync_call = core_fn.index('sync_resource_monitor_user_schema "$ext_dir"')
+    sync_call = core_fn.index('sync_resource_monitor_user_schema "$ext_dir" || return 1')
     refreshtime = core_fn.index(
         'ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime'
     )
     assert publish_mv < sync_call < refreshtime
     assert "glib-2.0/schemas" in core
     assert "org.gnome.shell.extensions.resource-monitor.gschema.xml" in core
+    assert "uninstall_rm_refresh_interval" in (
+        ROOT_DIR / "lib" / "lifecycle.sh"
+    ).read_text(encoding="utf-8")
+    assert "uninstall_rm_refresh_interval" in (
+        ROOT_DIR / "installer" / "components.sh"
+    ).read_text(encoding="utf-8")
+    agents = (ROOT_DIR / "AGENTS.md").read_text(encoding="utf-8")
+    assert "glib-2.0/schemas" in agents
+
+
+def test_select_unknown_aborts_at_runtime_before_core_banner():
+    """Unknown --select must exit 1 without starting the install banner."""
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "home"
+        home.mkdir()
+        env = {
+            **os.environ,
+            "HOME": str(home),
+            "ISC_FUNCTIONS_DIR": str(Path(tmp) / "missing-framework"),
+            "PATH": str(Path(tmp) / "bin") + ":" + os.environ.get("PATH", ""),
+        }
+        bin_dir = Path(tmp) / "bin"
+        bin_dir.mkdir()
+        curl = bin_dir / "curl"
+        curl.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        curl.chmod(0o755)
+        result = subprocess.run(
+            ["bash", str(ROOT_DIR / "install.sh"), "--select", "not_a_component"],
+            cwd=ROOT_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 1
+        combined = result.stdout + result.stderr
+        assert "unknown component id" in combined
+        assert "Linux Taskbar Monitor & GNOME Extensions Setup" not in combined
 
 
 def test_select_ids_validated_before_core_install():

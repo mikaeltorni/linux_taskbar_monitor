@@ -40,19 +40,23 @@ sync_resource_monitor_user_schema() {
   schema_dir="$TARGET_HOME/.local/share/glib-2.0/schemas"
   dest="$schema_dir/org.gnome.shell.extensions.resource-monitor.gschema.xml"
   if [ ! -f "$src" ]; then
-    msg "WARN: extension schema missing at $src; cannot sync user glib schemas"
-    return 0
+    msg "ERROR: extension schema missing at $src; cannot sync user glib schemas"
+    return 1
   fi
+  need_cmd glib-compile-schemas || {
+    msg "ERROR: glib-compile-schemas is required to sync user glib schemas"
+    return 1
+  }
   run_as_target mkdir -p "$schema_dir"
   if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
     return 0
   fi
   msg "Syncing Resource Monitor schema into user glib schemas: $dest"
-  run_as_target cp -f "$src" "$dest"
-  if need_cmd glib-compile-schemas; then
-    run_as_target glib-compile-schemas "$schema_dir" \
-      || msg "WARN: glib-compile-schemas failed for $schema_dir (extension schemadir still authoritative)"
-  fi
+  run_as_target cp -f "$src" "$dest" || return 1
+  run_as_target glib-compile-schemas "$schema_dir" || {
+    msg "ERROR: glib-compile-schemas failed for $schema_dir"
+    return 1
+  }
 }
 
 # RESOURCE_MONITOR_EXT_DIR is published by install_resource_monitor_core so the
@@ -238,7 +242,7 @@ apply_resource_monitor_refresh_interval() {
     msg "Resource Monitor is not installed yet; cannot apply update time." >&2
     return 1
   fi
-  sync_resource_monitor_user_schema "$ext_dir"
+  sync_resource_monitor_user_schema "$ext_dir" || return 1
   if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$seconds"; then
     msg "Failed to apply Resource Monitor update time; the installed schema may need reconfiguration." >&2
     return 1
@@ -377,7 +381,7 @@ install_resource_monitor_core() {
   rm -rf "$tmpdir"
   trap - RETURN
 
-  sync_resource_monitor_user_schema "$ext_dir"
+  sync_resource_monitor_user_schema "$ext_dir" || return 1
 
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime "$(resource_monitor_refresh_seconds)"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
