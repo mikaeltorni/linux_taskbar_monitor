@@ -13,18 +13,51 @@ use thiserror::Error;
 #[error("Could not find target code in {0}")]
 pub struct PatchTargetMissing(pub String);
 
+/// Compute the sibling `.tmp` path used by [`write_atomic`] and
+/// [`write_atomic_batch`] for `path`.
+fn tmp_sibling(path: &Path) -> PathBuf {
+    let mut os = path.as_os_str().to_owned();
+    os.push(".tmp");
+    PathBuf::from(os)
+}
+
 /// Write `content` to `path` via a sibling `.tmp` file then rename.
 ///
 /// Avoids leaving a truncated target when the process dies mid-write. Same-
 /// filesystem rename is atomic on Linux for the final replace step.
 pub fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
-    let tmp = {
-        let mut os = path.as_os_str().to_owned();
-        os.push(".tmp");
-        PathBuf::from(os)
-    };
+    let tmp = tmp_sibling(path);
     fs::write(&tmp, content)?;
     fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+/// Write a batch of `(path, content)` pairs atomically as a group.
+///
+/// Every file's `.tmp` sibling is written first; only once **all** writes
+/// succeed are the files renamed into place (also in order). This keeps a
+/// multi-file patch (e.g. `containers.js` + `refreshers.js` + `extension.js`)
+/// from leaving some targets patched and others untouched when a later file
+/// in the batch fails to write.
+///
+/// On a tmp-write failure, every `.tmp` sibling created so far in this call is
+/// removed (best-effort) and the error is returned without renaming any file
+/// — the targets stay exactly as they were before the call.
+pub fn write_atomic_batch(files: &[(PathBuf, String)]) -> std::io::Result<()> {
+    let mut created_tmps: Vec<PathBuf> = Vec::with_capacity(files.len());
+    for (path, content) in files {
+        let tmp = tmp_sibling(path);
+        if let Err(err) = fs::write(&tmp, content) {
+            for created in &created_tmps {
+                let _ = fs::remove_file(created);
+            }
+            return Err(err);
+        }
+        created_tmps.push(tmp);
+    }
+    for ((path, _), tmp) in files.iter().zip(created_tmps.iter()) {
+        fs::rename(tmp, path)?;
+    }
     Ok(())
 }
 
@@ -240,11 +273,43 @@ mod tests {
         assert!(!path.with_extension("txt.tmp").exists());
         write_atomic(&path, "two").expect("rewrite");
         assert_eq!(fs::read_to_string(&path).unwrap(), "two");
-        let tmp = {
-            let mut os = path.as_os_str().to_owned();
-            os.push(".tmp");
-            PathBuf::from(os)
-        };
-        assert!(!tmp.exists(), "tmp sibling must be renamed away");
+        assert!(
+            !tmp_sibling(&path).exists(),
+            "tmp sibling must be renamed away"
+        );
+    }
+
+    #[test]
+    fn write_atomic_batch_writes_all_tmps_then_renames_all() {
+        let dir = tempfile::tempdir().expect("temp");
+        let a = dir.path().join("a.txt");
+        let b = dir.path().join("b.txt");
+        write_atomic_batch(&[(a.clone(), "A".to_string()), (b.clone(), "B".to_string())])
+            .expect("batch write");
+        assert_eq!(fs::read_to_string(&a).unwrap(), "A");
+        assert_eq!(fs::read_to_string(&b).unwrap(), "B");
+        assert!(!tmp_sibling(&a).exists());
+        assert!(!tmp_sibling(&b).exists());
+    }
+
+    #[test]
+    fn write_atomic_batch_cleans_up_tmps_and_renames_nothing_on_write_failure() {
+        let dir = tempfile::tempdir().expect("temp");
+        let a = dir.path().join("a.txt");
+        // Parent directory does not exist, so writing this tmp sibling fails.
+        let unwritable = dir.path().join("missing-dir").join("b.txt");
+        let result = write_atomic_batch(&[
+            (a.clone(), "A".to_string()),
+            (unwritable.clone(), "B".to_string()),
+        ]);
+
+        assert!(result.is_err());
+        assert!(!a.exists(), "earlier target must not be renamed into place");
+        assert!(!unwritable.exists());
+        assert!(
+            !tmp_sibling(&a).exists(),
+            "tmp created before the failure must be cleaned up"
+        );
+        assert!(!tmp_sibling(&unwritable).exists());
     }
 }

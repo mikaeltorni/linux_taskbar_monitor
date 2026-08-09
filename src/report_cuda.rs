@@ -70,11 +70,16 @@ pub fn parse_gpu_output(output: &str) -> Vec<Device> {
 
 /// Query `nvidia-smi` and return structured GPU device information.
 ///
-/// Returns an empty list when `nvidia-smi` is unavailable or the query fails.
-pub fn get_gpu_devices() -> Vec<Device> {
+/// # Returns
+/// - `Ok(vec![])` when `nvidia-smi` is not installed (no GPU to detect).
+/// - `Ok(devices)` when the query succeeds.
+/// - `Err(message)` when `nvidia-smi` is installed but `-L` fails, so callers
+///   can distinguish "genuinely no GPU" from "query broke" and avoid
+///   overwriting a real device list with a false empty one.
+pub fn get_gpu_devices() -> Result<Vec<Device>, String> {
     let Some(nvidia_smi) = detect_nvidia_smi() else {
         logging::info("nvidia-smi not found; no GPUs detected");
-        return Vec::new();
+        return Ok(Vec::new());
     };
 
     let output = match Command::new(&nvidia_smi)
@@ -84,21 +89,20 @@ pub fn get_gpu_devices() -> Vec<Device> {
     {
         Ok(output) if output.status.success() => output.stdout,
         Ok(output) => {
-            logging::warn(format!(
-                "nvidia-smi -L failed with status {}",
-                output.status
-            ));
-            return Vec::new();
+            let message = format!("nvidia-smi -L failed with status {}", output.status);
+            logging::warn(&message);
+            return Err(message);
         }
         Err(err) => {
-            logging::warn(format!("nvidia-smi -L failed: {err}"));
-            return Vec::new();
+            let message = format!("nvidia-smi -L failed: {err}");
+            logging::warn(&message);
+            return Err(message);
         }
     };
 
     let devices = parse_gpu_output(&String::from_utf8_lossy(&output));
     logging::info(format!("Detected {} GPU device(s)", devices.len()));
-    devices
+    Ok(devices)
 }
 
 /// CLI entry point: print the GSettings GPU device array to stdout.
@@ -149,7 +153,45 @@ pub fn run() -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+
+    #[test]
+    fn get_gpu_devices_result_reflects_probe_availability_and_success() {
+        // Sequential within one test (not split across tests) so the PATH
+        // mutation below cannot race with another test's PATH override.
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+
+        let empty_path_dir = tempfile::tempdir().expect("empty path dir");
+        // SAFETY: test-only PATH override, restored before this test returns.
+        unsafe { std::env::set_var("PATH", empty_path_dir.path()) };
+        assert_eq!(
+            get_gpu_devices(),
+            Ok(Vec::new()),
+            "missing nvidia-smi must report Ok(empty), not an error"
+        );
+
+        let bin_dir = tempfile::tempdir().expect("bin dir");
+        let fake = bin_dir.path().join("nvidia-smi");
+        fs::write(&fake, "#!/bin/sh\nexit 1\n").expect("fake nvidia-smi");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&fake).expect("meta").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&fake, perms).expect("chmod");
+        }
+        // SAFETY: test-only PATH override, restored immediately below.
+        unsafe { std::env::set_var("PATH", bin_dir.path()) };
+        assert!(
+            get_gpu_devices().is_err(),
+            "an installed nvidia-smi whose -L query fails must report Err, not Ok(empty)"
+        );
+
+        // SAFETY: restore the real PATH for the rest of the test process.
+        unsafe { std::env::set_var("PATH", original_path) };
+    }
 
     #[test]
     fn parses_a_single_gpu_line() {

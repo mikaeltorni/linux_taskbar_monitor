@@ -580,15 +580,12 @@ pub fn normalize_disk_container_styles(content: &str) -> String {
     collapsed
 }
 
-/// Current-body marker: LVM/mapper paths need `file_read_link` to match dm-N
-/// names in `/proc/diskstats`. Older patched helpers omit this.
-const ACTIVITY_HELPER_CURRENT_MARKER: &str = "GLib.file_read_link(filesystem)";
-
-/// Replace a top-level `function name(...) { ... }` whose header matches
-/// `header_marker` with `replacement` (full function text including braces).
+/// Locate a top-level `function name(...) { ... }` whose header matches
+/// `header_marker`, returning the `(start, end)` byte span of the full
+/// function text (header through the matching closing brace, inclusive).
 ///
 /// Returns `None` when the header is absent or braces are unbalanced.
-fn replace_js_function(content: &str, header_marker: &str, replacement: &str) -> Option<String> {
+fn find_js_function_bounds(content: &str, header_marker: &str) -> Option<(usize, usize)> {
     let start = content.find(header_marker)?;
     let brace_rel = content[start..].find('{')?;
     let brace_start = start + brace_rel;
@@ -607,7 +604,24 @@ fn replace_js_function(content: &str, header_marker: &str, replacement: &str) ->
             _ => {}
         }
     }
-    let end = end?;
+    Some((start, end?))
+}
+
+/// Extract the full text (header through matching closing brace) of a
+/// top-level function whose header matches `header_marker`.
+///
+/// Returns `None` under the same conditions as [`find_js_function_bounds`].
+fn extract_js_function<'a>(content: &'a str, header_marker: &str) -> Option<&'a str> {
+    let (start, end) = find_js_function_bounds(content, header_marker)?;
+    Some(&content[start..end])
+}
+
+/// Replace a top-level `function name(...) { ... }` whose header matches
+/// `header_marker` with `replacement` (full function text including braces).
+///
+/// Returns `None` when the header is absent or braces are unbalanced.
+fn replace_js_function(content: &str, header_marker: &str, replacement: &str) -> Option<String> {
+    let (start, end) = find_js_function_bounds(content, header_marker)?;
     let mut out = String::with_capacity(content.len() - (end - start) + replacement.len());
     out.push_str(&content[..start]);
     out.push_str(replacement);
@@ -624,18 +638,28 @@ fn replace_js_function(content: &str, header_marker: &str, replacement: &str) ->
 pub fn ensure_disk_activity_helper(content: &str) -> Result<String, PatchTargetMissing> {
     let mut content = content.to_string();
 
-    if content.contains(ACTIVITY_HELPER_MARKER) && !content.contains(ACTIVITY_HELPER_CURRENT_MARKER)
-    {
-        match replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY) {
-            Some(upgraded) => {
-                logging::info("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
-                println!("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
-                content = upgraded;
-            }
-            None => {
-                return Err(PatchTargetMissing(
-                    "refreshers.js disk activity helper (stale body, cannot upgrade)".to_string(),
-                ));
+    if content.contains(ACTIVITY_HELPER_MARKER) {
+        // Compare the installed function body against the current body rather
+        // than checking for one known-stale marker, so any drift (not just the
+        // LVM/mapper fix) gets upgraded. `unwrap_or(true)` treats "marker text
+        // present but bounds cannot be extracted" as needing replacement too;
+        // `replace_js_function` below fails hard in that same case.
+        let needs_replace = extract_js_function(&content, ACTIVITY_HELPER_MARKER)
+            .map(|body| body != DISK_ACTIVITY_HELPER_BODY)
+            .unwrap_or(true);
+        if needs_replace {
+            match replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY) {
+                Some(upgraded) => {
+                    logging::info("Upgraded refreshers.js disk activity helper body");
+                    println!("Upgraded refreshers.js disk activity helper body");
+                    content = upgraded;
+                }
+                None => {
+                    return Err(PatchTargetMissing(
+                        "refreshers.js disk activity helper (stale body, cannot upgrade)"
+                            .to_string(),
+                    ));
+                }
             }
         }
     }
@@ -945,7 +969,9 @@ fn sibling(containers_path: &Path, relative: &[&str]) -> PathBuf {
 ///
 /// # Parameters
 /// - `containers_path`: Path to the extension's `panel/containers.js`. The
-///   sibling `services/refreshers.js` and `extension.js` are derived from it.
+///   sibling `services/refreshers.js` and `extension.js` are derived from it
+///   and are both required — `extension.js` is no longer optional, since it
+///   carries the mount-point row keying this patch also applies.
 ///
 /// Returns `0` on success and `1` when a target file is missing or a required
 /// upstream snippet cannot be located.
@@ -965,6 +991,17 @@ pub fn run(containers_path: &Path) -> i32 {
         eprintln!(
             "Could not find refreshers.js at: {}",
             refreshers_path.display()
+        );
+        return 1;
+    }
+    if !extension_path.exists() {
+        logging::error(format!(
+            "Could not find extension.js at: {}",
+            extension_path.display()
+        ));
+        eprintln!(
+            "Could not find extension.js at: {}",
+            extension_path.display()
         );
         return 1;
     }
@@ -991,20 +1028,16 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
-    let extension_content = if extension_path.exists() {
-        match fs::read_to_string(&extension_path) {
-            Ok(content) => Some(content),
-            Err(err) => {
-                logging::error(format!(
-                    "Could not read {}: {err}",
-                    extension_path.display()
-                ));
-                eprintln!("Could not read {}: {err}", extension_path.display());
-                return 1;
-            }
+    let extension_content = match fs::read_to_string(&extension_path) {
+        Ok(content) => content,
+        Err(err) => {
+            logging::error(format!(
+                "Could not read {}: {err}",
+                extension_path.display()
+            ));
+            eprintln!("Could not read {}: {err}", extension_path.display());
+            return 1;
         }
-    } else {
-        None
     };
 
     let patched_containers = match patch_containers(&containers_content) {
@@ -1023,53 +1056,32 @@ pub fn run(containers_path: &Path) -> i32 {
             return 1;
         }
     };
-    let patched_extension = if let Some(ref content) = extension_content {
-        match patch_extension(content) {
-            Ok(content) => Some(content),
-            Err(err) => {
-                logging::error(err.to_string());
-                eprintln!("{err}");
-                return 1;
-            }
+    let patched_extension = match patch_extension(&extension_content) {
+        Ok(content) => content,
+        Err(err) => {
+            logging::error(err.to_string());
+            eprintln!("{err}");
+            return 1;
         }
-    } else {
-        None
     };
 
-    let mut any_changed = false;
+    let mut pending: Vec<(PathBuf, String)> = Vec::new();
     if patched_containers != containers_content {
-        if let Err(err) = crate::patch_text::write_atomic(containers_path, &patched_containers) {
-            logging::error(format!(
-                "Could not write {}: {err}",
-                containers_path.display()
-            ));
-            eprintln!("Could not write {}: {err}", containers_path.display());
-            return 1;
-        }
-        any_changed = true;
+        pending.push((containers_path.to_path_buf(), patched_containers));
     }
     if patched_refreshers != refreshers_content {
-        if let Err(err) = crate::patch_text::write_atomic(&refreshers_path, &patched_refreshers) {
-            logging::error(format!(
-                "Could not write {}: {err}",
-                refreshers_path.display()
-            ));
-            eprintln!("Could not write {}: {err}", refreshers_path.display());
-            return 1;
-        }
-        any_changed = true;
+        pending.push((refreshers_path.clone(), patched_refreshers));
     }
-    if let (Some(patched), Some(original)) = (patched_extension, extension_content) {
-        if patched != original {
-            if let Err(err) = crate::patch_text::write_atomic(&extension_path, &patched) {
-                logging::error(format!(
-                    "Could not write {}: {err}",
-                    extension_path.display()
-                ));
-                eprintln!("Could not write {}: {err}", extension_path.display());
-                return 1;
-            }
-            any_changed = true;
+    if patched_extension != extension_content {
+        pending.push((extension_path.clone(), patched_extension));
+    }
+
+    let any_changed = !pending.is_empty();
+    if any_changed {
+        if let Err(err) = crate::patch_text::write_atomic_batch(&pending) {
+            logging::error(format!("Could not write patched disk files: {err}"));
+            eprintln!("Could not write patched disk files: {err}");
+            return 1;
         }
     }
 
@@ -1086,6 +1098,12 @@ pub fn run(containers_path: &Path) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Current-body marker: LVM/mapper paths need `file_read_link` to match
+    /// dm-N names in `/proc/diskstats`. Older patched helpers omit this. Only
+    /// used by tests now; `ensure_disk_activity_helper` upgrades based on a
+    /// full-body comparison instead of this one marker.
+    const ACTIVITY_HELPER_CURRENT_MARKER: &str = "GLib.file_read_link(filesystem)";
 
     // ── containers.js ────────────────────────────────────────────────────
 
@@ -1285,6 +1303,28 @@ mod tests {
     }
 
     #[test]
+    fn activity_helper_is_upgraded_even_when_current_marker_is_already_present() {
+        // The LVM/mapper marker is present (so the old marker-only check would
+        // short-circuit), but the body still differs from the current form in
+        // some other way (a reworded comment here) — it must still be
+        // replaced with the exact current body.
+        let stale_body = DISK_ACTIVITY_HELPER_BODY.replacen(
+            "// LVM/mapper paths show as /dev/mapper/foo while diskstats uses dm-N.",
+            "// LVM/mapper paths show as /dev/mapper/foo while diskstats uses dm-N (old wording).",
+            1,
+        );
+        assert!(stale_body.contains(ACTIVITY_HELPER_CURRENT_MARKER));
+        assert_ne!(stale_body, DISK_ACTIVITY_HELPER_BODY);
+
+        let source = format!("{DISK_USAGE_STYLE_HELPER}\n\n{stale_body}\n");
+        let patched = ensure_disk_activity_helper(&source).expect("upgrade");
+        assert!(patched.contains(DISK_ACTIVITY_HELPER_BODY));
+        assert!(!patched.contains("(old wording)"));
+        let twice = ensure_disk_activity_helper(&patched).expect("idempotent");
+        assert_eq!(patched, twice);
+    }
+
+    #[test]
     fn helpers_are_prepended_when_no_anchor_exists() {
         let patched = ensure_disk_activity_helper("// nothing here\n").expect("prepend");
         assert!(patched.starts_with(COLOR_HELPER_MARKER));
@@ -1370,5 +1410,32 @@ mod tests {
     #[test]
     fn run_reports_a_missing_containers_file() {
         assert_eq!(run(Path::new("/nonexistent/panel/containers.js")), 1);
+    }
+
+    #[test]
+    fn run_reports_a_missing_extension_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        fs::create_dir_all(dir.path().join("panel")).expect("panel dir");
+        fs::create_dir_all(dir.path().join("services")).expect("services dir");
+        let containers = dir.path().join("panel/containers.js");
+        let containers_original = format!("{ORIGINAL_DISK_CONTAINER}\n");
+        fs::write(&containers, &containers_original).expect("write containers.js");
+        let refreshers = dir.path().join("services/refreshers.js");
+        let refreshers_original = upstream_refreshers();
+        fs::write(&refreshers, &refreshers_original).expect("write refreshers.js");
+        // extension.js intentionally absent.
+
+        assert_eq!(run(&containers), 1);
+        assert_eq!(
+            fs::read_to_string(&containers).expect("read"),
+            containers_original,
+            "containers.js must stay untouched when extension.js is missing"
+        );
+        assert_eq!(
+            fs::read_to_string(&refreshers).expect("read"),
+            refreshers_original,
+            "refreshers.js must stay untouched when extension.js is missing"
+        );
+        assert!(!dir.path().join("extension.js").exists());
     }
 }

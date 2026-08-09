@@ -149,7 +149,14 @@ pub fn run(
     }
 
     let gpu_devices = if gpu_memory_perc {
-        Some(get_gpu_devices())
+        match get_gpu_devices() {
+            Ok(devices) => Some(devices),
+            Err(err) => {
+                logging::error(format!("Could not query GPU devices: {err}"));
+                eprintln!("Could not query GPU devices: {err}");
+                return 1;
+            }
+        }
     } else {
         None
     };
@@ -194,11 +201,44 @@ pub fn run(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
     fn mutually_exclusive_disk_modes_are_rejected() {
         assert_eq!(run(false, true, false, true, None), 1);
+    }
+
+    #[test]
+    fn gpu_memory_perc_query_failure_is_a_hard_error() {
+        // An installed-but-broken nvidia-smi must fail the whole `run` rather
+        // than silently falling back to an empty GPU device list.
+        let bin_dir = tempfile::tempdir().expect("bin dir");
+        let fake = bin_dir.path().join("nvidia-smi");
+        fs::write(&fake, "#!/bin/sh\nexit 1\n").expect("fake nvidia-smi");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&fake).expect("meta").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&fake, perms).expect("chmod");
+        }
+
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+        // SAFETY: test-only PATH override, restored immediately after `run`.
+        unsafe { std::env::set_var("PATH", bin_dir.path()) };
+        let schema_dir = tempfile::tempdir().expect("schema dir");
+        let result = run(
+            true,
+            false,
+            false,
+            false,
+            Some(schema_dir.path().to_path_buf()),
+        );
+        unsafe { std::env::set_var("PATH", original_path) };
+
+        assert_eq!(result, 1);
     }
 
     #[test]

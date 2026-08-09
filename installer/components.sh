@@ -19,10 +19,9 @@
 ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
 ISC_REPO_LABEL="Linux Taskbar Monitor"
 
-# Warn once before the first optional component when the session bus cannot be
-# read — enable_shell_extension also fail-hards, but preflight surfaces the
-# problem earlier. Framework preflight continues after a warning; core enable
-# still aborts hard on rewrite refusal.
+# Fail hard before the first optional component when the session bus cannot be
+# read — enable_shell_extension also fail-hards; standalone fallback aborts on
+# preflight failure so partial installs do not continue with a dead bus.
 ISC_PREFLIGHT="isc_preflight_session_bus"
 ISC_POSTFLIGHT="report_sudo_required"
 
@@ -41,7 +40,7 @@ isc_preflight_session_bus() {
 # components the user picks. The refresh row exposes core configuration; the
 # remaining entries are optional tweaks that layer on top of the core.
 ISC_COMPONENTS=(
-  "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|detect_rm_refresh_interval||||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
+  "rm_refresh_interval|Resource Monitor update time|on|apply_resource_monitor_refresh_interval|detect_rm_refresh_interval|uninstall_rm_refresh_interval|||configure_resource_monitor_refresh_interval|resource_monitor_refresh_interval_status"
   "rm_gradient_colors|Resource Monitor gradient indicator colors|on|patch_resource_monitor_gradient_colors|detect_rm_gradient_colors|uninstall_rm_gradient_colors"
   "rm_vram|Resource Monitor GPU VRAM display|on|patch_resource_monitor_vram|detect_rm_vram|uninstall_rm_vram"
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk|uninstall_rm_per_disk"

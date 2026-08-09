@@ -32,6 +32,12 @@ const DISK_MARKER: &str =
 
 const GPU_MARKER: &str = "VRAM value (0-99 GB, 2 digits) gets its own tighter reserved";
 
+/// File-level marker recording which width mode was last applied. Detected
+/// independently of the disk/GPU markers above so `compact` still leaves an
+/// unambiguous trace even on extension versions where both per-widget
+/// reservations are skipped (e.g. `rm_per_disk` not selected and GPU absent).
+pub const COMPACT_MARKER: &str = "// Resource Monitor panel spacing: compact (no reserved widths)";
+
 const DISK_UPSTREAM_ADD: &str = r#"      const spaceSep = new St.Label({ text: "  " });
 
       this.add_child(this._elementsName[filesystem]);
@@ -285,6 +291,34 @@ pub fn patch_containers(content: &str, compact: bool) -> Result<(String, bool), 
         println!("Split GPU usage / VRAM reserved widths (stable-width patch)");
     }
 
+    // ── 3. File-level compact/stable marker ─────────────────────────────────
+    // Independent of whether either per-widget reservation above actually
+    // applied, so `compact` vs `stable` stays detectable (and idempotent) even
+    // when the disk reservation is skipped or the GPU markup is absent.
+    if compact {
+        if !content.contains(COMPACT_MARKER) {
+            content = format!("{COMPACT_MARKER}\n{content}");
+            changed = true;
+            logging::info("Added compact-mode marker (stable-width patch)");
+            println!("Added compact-mode marker (stable-width patch)");
+        }
+    } else if content.contains(COMPACT_MARKER) {
+        let without_marker: String = content
+            .lines()
+            .filter(|line| *line != COMPACT_MARKER)
+            .collect::<Vec<_>>()
+            .join("\n");
+        // `lines()` drops a trailing newline; restore it when the source had one.
+        content = if content.ends_with('\n') {
+            format!("{without_marker}\n")
+        } else {
+            without_marker
+        };
+        changed = true;
+        logging::info("Removed compact-mode marker (stable-width patch)");
+        println!("Removed compact-mode marker (stable-width patch)");
+    }
+
     Ok((content, changed))
 }
 
@@ -384,20 +418,49 @@ mod tests {
     }
 
     #[test]
-    fn compact_mode_round_trips_back_to_upstream() {
+    fn compact_mode_round_trips_widths_back_to_upstream_and_leaves_compact_marker() {
         let source = upstream();
         let (stable, _) = patch_containers(&source, false).expect("stable");
         let (compact, changed) = patch_containers(&stable, true).expect("compact");
         assert!(changed);
-        assert_eq!(compact, source);
+        assert!(compact.contains(COMPACT_MARKER));
+        assert_eq!(compact, format!("{COMPACT_MARKER}\n{source}"));
     }
 
     #[test]
-    fn compact_mode_on_upstream_changes_nothing() {
+    fn compact_mode_on_upstream_only_adds_the_compact_marker() {
+        // No per-widget reservations exist yet, so compact mode has nothing to
+        // revert, but it must still record that compact mode was requested.
         let source = upstream();
         let (compact, changed) = patch_containers(&source, true).expect("compact");
-        assert!(!changed);
-        assert_eq!(compact, source);
+        assert!(changed);
+        assert_eq!(compact, format!("{COMPACT_MARKER}\n{source}"));
+    }
+
+    #[test]
+    fn compact_marker_is_exact_and_survives_relevant_round_trips() {
+        assert_eq!(
+            COMPACT_MARKER,
+            "// Resource Monitor panel spacing: compact (no reserved widths)"
+        );
+
+        let source = upstream();
+        let (compact_once, changed) = patch_containers(&source, true).expect("compact");
+        assert!(changed);
+        assert!(compact_once.contains(COMPACT_MARKER));
+
+        let (compact_twice, changed_again) =
+            patch_containers(&compact_once, true).expect("compact again");
+        assert!(!changed_again, "re-applying compact must be a no-op");
+        assert_eq!(compact_once, compact_twice);
+
+        let (back_to_stable, changed_stable) =
+            patch_containers(&compact_once, false).expect("back to stable");
+        assert!(changed_stable);
+        assert!(
+            !back_to_stable.contains(COMPACT_MARKER),
+            "stable mode must remove the compact marker"
+        );
     }
 
     #[test]
@@ -448,6 +511,9 @@ mod tests {
             .expect("read")
             .contains(GPU_MARKER));
         assert_eq!(run("compact", &path), 0);
-        assert_eq!(fs::read_to_string(&path).expect("read"), source);
+        assert_eq!(
+            fs::read_to_string(&path).expect("read"),
+            format!("{COMPACT_MARKER}\n{source}")
+        );
     }
 }

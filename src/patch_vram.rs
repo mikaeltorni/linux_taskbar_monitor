@@ -35,12 +35,43 @@ const NEW_CODE: &str = r#"        // Space separator between GPU usage and VRAM 
         this.add_child(this._elementsMemoryValue[uuid]);
         this.add_child(this._elementsMemoryUnit[uuid]);"#;
 
+/// Last line of [`NEW_CODE`]; a stable end anchor for the marked block even
+/// when its interior (e.g. the comment wording) has drifted from the exact
+/// current text, since removing this line would break the VRAM display.
+const BLOCK_END_ANCHOR: &str = "this.add_child(this._elementsMemoryUnit[uuid]);";
+
 /// Failures when the upstream VRAM bracket anchors are missing.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum VramError {
     /// Neither the upstream bracket snippet nor the space-separator marker.
     #[error("Could not find target code in containers.js - unsupported extension version")]
     MissingTarget,
+    /// The marker is present but the marked block's start/end could not be
+    /// located, so a stale block cannot be safely replaced.
+    #[error(
+        "Marker present but VRAM block bounds could not be found in containers.js - refusing to guess"
+    )]
+    MarkedBlockBoundsNotFound,
+}
+
+/// Replace the marked VRAM block (from the marker's comment line through
+/// [`BLOCK_END_ANCHOR`]) with [`NEW_CODE`].
+///
+/// Returns `None` when either bound cannot be located.
+fn replace_marked_block(content: &str) -> Option<String> {
+    let marker_pos = content.find(MARKER)?;
+    let line_start = content[..marker_pos]
+        .rfind('\n')
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let end_rel = content[line_start..].find(BLOCK_END_ANCHOR)?;
+    let end = line_start + end_rel + BLOCK_END_ANCHOR.len();
+
+    let mut out = String::with_capacity(content.len() - (end - line_start) + NEW_CODE.len());
+    out.push_str(&content[..line_start]);
+    out.push_str(NEW_CODE);
+    out.push_str(&content[end..]);
+    Some(out)
 }
 
 /// Remove the bracket labels around the GPU VRAM value.
@@ -48,11 +79,21 @@ pub enum VramError {
 /// # Parameters
 /// - `content`: Current `containers.js` content.
 ///
-/// Returns `(patched_content, changed)`. `changed` is false when the marker is
-/// already present.
+/// Returns `(patched_content, changed)`. `changed` is false when the exact
+/// current block is already present. When the marker is present but the block
+/// text has drifted (e.g. an older revision of this patch), the marked block
+/// is replaced with the current [`NEW_CODE`] (process-popup style); this fails
+/// hard if the block's bounds cannot be located rather than silently leaving
+/// stale code in place.
 pub fn patch_containers(content: &str) -> Result<(String, bool), VramError> {
     if content.contains(MARKER) {
-        return Ok((content.to_string(), false));
+        if content.contains(NEW_CODE) {
+            return Ok((content.to_string(), false));
+        }
+        return match replace_marked_block(content) {
+            Some(updated) => Ok((updated, true)),
+            None => Err(VramError::MarkedBlockBoundsNotFound),
+        };
     }
     if !content.contains(OLD_CODE) {
         return Err(VramError::MissingTarget);
@@ -141,6 +182,41 @@ mod tests {
         assert_eq!(
             patch_containers("// unrelated"),
             Err(VramError::MissingTarget)
+        );
+    }
+
+    #[test]
+    fn stale_marked_block_is_upgraded_to_current_code() {
+        // Marker present (so the upstream-snippet path is skipped) but the
+        // interior text has drifted from the exact current NEW_CODE.
+        let stale = NEW_CODE.replacen(
+            "const spaceSep = new St.Label({ text: \"  \" });",
+            "const spaceSep = new St.Label({ text: \" \" });",
+            1,
+        );
+        assert!(stale.contains(MARKER));
+        assert_ne!(stale, NEW_CODE);
+        let source = format!("prefix\n{stale}\nsuffix\n");
+
+        let (patched, changed) = patch_containers(&source).expect("upgrade");
+        assert!(changed);
+        assert!(patched.contains(NEW_CODE));
+        assert!(patched.starts_with("prefix\n"));
+        assert!(patched.ends_with("suffix\n"));
+
+        let (again, changed_again) = patch_containers(&patched).expect("idempotent");
+        assert!(!changed_again);
+        assert_eq!(patched, again);
+    }
+
+    #[test]
+    fn marker_without_locatable_block_end_fails_hard() {
+        // The marker is present but the end anchor it needs to bound the
+        // replacement is missing entirely — must fail hard, not guess.
+        let source = format!("prefix\n// {MARKER}\nsuffix\n");
+        assert_eq!(
+            patch_containers(&source),
+            Err(VramError::MarkedBlockBoundsNotFound)
         );
     }
 

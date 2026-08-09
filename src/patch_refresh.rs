@@ -7,10 +7,15 @@
 //! recompiles the GSettings schemas.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::logging;
+
+/// Name of the Resource Monitor GSettings schema file, shared between the
+/// extension's own `schemas/` directory and the user's GSettings schema
+/// directory synced by [`sync_user_schemas`].
+const GSCHEMA_FILE_NAME: &str = "org.gnome.shell.extensions.resource-monitor.gschema.xml";
 
 /// A single `(old, new)` source substitution.
 type Replacement = (&'static str, &'static str);
@@ -123,7 +128,7 @@ pub enum RefreshPatchError {
 /// `Ok(true)` when at least one file changed, `Ok(false)` when every file was
 /// already patched (schemas are still compiled in both cases).
 pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> {
-    let mut pending: Vec<(std::path::PathBuf, String, &'static str)> = Vec::new();
+    let mut pending: Vec<(PathBuf, String, &'static str)> = Vec::new();
 
     for (relative_path, replacements) in REPLACEMENTS {
         let path = extension_dir.join(relative_path);
@@ -160,9 +165,15 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
     }
 
     let any_changed = !pending.is_empty();
-    for (path, content, relative_path) in &pending {
-        crate::patch_text::write_atomic(path, content)?;
-        logging::info(format!("Patched {relative_path} for sub-second refresh"));
+    if any_changed {
+        let batch: Vec<(PathBuf, String)> = pending
+            .iter()
+            .map(|(path, content, _)| (path.clone(), content.clone()))
+            .collect();
+        crate::patch_text::write_atomic_batch(&batch)?;
+        for (_, _, relative_path) in &pending {
+            logging::info(format!("Patched {relative_path} for sub-second refresh"));
+        }
     }
 
     let schemas_dir = extension_dir.join("schemas");
@@ -187,7 +198,99 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         )));
     }
 
+    // The extension's own schema compiled successfully; a problem syncing it
+    // to the user's GSettings schema directory is logged but must not fail
+    // this patch (gsettings consumers outside the extension process are a
+    // secondary concern to the extension itself working).
+    sync_user_schemas(&schemas_dir);
+
     Ok(any_changed)
+}
+
+/// Copy the compiled extension's schema XML into the user's GSettings schema
+/// directory (`$HOME/.local/share/glib-2.0/schemas/`) and recompile it there.
+///
+/// `gsettings` and other GSettings consumers outside the extension process
+/// resolve schemas through the user's XDG data dirs, not the extension's own
+/// `schemas/` directory; without this sync those consumers can keep seeing a
+/// stale (e.g. integer) `refreshtime` type after the extension's schema has
+/// already moved to the sub-second `double` type. Every failure here is a
+/// soft warning — see the call site in [`patch_extension`].
+///
+/// # Parameters
+/// - `extension_schemas_dir`: The extension's own `schemas/` directory,
+///   already compiled successfully by the caller.
+fn sync_user_schemas(extension_schemas_dir: &Path) {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|home| !home.as_os_str().is_empty());
+    let Some(home) = home else {
+        logging::warn("HOME is not set; skipping user GSettings schema sync");
+        return;
+    };
+
+    let user_schemas_dir = home.join(".local/share/glib-2.0/schemas");
+    if let Err(err) = fs::create_dir_all(&user_schemas_dir) {
+        logging::warn(format!(
+            "Could not create {}: {err}",
+            user_schemas_dir.display()
+        ));
+        return;
+    }
+
+    let src = extension_schemas_dir.join(GSCHEMA_FILE_NAME);
+    let dest = user_schemas_dir.join(GSCHEMA_FILE_NAME);
+
+    let src_bytes = match fs::read(&src) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            logging::warn(format!("Could not read {}: {err}", src.display()));
+            return;
+        }
+    };
+
+    let already_identical = fs::read(&dest)
+        .map(|dest_bytes| dest_bytes == src_bytes)
+        .unwrap_or(false);
+    if already_identical {
+        logging::info(format!(
+            "User GSettings schema already up to date at {}",
+            dest.display()
+        ));
+    } else if let Err(err) = fs::write(&dest, &src_bytes) {
+        logging::warn(format!(
+            "Could not copy schema to {}: {err}",
+            dest.display()
+        ));
+        return;
+    } else {
+        logging::info(format!(
+            "Synced Resource Monitor schema to {}",
+            dest.display()
+        ));
+    }
+
+    match Command::new("glib-compile-schemas")
+        .arg(&user_schemas_dir)
+        .status()
+    {
+        Ok(status) if status.success() => {
+            logging::info(format!(
+                "Compiled user GSettings schemas in {}",
+                user_schemas_dir.display()
+            ));
+        }
+        Ok(status) => {
+            logging::warn(format!(
+                "glib-compile-schemas for user schemas exited with {status}"
+            ));
+        }
+        Err(err) => {
+            logging::warn(format!(
+                "Could not run glib-compile-schemas for user schemas: {err}"
+            ));
+        }
+    }
 }
 
 /// CLI entry point for the refresh-interval patcher.
@@ -220,6 +323,11 @@ pub fn run(extension_dir: &Path) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Serializes tests that mutate the process-wide `PATH`/`HOME` env vars,
+    /// so they cannot race each other under cargo's default parallel test
+    /// execution within this binary.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     // Indentation is load-bearing: several substitutions match on the exact
     // leading whitespace of the upstream source.
@@ -380,6 +488,7 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
 
     #[test]
     fn already_patched_sources_still_compile_schemas() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = upstream_extension();
         // First pass writes patched sources even if schema compile is unavailable.
         let _ = patch_sources_only(dir.path());
@@ -400,14 +509,28 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
             fs::set_permissions(&fake, perms).expect("chmod");
         }
 
+        // A real HOME must never be touched by a test; sync_user_schemas now
+        // runs unconditionally after a successful extension schema compile.
+        let home_dir = tempfile::tempdir().expect("home dir");
         let original_path = std::env::var_os("PATH").unwrap_or_default();
+        let original_home = std::env::var_os("HOME");
         let mut path = std::ffi::OsString::from(bin_dir.path());
         path.push(":");
         path.push(&original_path);
-        // SAFETY: test-only PATH override for the child glib-compile-schemas lookup.
-        unsafe { std::env::set_var("PATH", &path) };
+        // SAFETY: test-only PATH/HOME override, restored below before this
+        // test returns (and serialized via ENV_LOCK across the whole file).
+        unsafe {
+            std::env::set_var("PATH", &path);
+            std::env::set_var("HOME", home_dir.path());
+        }
         let result = patch_extension(dir.path());
-        unsafe { std::env::set_var("PATH", original_path) };
+        unsafe {
+            std::env::set_var("PATH", original_path);
+            match original_home {
+                Some(home) => std::env::set_var("HOME", home),
+                None => std::env::remove_var("HOME"),
+            }
+        }
 
         assert!(!result.expect("patch"), "sources should already be patched");
         assert!(
@@ -419,5 +542,123 @@ this._refreshTime = this._settings.get_int(REFRESH_TIME);
     #[test]
     fn missing_extension_directory_exits_non_zero() {
         assert_eq!(run(Path::new("/nonexistent/rm-monitor-extension")), 1);
+    }
+
+    #[test]
+    fn syncs_compiled_schema_to_user_glib_schema_dir() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = upstream_extension();
+
+        let bin_dir = tempfile::tempdir().expect("bin dir");
+        let fake = bin_dir.path().join("glib-compile-schemas");
+        fs::write(&fake, "#!/bin/sh\nexit 0\n").expect("fake compiler");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&fake).expect("meta").permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&fake, perms).expect("chmod");
+        }
+
+        let home_dir = tempfile::tempdir().expect("home dir");
+        let original_path = std::env::var_os("PATH").unwrap_or_default();
+        let original_home = std::env::var_os("HOME");
+        let mut path = std::ffi::OsString::from(bin_dir.path());
+        path.push(":");
+        path.push(&original_path);
+        // SAFETY: test-only PATH/HOME override, restored below (serialized
+        // across the file via ENV_LOCK).
+        unsafe {
+            std::env::set_var("PATH", &path);
+            std::env::set_var("HOME", home_dir.path());
+        }
+        let result = patch_extension(dir.path());
+        unsafe {
+            std::env::set_var("PATH", original_path);
+            match original_home {
+                Some(home) => std::env::set_var("HOME", home),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        result.expect("patch");
+
+        let extension_schema = dir.path().join("schemas").join(GSCHEMA_FILE_NAME);
+        let user_schema = home_dir
+            .path()
+            .join(".local/share/glib-2.0/schemas")
+            .join(GSCHEMA_FILE_NAME);
+        assert!(
+            user_schema.is_file(),
+            "schema must be copied into the user's GSettings schema dir"
+        );
+        assert_eq!(
+            fs::read(&user_schema).expect("read user schema"),
+            fs::read(&extension_schema).expect("read extension schema"),
+            "synced schema must match the extension's compiled schema byte-for-byte"
+        );
+    }
+
+    #[test]
+    fn re_syncing_an_identical_user_schema_is_a_no_op_copy() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let extension_dir = upstream_extension();
+        // Skip the extension's own patch entirely: sync_user_schemas only
+        // cares about the already-compiled schemas/ directory contents.
+        let schemas_dir = extension_dir.path().join("schemas");
+
+        let home_dir = tempfile::tempdir().expect("home dir");
+        let user_schemas_dir = home_dir.path().join(".local/share/glib-2.0/schemas");
+        fs::create_dir_all(&user_schemas_dir).expect("user schemas dir");
+        let extension_schema_bytes =
+            fs::read(schemas_dir.join(GSCHEMA_FILE_NAME)).expect("read extension schema");
+        let user_schema_path = user_schemas_dir.join(GSCHEMA_FILE_NAME);
+        fs::write(&user_schema_path, &extension_schema_bytes).expect("seed identical schema");
+        let before_mtime = fs::metadata(&user_schema_path)
+            .expect("meta")
+            .modified()
+            .expect("mtime");
+
+        let original_home = std::env::var_os("HOME");
+        // SAFETY: test-only HOME override, restored below (serialized across
+        // the file via ENV_LOCK). PATH is left as-is on purpose: an absent or
+        // failing glib-compile-schemas here must stay a soft warning, not a
+        // panic, since this test does not assert on the compile step.
+        unsafe { std::env::set_var("HOME", home_dir.path()) };
+        sync_user_schemas(&schemas_dir);
+        unsafe {
+            match original_home {
+                Some(home) => std::env::set_var("HOME", home),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+
+        let after = fs::read(&user_schema_path).expect("read after sync");
+        assert_eq!(after, extension_schema_bytes);
+        let after_mtime = fs::metadata(&user_schema_path)
+            .expect("meta")
+            .modified()
+            .expect("mtime");
+        assert_eq!(
+            before_mtime, after_mtime,
+            "an identical destination schema must not be rewritten"
+        );
+    }
+
+    #[test]
+    fn missing_home_env_is_a_soft_no_op() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let extension_dir = upstream_extension();
+        let schemas_dir = extension_dir.path().join("schemas");
+
+        let original_home = std::env::var_os("HOME");
+        // SAFETY: test-only HOME removal, restored below (serialized via
+        // ENV_LOCK). Must not panic or otherwise abort the caller.
+        unsafe { std::env::remove_var("HOME") };
+        sync_user_schemas(&schemas_dir);
+        unsafe {
+            if let Some(home) = original_home {
+                std::env::set_var("HOME", home);
+            }
+        }
     }
 }

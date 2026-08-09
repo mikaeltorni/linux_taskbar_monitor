@@ -94,7 +94,8 @@ python3 -m pytest tests -q
 - `install.sh` — downloads, patches, configures, and enables Resource Monitor.
 - `src/` — Rust sources for the `rm-monitor` CLI (see `rm-monitor --help`).
 - `scripts/build_rm_monitor.sh` — build into `dist/rm-monitor` (cargo or container).
-- `lib/` — Bash installer modules (extension install, patch wrappers, lifecycle).
+- `lib/` — Bash installer modules (extension install, patch wrappers, lifecycle,
+  and `standalone_component_fallback.sh` when the shared framework is missing).
 - `installer/components.sh` — selectable component manifest for the shared menu.
 - `installation_configs/` — default/empty selection snapshots for the orchestrator.
 - `tests/` — installer contract tests; patch behavior is covered by `cargo test`.
@@ -187,7 +188,8 @@ Flags that never wipe the installed extension tree: `--list-*`, `--detect`,
 `--help`, `--reconfigure`, and `--uninstall`. `--configure-component` and
 `--export-selection` also skip core re-extract, but they require the full
 `linux_installation_scripts_functions` framework (standalone fallback exits 1).
-Fresh install modes (`--default`, `--all`, `--select`, interactive) always
+Unknown or empty `--select` aborts **before** core re-extract. Fresh install
+modes (`--default`, `--all`, `--select` with valid ids, interactive) always
 re-run `install_resource_monitor_core`, which re-extracts a clean Resource
 Monitor zip so deselected source patches revert.
 
@@ -203,7 +205,7 @@ runs before component selection on fresh installs). Optional default-on componen
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |
 | `rm_process_popup` | Per-process CPU popup (left-click) | on |
-| `window_rules` | App window-rules extension (Wayland; empty rules) | off |
+| `window_rules` | App window-rules (Wayland install; X11 skip marker) | off |
 
 ## Troubleshooting
 

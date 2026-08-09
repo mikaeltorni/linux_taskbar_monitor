@@ -61,20 +61,23 @@ detect_rm_vram() {
 }
 
 # detect_rm_panel_spacing: reflects the configured panel-spacing mode.
-# Stable mode is present when either stable-width reservation is in
-# containers.js: the disk-space secondary activity marker (when rm_per_disk
-# applied secondary labels) and/or the GPU VRAM width-split marker (always
-# attempted by patch-stable-width). Compact mode requires both markers gone.
+# Stable mode is present when either stable-width reservation marker is in
+# containers.js (disk-space secondary and/or GPU VRAM). Compact mode requires
+# the positive compact marker left by patch-stable-width --mode compact, not
+# mere absence of stable markers (clean upstream also lacks those).
 detect_rm_panel_spacing() {
-  local js disk_marker gpu_marker mode
+  local js disk_marker gpu_marker compact_marker mode
   js="$(_rm_containers_js)"
   disk_marker="Space separator between disk-space activity percent and its unit (stable width)"
   gpu_marker="VRAM value (0-99 GB, 2 digits) gets its own tighter reserved"
-  mode="$(resource_monitor_spacing_mode 2>/dev/null || echo stable)"
+  compact_marker="Resource Monitor panel spacing: compact (no reserved widths)"
+  mode="$(resource_monitor_spacing_mode)" || return 1
   [ -f "$js" ] || return 1
   case "$mode" in
     compact)
-      ! grep -q "$disk_marker" "$js" && ! grep -q "$gpu_marker" "$js"
+      grep -q "$compact_marker" "$js" \
+        && ! grep -q "$disk_marker" "$js" \
+        && ! grep -q "$gpu_marker" "$js"
       ;;
     *)
       grep -q "$disk_marker" "$js" || grep -q "$gpu_marker" "$js"
@@ -136,6 +139,26 @@ uninstall_rm_vram() { uninstall_rm_source_patch rm_vram; }
 uninstall_rm_per_disk() { uninstall_rm_source_patch rm_per_disk; }
 uninstall_rm_hide_eth_icon() { uninstall_rm_source_patch rm_hide_eth_icon; }
 uninstall_rm_process_popup() { uninstall_rm_source_patch rm_process_popup; }
+
+# uninstall_rm_refresh_interval — Revert live refreshtime away from the
+# configured value and drop the persist file so detect_rm_refresh_interval
+# becomes false (receipt-only uninstall would leave detect green).
+uninstall_rm_refresh_interval() {
+  local ext_dir
+  ext_dir="$(resource_monitor_ext_dir)"
+  if [ ! -d "$ext_dir/schemas" ]; then
+    msg "ERROR: Resource Monitor is not installed; cannot uninstall refresh interval." >&2
+    return 1
+  fi
+  msg "Reverting Resource Monitor update time to upstream-like 2.0 s"
+  # Upstream default was 2 seconds; configured installer default is 0.5 s.
+  if ! ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime 2.0; then
+    msg "ERROR: failed to reset refreshtime" >&2
+    return 1
+  fi
+  run_as_target rm -f "$(resource_monitor_refresh_interval_file)"
+  return 0
+}
 
 uninstall_window_rules() {
   msg "Removing app window-rules extension"

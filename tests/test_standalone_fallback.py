@@ -117,3 +117,40 @@ def test_fallback_detect_contract():
             cid, state = line.split("\t")
             assert state in ("installed", "absent"), line
             assert cid
+
+
+def test_fallback_configure_component_requires_framework():
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "home"
+        home.mkdir()
+        env = {
+            **os.environ,
+            "HOME": str(home),
+            "ISC_FUNCTIONS_DIR": str(Path(tmp) / "missing-framework"),
+            "PATH": str(Path(tmp) / "bin") + ":" + os.environ.get("PATH", ""),
+        }
+        bin_dir = Path(tmp) / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "curl").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        (bin_dir / "curl").chmod(0o755)
+        completed = subprocess.run(
+            ["bash", str(INSTALL), "--configure-component", "rm_refresh_interval"],
+            check=False,
+            text=True,
+            capture_output=True,
+            env=env,
+            cwd=str(ROOT),
+        )
+        assert completed.returncode == 1
+        assert "requires the linux_installation_scripts_functions framework" in (
+            completed.stderr + completed.stdout
+        )
+
+
+def test_fallback_preflight_aborts_not_continues():
+    fallback = (ROOT / "lib" / "standalone_component_fallback.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "ERROR: preflight" in fallback
+    assert "reported a problem (continuing)" not in fallback
+    assert "refusing to clear receipt" in fallback

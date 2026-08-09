@@ -99,9 +99,10 @@ _sc_run_selected() {
     [[ "$selected" == *" $id "* ]] || continue
     if (( ran == 0 )) && [[ -n "${ISC_PREFLIGHT:-}" ]] \
        && declare -F "$ISC_PREFLIGHT" >/dev/null 2>&1; then
-      "$ISC_PREFLIGHT" || {
-        msg "WARN: preflight '$ISC_PREFLIGHT' reported a problem (continuing)" >&2
-      }
+      if ! "$ISC_PREFLIGHT"; then
+        msg "ERROR: preflight '$ISC_PREFLIGHT' failed" >&2
+        return 1
+      fi
     fi
     ran=$((ran + 1))
     if [[ -z "$fn" ]] || ! declare -F "$fn" >/dev/null 2>&1; then
@@ -147,6 +148,13 @@ _sc_uninstall_selected() {
     un="$(_sc_field "$id" 5)"
     ran=$((ran + 1))
     if [[ -z "$un" ]]; then
+      # Live detect_fn means receipt-only uninstall would lie to --detect.
+      detect="$(_sc_field "$id" 4)"
+      if [[ -n "$detect" ]]; then
+        msg "ERROR: '$label' ($id) has detect but no uninstall; refusing to clear receipt." >&2
+        failed+=("$id")
+        continue
+      fi
       msg "[${ISC_REPO_NAME:-installer}] '$label' ($id) has no uninstall step — clearing receipt only." >&2
       _sc_clear_receipt "$id"
       continue

@@ -42,6 +42,12 @@ bash scripts/build_rm_monitor.sh
 EXT=~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
 ./dist/rm-monitor patch-extension-metadata "$EXT/metadata.json" 46 9999
 ./dist/rm-monitor patch-refresh "$EXT"
+# patch-refresh also syncs the patched schema into ~/.local/share/glib-2.0/schemas.
+# If you only recompile the extension schemadir by hand, mirror that sync:
+#   SCHEMA_USER=~/.local/share/glib-2.0/schemas
+#   mkdir -p "$SCHEMA_USER"
+#   cp -f "$EXT/schemas/org.gnome.shell.extensions.resource-monitor.gschema.xml" "$SCHEMA_USER/"
+#   glib-compile-schemas "$SCHEMA_USER"
 ./dist/rm-monitor patch-vram "$EXT/panel/containers.js"
 ./dist/rm-monitor patch-disk "$EXT/panel/containers.js"
 ./dist/rm-monitor patch-colors "$EXT/extension.js"
