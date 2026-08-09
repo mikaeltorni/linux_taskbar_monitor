@@ -140,13 +140,14 @@ pub fn patch_extension(extension_dir: &Path) -> Result<bool, RefreshPatchError> 
         }
 
         for (old, new) in *replacements {
-            if content.contains(new) {
-                continue;
-            }
-            if !content.contains(old) {
+            // Prefer "old still present → replace" over "new substring exists →
+            // skip". Short tokens like `GLib.timeout_add(` can appear elsewhere
+            // while the refresh timer still uses timeout_add_seconds.
+            if content.contains(old) {
+                content = content.replace(old, new);
+            } else if !content.contains(new) {
                 return Err(RefreshPatchError::Unsupported((*relative_path).to_string()));
             }
-            content = content.replace(old, new);
         }
 
         if content != original {

@@ -195,6 +195,9 @@ pub enum ProcessPopupError {
     /// Neither the upstream nor the patched keyboard case is present.
     #[error("ERROR: keyboard _launchPrimaryAction case not found — aborting.")]
     MissingKeyboardCase,
+    /// Neither the upstream nor the patched tooltip string is present.
+    #[error("ERROR: process-popup tooltip string not found — aborting.")]
+    MissingTooltip,
 }
 
 /// Apply every process-popup edit to `extension.js` content.
@@ -267,6 +270,8 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ProcessPopupE
     if content.contains(OLD_TOOLTIP) {
         content = content.replacen(OLD_TOOLTIP, NEW_TOOLTIP, 1);
         changed = true;
+    } else if !content.contains(NEW_TOOLTIP) {
+        return Err(ProcessPopupError::MissingTooltip);
     }
 
     Ok((content, changed))

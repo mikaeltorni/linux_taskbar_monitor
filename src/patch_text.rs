@@ -118,8 +118,22 @@ pub fn replace_known_snippet_with_migration(
         }
     }
     if did_migrate {
-        crate::logging::info(format!("Migrated {target_name}"));
-        return Ok((migrated, "migrated"));
+        // Style-only migrations can succeed without converging to the current
+        // body. Keep going until the already_marker is present.
+        if migrated.contains(already_marker) {
+            crate::logging::info(format!("Migrated {target_name}"));
+            return Ok((migrated, "migrated"));
+        }
+        crate::logging::info(format!(
+            "Partial migration of {target_name}; applying current replacement"
+        ));
+        return replace_known_snippet(
+            &migrated,
+            snippets,
+            replacement,
+            already_marker,
+            target_name,
+        );
     }
     if content.contains(already_marker) {
         crate::logging::info(format!("{target_name} already patched"));
@@ -215,5 +229,22 @@ mod tests {
             replace_known_snippet("hello world", &["world"], "rust", "MARKER", "t").unwrap();
         assert_eq!(status, "patched");
         assert_eq!(out, "hello rust");
+    }
+
+    #[test]
+    fn write_atomic_replaces_via_tmp_sibling() {
+        let dir = tempfile::tempdir().expect("temp");
+        let path = dir.path().join("target.txt");
+        write_atomic(&path, "one").expect("write");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "one");
+        assert!(!path.with_extension("txt.tmp").exists());
+        write_atomic(&path, "two").expect("rewrite");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "two");
+        let tmp = {
+            let mut os = path.as_os_str().to_owned();
+            os.push(".tmp");
+            PathBuf::from(os)
+        };
+        assert!(!tmp.exists(), "tmp sibling must be renamed away");
     }
 }

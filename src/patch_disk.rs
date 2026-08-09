@@ -621,50 +621,55 @@ fn replace_js_function(content: &str, header_marker: &str, replacement: &str) ->
 ///
 /// # Parameters
 /// - `content`: `refreshers.js` content.
-pub fn ensure_disk_activity_helper(content: &str) -> String {
+pub fn ensure_disk_activity_helper(content: &str) -> Result<String, PatchTargetMissing> {
     let mut content = content.to_string();
 
     if content.contains(ACTIVITY_HELPER_MARKER) && !content.contains(ACTIVITY_HELPER_CURRENT_MARKER)
     {
-        if let Some(upgraded) =
-            replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY)
-        {
-            logging::info("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
-            println!("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
-            content = upgraded;
+        match replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY) {
+            Some(upgraded) => {
+                logging::info("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
+                println!("Upgraded refreshers.js disk activity helper (LVM/mapper diskstats)");
+                content = upgraded;
+            }
+            None => {
+                return Err(PatchTargetMissing(
+                    "refreshers.js disk activity helper (stale body, cannot upgrade)".to_string(),
+                ));
+            }
         }
     }
 
     let has_activity = content.contains(ACTIVITY_HELPER_MARKER);
     let has_color = content.contains(COLOR_HELPER_MARKER);
     if has_activity && has_color {
-        return content;
+        return Ok(content);
     }
 
     if has_activity && !has_color {
         logging::info("Patched refreshers.js disk usage color helper");
         println!("Patched refreshers.js disk usage color helper");
-        return content.replacen(
+        return Ok(content.replacen(
             ACTIVITY_HELPER_MARKER,
             &format!("{DISK_USAGE_STYLE_HELPER}\n\n{ACTIVITY_HELPER_MARKER}"),
             1,
-        );
+        ));
     }
 
     let helper = format!("{DISK_USAGE_STYLE_HELPER}\n\n{DISK_ACTIVITY_HELPER_BODY}");
     if content.contains(REFRESH_FUNCTION_MARKER) {
         logging::info("Patched refreshers.js disk activity helper");
         println!("Patched refreshers.js disk activity helper");
-        return content.replacen(
+        return Ok(content.replacen(
             REFRESH_FUNCTION_MARKER,
             &format!("{helper}\n\n{REFRESH_FUNCTION_MARKER}"),
             1,
-        );
+        ));
     }
 
     logging::info("Prepended refreshers.js disk activity helper");
     println!("Prepended refreshers.js disk activity helper");
-    format!("{helper}\n\n{content}")
+    Ok(format!("{helper}\n\n{content}"))
 }
 
 /// Switch the primary disk style from the generic gradient helper to the
@@ -900,7 +905,14 @@ pub fn patch_refreshers(content: &str) -> Result<String, PatchTargetMissing> {
         DISK_ROW_KEY_MARKER,
         "refreshers.js disk space row key",
     );
-    Ok(ensure_disk_activity_helper(&patched))
+    // The current refresh body reads entry.devicePath; optional skip must not
+    // leave that field missing after a successful refresh-body rewrite.
+    if !patched.contains(DISK_ROW_KEY_MARKER) {
+        return Err(PatchTargetMissing(
+            "refreshers.js disk space row key (devicePath)".to_string(),
+        ));
+    }
+    ensure_disk_activity_helper(&patched)
 }
 
 /// Key the extension's disk-space rows by mount point.
@@ -1170,10 +1182,12 @@ mod tests {
     #[test]
     fn refreshers_legacy_upstream_form_is_patched() {
         let legacy = format!(
-            "{REFRESH_FUNCTION_MARKER}\n{UPSTREAM_DISPLAY_BLOCK}{ORIGINAL_REFRESH_UPDATE}\n}}\n"
+            "{REFRESH_FUNCTION_MARKER}\n{UPSTREAM_DISPLAY_BLOCK}{ORIGINAL_REFRESH_UPDATE}\n}}\n\n\
+             {ORIGINAL_DISK_REFRESH_RESULT}\n"
         );
         let patched = patch_refreshers(&legacy).expect("patch");
         assert!(patched.contains(REFRESH_UPDATE_MARKER));
+        assert!(patched.contains(DISK_ROW_KEY_MARKER));
         assert!(!patched.contains("monitor: indicator._diskSpaceMonitor,"));
     }
 
@@ -1193,13 +1207,19 @@ mod tests {
             FREE_GB_PRIMARY_ACTIVITY_REFRESH_UPDATE,
             USED_GB_ACTIVITY_REFRESH_UPDATE,
         ] {
-            let source = format!("{REFRESH_FUNCTION_MARKER}\n{older}\n}}\n");
+            let source = format!(
+                "{REFRESH_FUNCTION_MARKER}\n{older}\n}}\n\n{ORIGINAL_DISK_REFRESH_RESULT}\n"
+            );
             let patched = patch_refreshers(&source).expect("patch older form");
             assert!(
                 patched.contains(REFRESH_UPDATE_MARKER),
                 "older form was not migrated"
             );
             assert!(patched.contains(ACTIVITY_HELPER_MARKER));
+            assert!(patched.contains(ACTIVITY_HELPER_CURRENT_MARKER));
+            assert!(patched.contains(DISK_ROW_KEY_MARKER));
+            assert!(patched
+                .contains("const activityStyle = getDiskUsagePercentStyle(activityPercent);"));
         }
     }
 
@@ -1219,7 +1239,7 @@ mod tests {
     #[test]
     fn colour_helper_alone_is_injected_next_to_the_activity_helper() {
         let source = format!("{DISK_ACTIVITY_HELPER_BODY}\n");
-        let patched = ensure_disk_activity_helper(&source);
+        let patched = ensure_disk_activity_helper(&source).expect("helper");
         assert!(patched.contains(COLOR_HELPER_MARKER));
         assert!(patched.find(COLOR_HELPER_MARKER) < patched.find(ACTIVITY_HELPER_MARKER));
     }
@@ -1257,16 +1277,16 @@ mod tests {
         );
         assert!(!legacy.contains(ACTIVITY_HELPER_CURRENT_MARKER));
         let source = format!("{DISK_USAGE_STYLE_HELPER}\n\n{legacy}\n");
-        let patched = ensure_disk_activity_helper(&source);
+        let patched = ensure_disk_activity_helper(&source).expect("upgrade");
         assert!(patched.contains(ACTIVITY_HELPER_CURRENT_MARKER));
         assert!(patched.contains("names.includes(fields[2])"));
-        let twice = ensure_disk_activity_helper(&patched);
+        let twice = ensure_disk_activity_helper(&patched).expect("idempotent");
         assert_eq!(patched, twice);
     }
 
     #[test]
     fn helpers_are_prepended_when_no_anchor_exists() {
-        let patched = ensure_disk_activity_helper("// nothing here\n");
+        let patched = ensure_disk_activity_helper("// nothing here\n").expect("prepend");
         assert!(patched.starts_with(COLOR_HELPER_MARKER));
         assert!(patched.ends_with("// nothing here\n"));
     }
