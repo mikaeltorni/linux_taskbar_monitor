@@ -22,10 +22,10 @@ def test_core_fails_when_metadata_pin_fails():
     assert '[ "$shell_version" = "0" ]' in core
     # Parse and staged patch/pin must happen before the destructive live replace.
     assert core.index("could not parse GNOME Shell version") < core.index(
-        'run_as_target rm -rf "$ext_dir"'
+        'mv "$ext_dir" "$backup_dir"'
     )
     assert core.index('patch_extension_metadata "$staging"') < core.index(
-        'run_as_target rm -rf "$ext_dir"'
+        'mv "$ext_dir" "$backup_dir"'
     )
     assert 'staging="$tmpdir/staging"' in core
     assert "ERROR: metadata.json not found" in helper
@@ -48,13 +48,19 @@ def test_core_fails_when_metadata_pin_fails():
 
 
 def test_core_publishes_via_new_dir_then_rename():
-    """Live replace must not rm -rf before a successful staged copy."""
+    """Live replace must move the old tree aside, not rm it before publish."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
     assert 'publish_dir="${ext_dir}.new"' in core
+    assert 'backup_dir="${ext_dir}.old"' in core
     assert 'mv "$publish_dir" "$ext_dir"' in core
-    # Destructive wipe of the live tree must come after the staged copy.
+    assert 'mv "$ext_dir" "$backup_dir"' in core
+    # Never delete the only good tree before the replacement is in place.
+    assert 'rm -rf "$ext_dir"' not in core.split("sync_resource_monitor_user_schema")[0]
     assert core.index('cp -a "$staging/." "$publish_dir/"') < core.index(
-        'rm -rf "$ext_dir"'
+        'mv "$ext_dir" "$backup_dir"'
+    )
+    assert core.index('mv "$ext_dir" "$backup_dir"') < core.index(
+        'mv "$publish_dir" "$ext_dir"'
     )
 
 
@@ -312,13 +318,31 @@ def test_installer_apt_installs_runtime_deps():
 def test_core_syncs_user_schema_for_refreshtime():
     """Patched double refreshtime must be mirrored into user glib schemas."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
-    assert "sync_resource_monitor_user_schema" in core
-    assert "clear_stale_resource_monitor_user_schema" not in core
-    # Called after publish, before refreshtime is written via extension schemadir.
-    publish = core.split("sync_resource_monitor_user_schema", 1)[1]
-    assert "refreshtime" in publish
+    assert "sync_resource_monitor_user_schema() {" in core
+    # Scope to install_resource_monitor_core so apply_* call sites do not confuse order.
+    core_fn = core.split("install_resource_monitor_core()")[1].split(
+        "# ── Optional Resource Monitor tweaks"
+    )[0]
+    publish_mv = core_fn.index('mv "$publish_dir" "$ext_dir"')
+    sync_call = core_fn.index('sync_resource_monitor_user_schema "$ext_dir"')
+    refreshtime = core_fn.index(
+        'ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor refreshtime'
+    )
+    assert publish_mv < sync_call < refreshtime
     assert "glib-2.0/schemas" in core
     assert "org.gnome.shell.extensions.resource-monitor.gschema.xml" in core
+
+
+def test_select_ids_validated_before_core_install():
+    """Unknown/empty --select must abort before install_resource_monitor_core."""
+    install = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+    main = install.split("# ── Main installer logic")[1]
+    early, _after = main.split("ensure_rm_monitor_tools", 1)
+    assert "_validate_select_ids" in early
+    assert 'unknown component id' in early
+    assert "--select needs component ids" in early
+    # Unknown bare tokens (no leading dash) must also abort.
+    assert 'unknown argument: $1' in early
 
 
 def test_dead_dash_to_panel_helpers_are_gone():
@@ -384,7 +408,10 @@ def test_unknown_dash_args_abort_before_core_install():
     early, _after = main.split("ensure_rm_monitor_tools", 1)
     assert '-*)' in early
     assert "unknown argument" in early
-    assert "--default|--all|--select|--select=*|" in early.replace("\n", "")
+    assert "_validate_select_ids" in early
+    assert '--default|--all|""' in early.replace("\n", "")
+    # Bare unknown tokens (no dash) also abort before core.
+    assert "*)" in early
 
 
 def test_panel_spacing_manifest_section_is_empty():

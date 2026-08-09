@@ -343,10 +343,12 @@ install_resource_monitor_core() {
   patch_extension_metadata "$staging" metadata.json "$shell_version" 9999
 
   run_as_target mkdir -p "$(dirname "$ext_dir")"
-  # Atomic-ish publish: stage into $ext_dir.new, then replace the live tree so a
-  # failed cp cannot leave an empty half-deleted extension directory.
+  # Crash-safe publish: stage into $ext_dir.new, move the live tree aside to
+  # $ext_dir.old, then rename .new into place. Never rm the only good tree
+  # before the replacement name exists (rollback if the final mv fails).
   local publish_dir="${ext_dir}.new"
-  run_as_target rm -rf "$publish_dir"
+  local backup_dir="${ext_dir}.old"
+  run_as_target rm -rf "$publish_dir" "$backup_dir"
   run_as_target mkdir -p "$publish_dir"
   if declare -F run_as_target >/dev/null 2>&1; then
     run_as_target cp -a "$staging/." "$publish_dir/"
@@ -356,8 +358,22 @@ install_resource_monitor_core() {
   if [ "$(id -u)" -eq 0 ]; then
     chown -R "$TARGET_USER:$TARGET_USER" "$publish_dir"
   fi
-  run_as_target rm -rf "$ext_dir"
-  run_as_target mv "$publish_dir" "$ext_dir"
+  if [ -e "$ext_dir" ]; then
+    if ! run_as_target mv "$ext_dir" "$backup_dir"; then
+      msg "ERROR: could not move live extension aside for publish"
+      run_as_target rm -rf "$publish_dir"
+      return 1
+    fi
+  fi
+  if ! run_as_target mv "$publish_dir" "$ext_dir"; then
+    msg "ERROR: could not publish staged Resource Monitor tree"
+    if [ -e "$backup_dir" ]; then
+      run_as_target mv "$backup_dir" "$ext_dir" \
+        || msg "ERROR: rollback also failed; backup at $backup_dir"
+    fi
+    return 1
+  fi
+  run_as_target rm -rf "$backup_dir"
   rm -rf "$tmpdir"
   trap - RETURN
 
@@ -403,11 +419,16 @@ install_resource_monitor_core() {
   # mode is passed straight through to it when that component runs.
   apply_resource_monitor_width_gsettings "$ext_dir" "$(resource_monitor_spacing_mode)"
 
-  gpu_devices="$(rm_monitor report-cuda-devices)"
-  if [ -n "$gpu_devices" ]; then
+  local gpu_rc=0
+  local gpu_devices=""
+  gpu_devices="$(rm_monitor report-cuda-devices)" || gpu_rc=$?
+  if (( gpu_rc != 0 )); then
+    msg "WARN: report-cuda-devices failed (exit $gpu_rc); leaving gpudeviceslist unchanged."
+  elif [ "$gpu_devices" = "[]" ]; then
+    ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "[]"
+    msg "No NVIDIA GPU reported by nvidia-smi; Resource Monitor GPU list set empty."
+  elif [ -n "$gpu_devices" ]; then
     ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpudeviceslist "$gpu_devices"
-  else
-    msg "No NVIDIA GPU reported by nvidia-smi; Resource Monitor GPU list left empty."
   fi
 
   enable_shell_extension "$ext_id"

@@ -230,12 +230,48 @@ source "$SCRIPT_DIR/installer/components.sh"
 # the already-extracted tree; core re-extract is reserved for fresh install
 # modes (--default / --all / --select / interactive) so deselected patches
 # revert cleanly on a full install.
+
+# _validate_select_ids IDS — Every id must exist in ISC_COMPONENTS before core
+# re-extract. Empty/unknown selections must not wipe the live extension tree.
+_validate_select_ids() {
+  local raw="$1" id found entry cid
+  local -a tokens=()
+  # shellcheck disable=SC2206
+  tokens=( ${raw//,/ } )
+  if (( ${#tokens[@]} == 0 )); then
+    msg "ERROR: --select needs component ids"
+    exit 1
+  fi
+  for id in "${tokens[@]}"; do
+    [[ -n "$id" ]] || continue
+    found=0
+    for entry in "${ISC_COMPONENTS[@]}"; do
+      IFS='|' read -r cid _ <<<"$entry"
+      if [[ "$cid" == "$id" ]]; then
+        found=1
+        break
+      fi
+    done
+    if (( found == 0 )); then
+      msg "ERROR: unknown component id: $id"
+      msg "       Use --list-components to see valid ids."
+      exit 1
+    fi
+  done
+}
+
 case "${1:-}" in
   --list-components|--list-configurable-components|--list-select-configure-components|--list-component-config-values|--configure-component|--configure-component=*|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*|--reconfigure|--reconfigure=*)
     component_main "$@"
     exit $?
     ;;
-  --default|--all|--select|--select=*|"")
+  --select)
+    _validate_select_ids "${2:-}"
+    ;;
+  --select=*)
+    _validate_select_ids "${1#--select=}"
+    ;;
+  --default|--all|"")
     ;;
   -*)
     # Unknown dash-args must not fall through into a fresh core re-extract.
@@ -243,6 +279,11 @@ case "${1:-}" in
     # the mandatory core install has already wiped the live extension tree.
     msg "ERROR: unknown argument: $1"
     msg "       Use --help for supported flags (e.g. --list-configurable-components)."
+    exit 1
+    ;;
+  *)
+    msg "ERROR: unknown argument: $1"
+    msg "       Use --help for supported flags."
     exit 1
     ;;
 esac

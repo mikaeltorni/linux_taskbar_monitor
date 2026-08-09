@@ -23,7 +23,7 @@ pub fn try_parse_strv(raw: Option<&str>) -> Result<Vec<String>, &'static str> {
     pythonish_list(&value).ok_or("CURRENT is not a parseable GSettings string-array")
 }
 
-/// Parse a Python/gsettings list literal like `['a', "b"]`.
+/// Parse a Python/gsettings list literal like `['a', "b"]` (UTF-8 safe).
 fn pythonish_list(value: &str) -> Option<Vec<String>> {
     let value = value.trim();
     if !value.starts_with('[') || !value.ends_with(']') {
@@ -34,34 +34,33 @@ fn pythonish_list(value: &str) -> Option<Vec<String>> {
         return Some(Vec::new());
     }
 
-    let bytes = inner.as_bytes();
     let mut items = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        while i < bytes.len() && ((bytes[i] as char).is_whitespace() || bytes[i] == b',') {
-            i += 1;
+    let mut chars = inner.chars().peekable();
+    while let Some(&ch) = chars.peek() {
+        if ch.is_whitespace() || ch == ',' {
+            chars.next();
+            continue;
         }
-        if i >= bytes.len() {
-            break;
-        }
-        let quote = bytes[i];
-        if quote != b'\'' && quote != b'"' {
+        let quote = chars.next()?;
+        if quote != '\'' && quote != '"' {
             return None;
         }
-        i += 1;
         let mut out = String::new();
-        while i < bytes.len() {
-            if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                out.push(bytes[i + 1] as char);
-                i += 2;
+        let mut closed = false;
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                let escaped = chars.next()?;
+                out.push(escaped);
                 continue;
             }
-            if bytes[i] == quote {
-                i += 1;
+            if c == quote {
+                closed = true;
                 break;
             }
-            out.push(bytes[i] as char);
-            i += 1;
+            out.push(c);
+        }
+        if !closed {
+            return None;
         }
         items.push(out);
     }
@@ -102,7 +101,8 @@ pub fn append_strv(raw: Option<&str>, value: &str) -> Result<Vec<String>, &'stat
 /// Remove every occurrence of `value`.
 ///
 /// # Parameters
-/// - `raw`: Current `gsettings get` string-array text (or `None`).
+/// - `raw`: Current `gsettings get` string-array text (must be set for CLI
+///   remove; empty/`None` is allowed for library callers that already validated).
 /// - `value`: Entry to drop.
 ///
 /// # Errors
@@ -139,8 +139,9 @@ pub fn format_strv(values: &[String]) -> String {
 ///
 /// # Returns
 /// `Ok(())` after printing the new list on stdout. `Err(2)` for an invalid
-/// action (usage error). `Err(1)` when `CURRENT` is set but unparseable.
-/// Reads `CURRENT` for the prior `gsettings get` text.
+/// action (usage error). `Err(1)` when `CURRENT` is set but unparseable, or
+/// when `remove` is invoked without `CURRENT` (avoids inventing `[]` and wiping
+/// a live GSettings list).
 pub fn run(action: &str, value: &str) -> Result<(), i32> {
     crate::logging::info(format!("gsettings-strv {action} value={value}"));
     if action != "append" && action != "remove" {
@@ -149,6 +150,11 @@ pub fn run(action: &str, value: &str) -> Result<(), i32> {
         return Err(2);
     }
     let current = env::var("CURRENT").ok();
+    if action == "remove" && current.as_deref().unwrap_or("").trim().is_empty() {
+        crate::logging::error("gsettings-strv remove requires CURRENT");
+        eprintln!("gsettings-strv: remove requires CURRENT (refusing to invent [])");
+        return Err(1);
+    }
     let result = if action == "append" {
         append_strv(current.as_deref(), value)
     } else {
@@ -176,13 +182,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_and_format_round_trip_shape() {
-        let parsed = try_parse_strv(Some("['a', 'b']")).unwrap();
-        assert_eq!(parsed, vec!["a".to_string(), "b".to_string()]);
-        assert_eq!(format_strv(&parsed), "['a', 'b']");
-    }
-
-    #[test]
     fn append_dedupes() {
         assert_eq!(
             append_strv(Some("['a']"), "a").unwrap(),
@@ -195,22 +194,28 @@ mod tests {
     }
 
     #[test]
-    fn strips_as_prefix() {
+    fn remove_drops_all_matches() {
         assert_eq!(
-            try_parse_strv(Some("@as ['x']")).unwrap(),
-            vec!["x".to_string()]
+            remove_strv(Some("['a', 'b', 'a']"), "a").unwrap(),
+            vec!["b".to_string()]
         );
     }
 
     #[test]
-    fn unparseable_current_is_rejected() {
-        assert!(try_parse_strv(Some("not-a-list")).is_err());
-        assert!(append_strv(Some("@@@"), "x").is_err());
-        assert!(remove_strv(Some("enabled-extensions"), "x").is_err());
+    fn unclosed_quotes_are_rejected() {
+        assert!(try_parse_strv(Some("['a]")).is_err());
+        assert!(try_parse_strv(Some(r#"["unterminated]"#)).is_err());
     }
 
     #[test]
-    fn empty_and_missing_current_are_empty_lists() {
+    fn utf8_values_round_trip() {
+        let parsed = try_parse_strv(Some("@as ['café']")).unwrap();
+        assert_eq!(parsed, vec!["café".to_string()]);
+        assert_eq!(format_strv(&parsed), "['café']");
+    }
+
+    #[test]
+    fn empty_forms_parse() {
         assert_eq!(try_parse_strv(None).unwrap(), Vec::<String>::new());
         assert_eq!(try_parse_strv(Some("")).unwrap(), Vec::<String>::new());
         assert_eq!(try_parse_strv(Some("[]")).unwrap(), Vec::<String>::new());

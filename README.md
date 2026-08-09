@@ -34,10 +34,12 @@ to force the full framework, or to a missing path to force the fallback.
 
 ## What it installs
 
-It downloads Resource Monitor v27, patches the extension display for GPU VRAM,
-disk usage rows, gradient colors, ethernet icon, process popup, and configurable
-100–2000 ms refreshes (500 ms by default), and configures the panel to show
-CPU, RAM, `/home` disk usage/activity, ethernet, and GPU status.
+It downloads Resource Monitor v27 and configures the panel for CPU, RAM,
+`/home` disk usage/activity, ethernet, and GPU status. The mandatory core also
+enables configurable 100–2000 ms refreshes (500 ms by default). Optional
+default-on components then patch GPU VRAM display, per-disk rows, gradient
+colors, ethernet icon hide, process popup, and panel spacing — unless you
+deselect them.
 
 ## Technology Stack
 
@@ -181,11 +183,13 @@ bash install.sh --reconfigure a,b
 bash install.sh --uninstall a,b
 ```
 
-Readonly flags (`--list-*`, `--detect`, `--help`, `--configure-component`,
-`--export-selection`) and `--reconfigure` / `--uninstall` never wipe the
-installed extension tree. Fresh install modes (`--default`, `--all`,
-`--select`, interactive) always re-run `install_resource_monitor_core`, which
-re-extracts a clean Resource Monitor zip so deselected source patches revert.
+Flags that never wipe the installed extension tree: `--list-*`, `--detect`,
+`--help`, `--reconfigure`, and `--uninstall`. `--configure-component` and
+`--export-selection` also skip core re-extract, but they require the full
+`linux_installation_scripts_functions` framework (standalone fallback exits 1).
+Fresh install modes (`--default`, `--all`, `--select`, interactive) always
+re-run `install_resource_monitor_core`, which re-extracts a clean Resource
+Monitor zip so deselected source patches revert.
 
 The Resource Monitor extension is the mandatory core (`install_resource_monitor_core`
 runs before component selection on fresh installs). Optional default-on components:
@@ -204,6 +208,12 @@ runs before component selection on fresh installs). Optional default-on componen
 ## Troubleshooting
 
 If `nvidia-smi` is unavailable, GPU device list configuration is skipped.
+If `nvidia-smi` exists but `-L` fails, the installer leaves `gpudeviceslist`
+unchanged (it does not write a false empty list).
+
+After core install, the patched Resource Monitor schema is synced into
+`~/.local/share/glib-2.0/schemas` so bare `gsettings` matches the extension's
+double `refreshtime` range (0.1–60 s).
 
 If `curl`, `unzip`, or `glib-compile-schemas` are missing, re-run with
 `sudo bash install.sh` so apt can install `curl`, `unzip`, and `libglib2.0-bin`

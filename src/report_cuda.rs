@@ -103,11 +103,41 @@ pub fn get_gpu_devices() -> Vec<Device> {
 
 /// CLI entry point: print the GSettings GPU device array to stdout.
 ///
-/// Returns `0` on success. A missing `nvidia-smi` is not an error; the command
-/// prints `[]` and succeeds so the installer can use the value unconditionally.
+/// Returns `0` when `nvidia-smi` is missing (prints `[]`) or when the query
+/// succeeds. Returns `1` when `nvidia-smi` exists but `-L` fails, so callers do
+/// not overwrite `gpudeviceslist` with a false empty list.
 pub fn run() -> i32 {
     logging::info("report-cuda-devices starting");
-    let devices = get_gpu_devices();
+    let Some(nvidia_smi) = detect_nvidia_smi() else {
+        logging::info("nvidia-smi not found; emitting empty GPU list");
+        println!("[]");
+        return 0;
+    };
+
+    let output = match Command::new(&nvidia_smi)
+        .arg("-L")
+        .stderr(Stdio::piped())
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            logging::warn(format!(
+                "nvidia-smi -L failed with status {}: {}",
+                output.status,
+                stderr.trim()
+            ));
+            eprintln!("report-cuda-devices: nvidia-smi -L failed; refusing to emit []");
+            return 1;
+        }
+        Err(err) => {
+            logging::warn(format!("nvidia-smi -L failed: {err}"));
+            eprintln!("report-cuda-devices: nvidia-smi -L failed; refusing to emit []");
+            return 1;
+        }
+    };
+
+    let devices = parse_gpu_output(&String::from_utf8_lossy(&output.stdout));
     let formatted = format_gsettings_list(&devices);
     logging::info(format!(
         "report-cuda-devices emitted {} device(s)",

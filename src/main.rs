@@ -60,7 +60,7 @@ enum Command {
         /// Set GPU memory to percentage mode (used/total %).
         #[arg(long)]
         gpu_memory_perc: bool,
-        /// Set disk space to GB mode. The patch adds live IO percentage.
+        /// Free `/home` space in GB (installer default); live IO % comes from patch-disk.
         #[arg(long)]
         disk_space_gb: bool,
         /// Legacy alias for `--disk-space-gb`, kept for installer compatibility.
