@@ -235,6 +235,16 @@ case "${1:-}" in
     component_main "$@"
     exit $?
     ;;
+  --default|--all|--select|--select=*|"")
+    ;;
+  -*)
+    # Unknown dash-args must not fall through into a fresh core re-extract.
+    # The shared framework may "ignore" unknown flags after selection; by then
+    # the mandatory core install has already wiped the live extension tree.
+    msg "ERROR: unknown argument: $1"
+    msg "       Use --help for supported flags (e.g. --list-configurable-components)."
+    exit 1
+    ;;
 esac
 
 msg "=== Linux Taskbar Monitor & GNOME Extensions Setup ==="

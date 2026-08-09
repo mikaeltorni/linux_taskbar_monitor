@@ -514,8 +514,7 @@ const FIXED_DISK_REFRESH_RESULT: &str = r#"        return {
 
 const DISK_ROW_KEY_MARKER: &str = "devicePath: device.device,";
 
-const ACTIVITY_HELPER_MARKER: &str =
-    "function getDiskSpaceActivityPercent(indicator, filesystem)";
+const ACTIVITY_HELPER_MARKER: &str = "function getDiskSpaceActivityPercent(indicator, filesystem)";
 const COLOR_HELPER_MARKER: &str = "function getDiskUsagePercentStyle(value)";
 const REFRESH_FUNCTION_MARKER: &str = "export function refreshDiskSpaceValue(indicator) {";
 
@@ -625,8 +624,7 @@ fn replace_js_function(content: &str, header_marker: &str, replacement: &str) ->
 pub fn ensure_disk_activity_helper(content: &str) -> String {
     let mut content = content.to_string();
 
-    if content.contains(ACTIVITY_HELPER_MARKER)
-        && !content.contains(ACTIVITY_HELPER_CURRENT_MARKER)
+    if content.contains(ACTIVITY_HELPER_MARKER) && !content.contains(ACTIVITY_HELPER_CURRENT_MARKER)
     {
         if let Some(upgraded) =
             replace_js_function(&content, ACTIVITY_HELPER_MARKER, DISK_ACTIVITY_HELPER_BODY)
@@ -779,7 +777,11 @@ pub fn migrate_disk_activity_style(content: &str) -> String {
     logging::info("Migrated refreshers.js disk activity color style");
     println!("Migrated refreshers.js disk activity color style");
     content
-        .replacen(ACTIVITY_LINE, &format!("{ACTIVITY_LINE}\n          {MARKER}"), 1)
+        .replacen(
+            ACTIVITY_LINE,
+            &format!("{ACTIVITY_LINE}\n          {MARKER}"),
+            1,
+        )
         .replacen(SECONDARY_CALL, STYLED_SECONDARY_CALL, 1)
 }
 
@@ -948,7 +950,10 @@ pub fn run(containers_path: &Path) -> i32 {
             "Could not find refreshers.js at: {}",
             refreshers_path.display()
         ));
-        eprintln!("Could not find refreshers.js at: {}", refreshers_path.display());
+        eprintln!(
+            "Could not find refreshers.js at: {}",
+            refreshers_path.display()
+        );
         return 1;
     }
 
@@ -1075,7 +1080,8 @@ mod tests {
     #[test]
     fn containers_upstream_gb_variant_is_rewritten() {
         let patched = patch_containers(ORIGINAL_DISK_CONTAINER).expect("patch");
-        assert!(patched.contains("update_element_secondary_value(filesystem, value, unit, style = \"\")"));
+        assert!(patched
+            .contains("update_element_secondary_value(filesystem, value, unit, style = \"\")"));
         assert!(patched.contains("cleanup_elements()"));
         assert!(patched.contains(DISK_CONTAINER_MARKER));
     }
@@ -1112,16 +1118,19 @@ mod tests {
         assert!(patched.contains(DISK_CONTAINER_MARKER));
         assert!(patched.contains("cleanup_elements()"));
         assert!(patched.contains(r#"_createUnitLabel("%""#));
-        assert!(!patched.contains(
-            "this._elementsSecondaryUnit[filesystem] = _createUnitLabel(\"GB\""
-        ));
+        assert!(
+            !patched.contains("this._elementsSecondaryUnit[filesystem] = _createUnitLabel(\"GB\"")
+        );
     }
 
     #[test]
     fn unit_styles_are_inserted_once_and_deduplicated() {
         let missing = format!("x\n{UNIT_TEXT_LINE}y\n");
         let normalized = normalize_disk_container_styles(&missing);
-        assert_eq!(normalized, format!("x\n{UNIT_TEXT_LINE}{UNIT_STYLE_LINE}y\n"));
+        assert_eq!(
+            normalized,
+            format!("x\n{UNIT_TEXT_LINE}{UNIT_STYLE_LINE}y\n")
+        );
 
         let duplicated = format!("x\n{UNIT_TEXT_LINE}{UNIT_STYLE_LINE}{UNIT_STYLE_LINE}y\n");
         assert_eq!(
@@ -1143,14 +1152,17 @@ mod tests {
     fn refreshers_current_upstream_form_is_patched() {
         let patched = patch_refreshers(&upstream_refreshers()).expect("patch");
         assert!(patched.contains(REFRESH_UPDATE_MARKER));
-        assert!(patched.contains("const activityStyle = getDiskUsagePercentStyle(activityPercent);"));
+        assert!(
+            patched.contains("const activityStyle = getDiskUsagePercentStyle(activityPercent);")
+        );
         assert!(patched.contains(ACTIVITY_HELPER_MARKER));
         assert!(patched.contains(COLOR_HELPER_MARKER));
         assert!(patched.contains("devicePath: device.device,"));
         // The template literals must survive verbatim, not be eaten as regex
         // capture-group references.
-        assert!(patched
-            .contains(r#"`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`"#));
+        assert!(patched.contains(
+            r#"`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`"#
+        ));
         // The stale upstream display block must not be left behind.
         assert!(!patched.contains("monitor: indicator._diskSpaceMonitor,"));
     }

@@ -494,7 +494,9 @@ mod tests {
         assert!(patched.contains("colors === this._diskSpaceColors"));
         assert!(patched.contains("const GRADIENT_CONFIGS = {"));
         // The support block must precede the class declaration.
-        let block_at = patched.find("Gradient color support").expect("support block");
+        let block_at = patched
+            .find("Gradient color support")
+            .expect("support block");
         let class_at = patched.find(CLASS_MARKER).expect("class marker");
         assert!(block_at < class_at);
     }
@@ -529,7 +531,8 @@ mod tests {
         let (migrated, changed) = patch_extension_js(&legacy).expect("migrate");
         assert!(changed);
         assert!(migrated.contains("colors === this._diskSpaceColors"));
-        assert!(migrated.contains("colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")"));
+        assert!(migrated
+            .contains("colors === this._gpuMemoryColors || colorStr.includes(\"__gpuMem\")"));
     }
 
     #[test]

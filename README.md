@@ -72,6 +72,8 @@ changes (on X11, agents may use the sanctioned in-place Shell reload instead).
 ```bash
 # Rust unit/integration tests (primary — covers every patcher and helper)
 source "$HOME/.cargo/env"   # if using rustup
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
 cargo test
 cargo build --release --bin rm-monitor
 
@@ -81,6 +83,8 @@ bash scripts/build_rm_monitor.sh
 bash tests/test_lifecycle.sh
 python3 -m pytest tests -q
 ./install.sh --list-components
+./install.sh --list-configurable-components
+./install.sh --detect
 ```
 
 ## Project Structure

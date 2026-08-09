@@ -84,7 +84,10 @@ pub fn get_gpu_devices() -> Vec<Device> {
     {
         Ok(output) if output.status.success() => output.stdout,
         Ok(output) => {
-            logging::warn(format!("nvidia-smi -L failed with status {}", output.status));
+            logging::warn(format!(
+                "nvidia-smi -L failed with status {}",
+                output.status
+            ));
             return Vec::new();
         }
         Err(err) => {
