@@ -270,6 +270,36 @@ pub fn get_disk_usage_percent_style(value: f64) -> String {
     format!("color: rgb({red}, {green}, 0);")
 }
 
+/// Build a red -> yellow -> green CSS style for available filesystem space.
+///
+/// The filesystem's current total capacity defines the upper endpoint, so the
+/// scale remains correct for disks of any size: no free space is red, half of
+/// the capacity free is yellow, and the entire capacity free is green.
+///
+/// # Parameters
+/// - `available`: Available space in any byte/unit scale.
+/// - `total`: Total capacity in the same scale. Non-positive or non-finite
+///   totals yield `""`.
+pub fn get_disk_free_space_style(available: f64, total: f64) -> String {
+    if !available.is_finite() || !total.is_finite() || total <= 0.0 {
+        return String::new();
+    }
+
+    let ratio = js_clamp(available / total, 1.0);
+    let red = if ratio <= 0.5 {
+        255
+    } else {
+        js_round(510.0 * (1.0 - ratio)) as i64
+    };
+    let green = if ratio <= 0.5 {
+        js_round(510.0 * ratio) as i64
+    } else {
+        255
+    };
+
+    format!("color: rgb({red}, {green}, 0);")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +381,28 @@ mod tests {
         );
         assert_eq!(gradient_get_usage_color(&[f64::NAN], &["__cpu"]), "");
         assert_eq!(gradient_get_usage_color(&[], &["__cpu"]), "");
+    }
+
+    #[test]
+    fn disk_free_space_uses_the_filesystem_capacity_as_its_gradient_range() {
+        assert_eq!(
+            get_disk_free_space_style(0.0, 512.0),
+            "color: rgb(255, 0, 0);"
+        );
+        assert_eq!(
+            get_disk_free_space_style(256.0, 512.0),
+            "color: rgb(255, 255, 0);"
+        );
+        assert_eq!(
+            get_disk_free_space_style(512.0, 512.0),
+            "color: rgb(0, 255, 0);"
+        );
+        assert_eq!(
+            get_disk_free_space_style(19.0, 512.0),
+            "color: rgb(255, 19, 0);"
+        );
+        assert_eq!(get_disk_free_space_style(19.0, 0.0), "");
+        assert_eq!(get_disk_free_space_style(f64::NAN, 512.0), "");
     }
 
     #[test]

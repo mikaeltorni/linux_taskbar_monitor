@@ -159,7 +159,8 @@ VRAM split reservations that have no upstream GSetting are applied by
 
 Ethernet is placed first (leftmost). The ethernet icon is hidden while Mbps
 values stay visible. Disk free space shows as colored GB with a secondary
-activity %.
+activity %. Its gradient uses the filesystem's current capacity: 0 GB free is
+red, half free is yellow, and fully free is green.
 
 ## Component selection
 

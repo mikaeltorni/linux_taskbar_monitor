@@ -4,10 +4,10 @@
 //!
 //! - `panel/containers.js`: `DiskContainerSpace` gains a secondary label for
 //!   live disk activity, plus styled unit labels.
-//! - `services/refreshers.js`: the disk-space row renders free GB coloured by
-//!   used percentage, with the live IO busy percentage as the secondary value;
-//!   the `getDiskSpaceActivityPercent` and `getDiskUsagePercentStyle` helpers
-//!   are injected here.
+//! - `services/refreshers.js`: the disk-space row renders free GB coloured
+//!   against the filesystem's total capacity, with the live IO busy percentage
+//!   as the secondary value; disk-space, activity, and colour helpers are
+//!   injected here.
 //! - `extension.js`: disk-space rows are keyed by mount point.
 //!
 //! Every edit is version-tolerant: known older patched forms are migrated in
@@ -278,6 +278,20 @@ const DISK_USAGE_STYLE_HELPER: &str = r#"function getDiskUsagePercentStyle(value
   return `color: rgb(${red}, ${green}, 0);`;
 }"#;
 
+/// Red -> yellow -> green free-space helper injected into refreshers.js.
+/// Mirrors [`crate::gradient_colors::get_disk_free_space_style`].
+const DISK_FREE_SPACE_STYLE_HELPER: &str = r#"function getDiskFreeSpaceStyle(available, total) {
+  if (!Number.isFinite(available) || !Number.isFinite(total) || total <= 0) {
+    return "";
+  }
+
+  const ratio = Math.max(0, Math.min(1, available / total));
+  const red = ratio <= 0.5 ? 255 : Math.round(510 * (1 - ratio));
+  const green = ratio <= 0.5 ? Math.round(510 * ratio) : 255;
+
+  return `color: rgb(${red}, ${green}, 0);`;
+}"#;
+
 const DISK_ACTIVITY_HELPER_BODY: &str = r#"function getDiskSpaceActivityPercent(indicator, filesystem) {
   if (!indicator._diskSpaceActivitySamples) {
     indicator._diskSpaceActivitySamples = new Map();
@@ -437,7 +451,10 @@ const FIXED_REFRESH_UPDATE: &str = r#"          const diskSpaceUsageDisplay = bu
             scaleBase: indicator._dataScaleBase,
           });
           const activityPercent = getDiskSpaceActivityPercent(indicator, entry.devicePath);
-          const primaryStyle = getDiskUsagePercentStyle(entry.usedPercent);
+          const primaryStyle = getDiskFreeSpaceStyle(
+            entry.availableBytes,
+            entry.availableBytes + entry.usedBytes
+          );
           const activityStyle = getDiskUsagePercentStyle(activityPercent);
 
           indicator._diskSpaceBox.update_element_value(
@@ -516,6 +533,7 @@ const DISK_ROW_KEY_MARKER: &str = "devicePath: device.device,";
 
 const ACTIVITY_HELPER_MARKER: &str = "function getDiskSpaceActivityPercent(indicator, filesystem)";
 const COLOR_HELPER_MARKER: &str = "function getDiskUsagePercentStyle(value)";
+const FREE_SPACE_COLOR_HELPER_MARKER: &str = "function getDiskFreeSpaceStyle(available, total)";
 const REFRESH_FUNCTION_MARKER: &str = "export function refreshDiskSpaceValue(indicator) {";
 
 // ── extension.js snippets ────────────────────────────────────────────────────
@@ -629,9 +647,9 @@ fn replace_js_function(content: &str, header_marker: &str, replacement: &str) ->
     Some(out)
 }
 
-/// Ensure refreshers.js defines both the disk-activity and disk-usage-colour
-/// helpers, injecting whichever is missing at the appropriate anchor, and
-/// upgrading a stale activity helper body when the LVM/mapper fix is absent.
+/// Ensure refreshers.js defines the disk-activity, usage-colour, and
+/// capacity-scaled free-space-colour helpers, injecting whichever is missing
+/// at the appropriate anchor and upgrading stale helper bodies.
 ///
 /// # Parameters
 /// - `content`: `refreshers.js` content.
@@ -664,23 +682,58 @@ pub fn ensure_disk_activity_helper(content: &str) -> Result<String, PatchTargetM
         }
     }
 
+    if content.contains(FREE_SPACE_COLOR_HELPER_MARKER) {
+        let needs_replace = extract_js_function(&content, FREE_SPACE_COLOR_HELPER_MARKER)
+            .map(|body| body != DISK_FREE_SPACE_STYLE_HELPER)
+            .unwrap_or(true);
+        if needs_replace {
+            match replace_js_function(
+                &content,
+                FREE_SPACE_COLOR_HELPER_MARKER,
+                DISK_FREE_SPACE_STYLE_HELPER,
+            ) {
+                Some(upgraded) => {
+                    logging::info("Upgraded refreshers.js disk free-space color helper body");
+                    println!("Upgraded refreshers.js disk free-space color helper body");
+                    content = upgraded;
+                }
+                None => {
+                    return Err(PatchTargetMissing(
+                        "refreshers.js disk free-space color helper (stale body, cannot upgrade)"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+    }
+
     let has_activity = content.contains(ACTIVITY_HELPER_MARKER);
     let has_color = content.contains(COLOR_HELPER_MARKER);
-    if has_activity && has_color {
+    let has_free_space_color = content.contains(FREE_SPACE_COLOR_HELPER_MARKER);
+    if has_activity && has_color && has_free_space_color {
         return Ok(content);
     }
 
-    if has_activity && !has_color {
-        logging::info("Patched refreshers.js disk usage color helper");
-        println!("Patched refreshers.js disk usage color helper");
+    let mut missing_helpers = Vec::new();
+    if !has_color {
+        missing_helpers.push(DISK_USAGE_STYLE_HELPER);
+    }
+    if !has_free_space_color {
+        missing_helpers.push(DISK_FREE_SPACE_STYLE_HELPER);
+    }
+    let missing_helpers = missing_helpers.join("\n\n");
+
+    if has_activity {
+        logging::info("Patched refreshers.js disk color helpers");
+        println!("Patched refreshers.js disk color helpers");
         return Ok(content.replacen(
             ACTIVITY_HELPER_MARKER,
-            &format!("{DISK_USAGE_STYLE_HELPER}\n\n{ACTIVITY_HELPER_MARKER}"),
+            &format!("{missing_helpers}\n\n{ACTIVITY_HELPER_MARKER}"),
             1,
         ));
     }
 
-    let helper = format!("{DISK_USAGE_STYLE_HELPER}\n\n{DISK_ACTIVITY_HELPER_BODY}");
+    let helper = format!("{missing_helpers}\n\n{DISK_ACTIVITY_HELPER_BODY}");
     if content.contains(REFRESH_FUNCTION_MARKER) {
         logging::info("Patched refreshers.js disk activity helper");
         println!("Patched refreshers.js disk activity helper");
@@ -735,13 +788,18 @@ pub fn migrate_disk_usage_style_gradient(content: &str) -> String {
 
 /// Migrate the primary disk display from "used percent" to "free GB".
 ///
-/// Switches the monitor/unit-type/unit-measure settings and recolours using
-/// `usedPercent`. Each substitution is applied only when its source is present.
+/// Switches the monitor/unit-type/unit-measure settings and scales the colour
+/// from zero through the filesystem's total capacity. Each substitution is
+/// applied only when its source is present.
 ///
 /// # Parameters
 /// - `content`: `refreshers.js` content.
 pub fn migrate_disk_space_primary_to_free_gb(content: &str) -> String {
-    const SUBSTITUTIONS: [(&str, &str); 4] = [
+    const FREE_SPACE_STYLE: &str = r#"          const primaryStyle = getDiskFreeSpaceStyle(
+            entry.availableBytes,
+            entry.availableBytes + entry.usedBytes
+          );"#;
+    const SUBSTITUTIONS: [(&str, &str); 5] = [
         (
             "            monitor: \"used\",",
             "            monitor: \"free\",",
@@ -756,7 +814,11 @@ pub fn migrate_disk_space_primary_to_free_gb(content: &str) -> String {
         ),
         (
             "          const primaryStyle = getDiskUsagePercentStyle(diskSpaceUsageDisplay.value);",
+            FREE_SPACE_STYLE,
+        ),
+        (
             "          const primaryStyle = getDiskUsagePercentStyle(entry.usedPercent);",
+            FREE_SPACE_STYLE,
         ),
     ];
 
@@ -1193,6 +1255,8 @@ mod tests {
         assert!(patched.contains(
             r#"`${indicator._getValueFixed(diskSpaceUsageDisplay.value, "diskSpace")}`"#
         ));
+        assert!(patched.contains("const primaryStyle = getDiskFreeSpaceStyle("));
+        assert!(patched.contains("entry.availableBytes + entry.usedBytes"));
         // The stale upstream display block must not be left behind.
         assert!(!patched.contains("monitor: indicator._diskSpaceMonitor,"));
     }
@@ -1214,6 +1278,25 @@ mod tests {
         let once = patch_refreshers(&upstream_refreshers()).expect("first");
         let twice = patch_refreshers(&once).expect("second");
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn refreshers_installed_usage_percent_style_migrates_to_capacity_scaled_free_space() {
+        let old_primary_style =
+            r#"          const primaryStyle = getDiskUsagePercentStyle(entry.usedPercent);"#;
+        let new_primary_style = r#"          const primaryStyle = getDiskFreeSpaceStyle(
+            entry.availableBytes,
+            entry.availableBytes + entry.usedBytes
+          );"#;
+        let old_refresh = FIXED_REFRESH_UPDATE.replacen(new_primary_style, old_primary_style, 1);
+        let source = format!(
+            "{DISK_USAGE_STYLE_HELPER}\n\n{DISK_ACTIVITY_HELPER_BODY}\n\n{REFRESH_FUNCTION_MARKER}\n{old_refresh}\n}}\n\n{FIXED_DISK_REFRESH_RESULT}\n"
+        );
+
+        let patched = patch_refreshers(&source).expect("migrate installed form");
+        assert!(patched.contains(new_primary_style));
+        assert!(!patched.contains(old_primary_style));
+        assert!(patched.contains(DISK_FREE_SPACE_STYLE_HELPER));
     }
 
     #[test]
@@ -1259,6 +1342,7 @@ mod tests {
         let source = format!("{DISK_ACTIVITY_HELPER_BODY}\n");
         let patched = ensure_disk_activity_helper(&source).expect("helper");
         assert!(patched.contains(COLOR_HELPER_MARKER));
+        assert!(patched.contains(FREE_SPACE_COLOR_HELPER_MARKER));
         assert!(patched.find(COLOR_HELPER_MARKER) < patched.find(ACTIVITY_HELPER_MARKER));
     }
 
