@@ -124,16 +124,19 @@ apply_resource_monitor_width_gsettings() {
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 0
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 0
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 0
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanwidth 0
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 0
       ;;
     stable)
       # Sizes match the widest expected reading at the configured units
       # (measured in the panel font, digit ~8px): CPU 0-100 -> 24, RAM GB -> 20,
       # disk free GB -> 36, GPU usage/VRAM split -> 24, ethernet down|up -> 60.
+      # Wi-Fi carries the same down|up pair as ethernet, so it reserves the same 60.
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuwidth 24
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor ramwidth 20
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor diskspacewidth 36
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethwidth 60
+      ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanwidth 60
       ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpuwidth 24
       ;;
     *)
@@ -397,7 +400,7 @@ install_resource_monitor_core() {
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor extensionposition "'right'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor displaymode "'primary'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor iconsstatus true
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor itemsposition "['eth', 'cpu', 'ram', 'stats', 'space', 'wlan', 'gpu']"
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor itemsposition "['eth', 'wlan', 'cpu', 'ram', 'stats', 'space', 'gpu']"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpustatus true
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpufrequencystatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor cpuloadaveragestatus false
@@ -410,10 +413,15 @@ install_resource_monitor_core() {
   rm_monitor configure-resource-monitor \
     --disk-space-gb \
     --schema-dir "$ext_dir/schemas"
+  # Both network columns stay on, and auto-hide stays off, so the panel keeps a
+  # fixed set of network readings instead of appearing/disappearing (and
+  # reflowing every column to its right) as links come and go. A disconnected
+  # interface simply reads 0.
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netethstatus true
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netunit "'bits'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
-  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanstatus false
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netwlanstatus true
+  ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor netautohidestatus false
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpustatus true
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunit "'numeric'"
   ext_gsettings "$ext_dir" set org.gnome.shell.extensions.resource-monitor gpumemoryunitmeasure "'auto'"
