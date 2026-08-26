@@ -6,12 +6,21 @@
 //! change that, so this source patch:
 //!
 //! 1. Adds the `PopupMenu` import next to the existing `PanelMenu` import.
-//! 2. Inserts marker-guarded `_toggleProcessMenu`/`_refreshProcessMenu` methods
-//!    before `_clickManager`, reading `ps -eo comm=,%cpu=,%mem=` asynchronously
-//!    and aggregating per command name.
-//! 3. Rewires the left-click case of `_clickManager` and the Enter/Space key
-//!    activation to open the popup.
+//! 2. Inserts marker-guarded `vfunc_event`/`_toggleProcessMenu`/
+//!    `_refreshProcessMenu` methods before `_clickManager`, reading
+//!    `ps -eo comm=,%cpu=,%mem=` asynchronously and aggregating per command name.
+//! 3. Rewires the Enter/Space key activation to open the popup and drops the
+//!    left-click `_launchPrimaryAction` call from `_clickManager`.
 //! 4. Updates the accessibility tooltip to describe the new behavior.
+//!
+//! `vfunc_event` is the single toggle owner on purpose. `PanelMenu.Button`
+//! toggles `this.menu` for every `BUTTON_PRESS` before the `button-press-event`
+//! handler (`_clickManager`) runs, so an earlier revision toggled twice per
+//! click: the base class opened the already-populated menu and `_clickManager`
+//! immediately closed it again. The popup therefore worked exactly once per
+//! Shell process and then silently ignored every click. The override toggles
+//! once, only for button 1 / touch, and fills the menu *before* opening it
+//! because `PopupMenu.open()` returns early on an empty menu.
 //!
 //! The edits are idempotent (guarded by marker comments) and fail fast when the
 //! expected upstream snippets are absent.
@@ -38,6 +47,27 @@ const METHODS: &str = r#"    // ── Process popup: total CPU/RAM aggregated p
     // Left-click no longer launches the task manager; it opens this menu,
     // whose rows show each process name with its summed CPU%, RAM%, and
     // instance count (ps aggregates per PID; we aggregate per name).
+    //
+    // PanelMenu.Button.vfunc_event toggles this.menu on every BUTTON_PRESS,
+    // and it runs before the button-press-event handler (_clickManager). With
+    // both toggling, the two cancelled out as soon as the menu held rows: the
+    // base class opened it and _clickManager closed it again, so the popup
+    // stopped responding after its first use. Own the toggle here instead —
+    // once, for button 1 / touch only — and populate before opening because
+    // PopupMenu.open() bails out while the menu is still empty.
+    vfunc_event(event) {
+      const type = event.type();
+      const isPrimaryPress =
+        type === Clutter.EventType.TOUCH_BEGIN ||
+        (type === Clutter.EventType.BUTTON_PRESS && event.get_button() === 1);
+
+      if (this.menu && isPrimaryPress) {
+        this._toggleProcessMenu();
+      }
+
+      return Clutter.EVENT_PROPAGATE;
+    }
+
     _toggleProcessMenu() {
       if (!this.menu) {
         return;
@@ -165,6 +195,14 @@ const OLD_CLICK: &str = r#"        case 1: // Left-click
           this._launchPrimaryAction();"#;
 
 const NEW_CLICK: &str = r#"        case 1: // Left-click
+          // vfunc_event above already toggled the process popup for this very
+          // event. Toggling again here would cancel it out and leave the panel
+          // button looking dead, so only swallow the click (which also keeps
+          // the upstream _launchPrimaryAction from running)."#;
+
+/// First-generation rewrite that toggled the popup a second time per click.
+/// Re-running the patcher over an already-installed tree must upgrade it.
+const LEGACY_CLICK: &str = r#"        case 1: // Left-click
           // Show per-process CPU/RAM data instead of launching the task manager.
           this._toggleProcessMenu();"#;
 
@@ -254,6 +292,10 @@ pub fn patch_extension_js(content: &str) -> Result<(String, bool), ProcessPopupE
     // ── 3. Rewire left-click and keyboard activation ─────────────────────
     if content.contains(OLD_CLICK) {
         content = content.replacen(OLD_CLICK, NEW_CLICK, 1);
+        changed = true;
+    } else if content.contains(LEGACY_CLICK) {
+        // Upgrade an in-place install that still double-toggles the popup.
+        content = content.replacen(LEGACY_CLICK, NEW_CLICK, 1);
         changed = true;
     } else if !content.contains(NEW_CLICK) {
         return Err(ProcessPopupError::MissingLeftClickCase);
@@ -416,6 +458,49 @@ mod tests {
         assert!(upgraded.contains(
             "Error reading ps output: ${error}`\n          );\n          loadingItem.label.text"
         ));
+        let (again, changed_again) = patch_extension_js(&upgraded).expect("idempotent");
+        assert!(!changed_again);
+        assert_eq!(upgraded, again);
+    }
+
+    #[test]
+    fn only_one_toggle_owner_survives_the_patch() {
+        let (patched, _) = patch_extension_js(&upstream()).expect("patch");
+        // vfunc_event is the sole click-driven toggle: _clickManager's
+        // left-click case must no longer call _toggleProcessMenu, otherwise the
+        // two toggles cancel out and the popup stops opening (see module docs).
+        assert!(patched.contains("    vfunc_event(event) {"));
+        assert_eq!(patched.matches("this._toggleProcessMenu();").count(), 2);
+        let click_at = patched.find(NEW_CLICK).expect("left-click case");
+        let key_at = patched.find(NEW_KEY).expect("key case");
+        let click_body = &patched[click_at..key_at];
+        assert!(!click_body.contains("_toggleProcessMenu"));
+    }
+
+    #[test]
+    fn vfunc_event_toggles_only_for_primary_press() {
+        // Right-click must reach _clickManager's preferences case without the
+        // base-class toggle leaving a stray popup open behind the dialog.
+        assert!(METHODS.contains("type === Clutter.EventType.TOUCH_BEGIN"));
+        assert!(METHODS
+            .contains("(type === Clutter.EventType.BUTTON_PRESS && event.get_button() === 1)"));
+        assert!(METHODS.contains("return Clutter.EVENT_PROPAGATE;"));
+    }
+
+    #[test]
+    fn legacy_double_toggle_body_is_upgraded_in_place() {
+        let legacy = format!(
+            "{PANEL_MENU_IMPORT}\n{POPUP_MENU_IMPORT}\n\n\
+             {METHODS}{CLICK_MANAGER_ANCHOR}\n\
+             {LEGACY_CLICK}\n\
+             {NEW_KEY}\n\
+             const tooltip = {NEW_TOOLTIP};\n"
+        );
+        let (upgraded, changed) = patch_extension_js(&legacy).expect("upgrade");
+        assert!(changed);
+        assert!(upgraded.contains(NEW_CLICK));
+        assert!(!upgraded.contains(LEGACY_CLICK));
+
         let (again, changed_again) = patch_extension_js(&upgraded).expect("idempotent");
         assert!(!changed_again);
         assert_eq!(upgraded, again);

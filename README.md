@@ -228,6 +228,13 @@ If GNOME Shell does not show the updated indicator immediately, log out and
 back in. Do not reload GNOME Shell extensions from an active Wayland session
 via destructive shortcuts.
 
+If left-click opens the popup once and then stops responding, the installed
+`extension.js` predates the `vfunc_event` toggle fix: `PanelMenu.Button` and
+`_clickManager` each toggled the menu for the same click, so the two cancelled
+out as soon as the menu had rows. Re-run `bash install.sh` (or
+`./dist/rm-monitor patch-process-popup "$EXT/extension.js"`) and reload the
+Shell.
+
 ## Extended Features
 
 This repo also manages the Wayland **Window Rules Extension**
