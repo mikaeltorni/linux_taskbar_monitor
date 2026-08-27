@@ -215,14 +215,12 @@ def test_core_reserves_tight_stable_per_value_widths():
     # widest reading at the configured units, not a generous buffer. CPU 0-100
     # (3 digits, "100"=24px) -> 24, RAM GB (2) -> 20, disk free GB (3) -> 36, GPU
     # usage 3 -> 24 (VRAM 2 is split off to its own snug width by rm_panel_spacing),
-    # ethernet down|up (3|3) -> 60, Wi-Fi down|up -> the same 60. compact mode
-    # sets these widths to 0 instead.
+    # ethernet down|up (3|3) -> 60. compact mode sets these widths to 0 instead.
     stable_expected = {
         "cpuwidth 24",
         "ramwidth 20",
         "diskspacewidth 36",
         "netethwidth 60",
-        "netwlanwidth 60",
         "gpuwidth 24",
     }
     compact_expected = {
@@ -230,7 +228,6 @@ def test_core_reserves_tight_stable_per_value_widths():
         "ramwidth 0",
         "diskspacewidth 0",
         "netethwidth 0",
-        "netwlanwidth 0",
         "gpuwidth 0",
     }
     for key_width in stable_expected:
@@ -247,9 +244,9 @@ def test_core_reserves_tight_stable_per_value_widths():
     assert "apply_resource_monitor_width_gsettings" in core
     assert 'apply_resource_monitor_width_gsettings "$ext_dir" "$(resource_monitor_spacing_mode)"' in core
 
-    # The two network columns are placed leftmost, side by side, so their rarer
-    # wider readings grow toward the screen center instead of shifting the clock.
-    assert "itemsposition \"[\'eth\', \'wlan\', \'cpu\', \'ram\', \'stats\', \'space\', \'gpu\']\"" in core
+    # The primary network column is placed first (leftmost), so its rarer wider
+    # readings grow toward the screen center instead of shifting the clock.
+    assert "itemsposition \"[\'eth\', \'cpu\', \'ram\', \'stats\', \'space\', \'wlan\', \'gpu\']\"" in core
 
     # The reservations live in the mandatory core, not a deselectable component.
     components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
@@ -257,25 +254,21 @@ def test_core_reserves_tight_stable_per_value_widths():
         "cpuwidth",
         "ramwidth",
         "netethwidth",
-        "netwlanwidth",
         "gpuwidth",
         "diskspacewidth",
     ):
         assert key not in components, f"{key} must not be a component toggle"
 
 
-def test_core_enables_every_network_column_without_auto_hide():
-    """Both network columns stay visible so the panel layout never reflows on link changes."""
+def test_core_keeps_only_the_primary_network_column():
+    """The core keeps the existing primary network reading without a duplicate Wi-Fi column."""
     core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
 
     schema = "org.gnome.shell.extensions.resource-monitor"
     assert f"{schema} netethstatus true" in core
-    assert f"{schema} netwlanstatus true" in core
-    # Auto-hide would drop a disconnected interface's column and shift every
-    # column to its right; a disconnected link reads 0 instead.
-    assert f"{schema} netautohidestatus false" in core
-    assert f"{schema} netwlanstatus false" not in core
-    assert f"{schema} netethstatus false" not in core
+    assert f"{schema} netwlanstatus false" in core
+    assert f"{schema} netautohidestatus true" in core
+    assert f"{schema} netwlanstatus true" not in core
 
 
 def test_panel_spacing_is_a_selectable_component():

@@ -1,8 +1,8 @@
 # Linux Taskbar Monitor
 
 Standalone installer that patches the GNOME Shell **Resource Monitor** extension
-into a compact taskbar status strip (ethernet, Wi-Fi, CPU, RAM, `/home` disk
-usage/activity, GPU/VRAM).
+into a compact taskbar status strip (CPU, RAM, `/home` disk usage/activity,
+ethernet, GPU/VRAM).
 
 ## Supported platforms
 
@@ -34,9 +34,8 @@ to force the full framework, or to a missing path to force the fallback.
 
 ## What it installs
 
-It downloads Resource Monitor v27 and configures the panel for every network
-column (ethernet **and** Wi-Fi, auto-hide off), CPU, RAM, `/home` disk
-usage/activity, and GPU status. The mandatory core also
+It downloads Resource Monitor v27 and configures the panel for CPU, RAM,
+`/home` disk usage/activity, ethernet, and GPU status. The mandatory core also
 enables configurable 100–2000 ms refreshes (500 ms by default). Optional
 default-on components then patch GPU VRAM display, per-disk rows, gradient
 colors, ethernet icon hide, process popup, and panel spacing — unless you
@@ -153,19 +152,17 @@ the mode via the installer's `rm_panel_spacing` component (or
 `RESOURCE_MONITOR_SPACING_MODE` / the persisted file under
 `~/.config/taskbar-system-status-monitor/`).
 
-The six upstream `*width` GSettings keys are applied by the mandatory core
+The five upstream `*width` GSettings keys are applied by the mandatory core
 (and again when the spacing component runs). The secondary disk-activity and
 VRAM split reservations that have no upstream GSetting are applied by
 `rm-monitor patch-stable-width` when `rm_panel_spacing` is selected.
 
-Both network columns are placed first (leftmost), ethernet then Wi-Fi, and
-`netautohidestatus` is off so neither column disappears when its link goes
-down — a disconnected interface reads 0 instead of reflowing every column to
-its right. The ethernet icon is hidden while Mbps values stay visible; Wi-Fi
-keeps its icon so the two adjacent network readings stay distinguishable. Disk
-free space shows as colored GB with a secondary activity %. Its gradient uses
-the filesystem's current capacity: 0 GB free is red, half free is yellow, and
-fully free is green.
+Ethernet is placed first (leftmost) and remains the single visible network
+column; Wi-Fi is disabled to avoid duplicating the connection reading. The
+ethernet icon is hidden while Mbps values stay visible. Disk free space shows
+as colored GB with a secondary activity %. Its gradient uses the filesystem's
+current capacity: 0 GB free is red, half free is yellow, and fully free is
+green.
 
 ## Component selection
 
