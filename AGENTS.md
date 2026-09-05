@@ -1,17 +1,14 @@
 # Clean Installation Compatibility
 
-All repository changes must remain compatible with a clean installation run
-through this repository's `install.sh`. When also listed by the optional master
-orchestrator (`installation_scripts`), keep the shared component CLI contract
-(`--list-components`, `--select`, `--detect`, `--reconfigure`, `--uninstall`,
-and the other readonly flags documented in `README.md`) stable so that
-orchestrator keeps working. Do not rely on packages, files, settings, or
-manual steps that exist only on the current machine. Add every required
-dependency, asset, configuration step, and migration to the installer so a
-fresh checkout can reproduce the complete setup.
+The `linux-configuration` skill owns the clean-install and root-optional
+installer rules; they are not restated here. Repository-specific installer
+facts:
 
-Keep installation steps idempotent and verify the clean-install path for every
-change.
+This repository's `install.sh` is the primary entry point; the master
+orchestrator (`installation_scripts`) lists it optionally. Keep the shared
+component CLI contract (`--list-components`, `--select`, `--detect`,
+`--reconfigure`, `--uninstall`, and the other readonly flags documented in
+`README.md`) stable so that orchestrator keeps working.
 
 User-facing install steps, component tables, `rm-monitor` subcommands, and
 environment overrides live in [`README.md`](README.md). Keep that file the
