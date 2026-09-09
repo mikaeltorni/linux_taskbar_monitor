@@ -202,7 +202,7 @@ runs before component selection on fresh installs). Optional default-on componen
 | `rm_per_disk` | Per-disk display | on |
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |
-| `rm_process_popup` | Top-users popup (left-click) | on, 60 min |
+| `rm_process_popup` | Top-users popup (left-click) | on, 10 min |
 | `window_rules` | App window-rules (Wayland install; X11 skip marker) | off |
 
 ## Troubleshooting
@@ -241,7 +241,7 @@ Shell.
 
 Left-click opens a popup listing the top process users of every panel
 metric — CPU, RAM, disk IO, network, GPU and VRAM. The default window is the
-past 60 minutes.
+past 10 minutes.
 
 Every row has two columns:
 

@@ -73,12 +73,12 @@ RESOURCE_MONITOR_REFRESH_INTERVAL_MS="${RESOURCE_MONITOR_REFRESH_INTERVAL_MS:-50
 RESOURCE_MONITOR_SPACING_MODE="${RESOURCE_MONITOR_SPACING_MODE:-stable}"
 # Rolling window, in minutes, that the left-click popup ranks "top process
 # users" over. U2TSSM is this repository's name condensed to its initials
-# (Ubuntu 2404 Taskbar System Status Monitor), so `U2TSSM=60 bash install.sh`
-# means "rank by the last 60 minutes". The repository persists the selection;
-# this environment variable seeds a clean install (defaults to 60) and is also
+# (Ubuntu 2404 Taskbar System Status Monitor), so `U2TSSM=10 bash install.sh`
+# means "rank by the last 10 minutes". The repository persists the selection;
+# this environment variable seeds a clean install (defaults to 10) and is also
 # read live by the extension, so exporting it into the desktop session changes
 # the window without re-patching.
-U2TSSM="${U2TSSM:-60}"
+U2TSSM="${U2TSSM:-10}"
 
 # Dash-to-Panel now lives in linux_configuration_setup (lib/dash_to_panel.sh),
 # which owns desktop layout/panel behavior; its EGO download settings moved with

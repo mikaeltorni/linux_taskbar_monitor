@@ -267,12 +267,12 @@ mod tests {
     }
 
     #[test]
-    fn process_popup_window_defaults_to_one_hour() {
+    fn process_popup_window_defaults_to_ten_minutes() {
         let cli = Cli::try_parse_from(["rm-monitor", "patch-process-popup", "extension.js"])
             .expect("parse");
         match cli.command {
             Command::PatchProcessPopup { window_minutes, .. } => {
-                assert_eq!(window_minutes, 60);
+                assert_eq!(window_minutes, 10);
                 assert_eq!(window_minutes, patch_process_popup::DEFAULT_WINDOW_MINUTES);
             }
             _ => panic!("unexpected subcommand"),

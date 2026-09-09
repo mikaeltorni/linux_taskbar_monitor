@@ -10,7 +10,7 @@
 //!    a rolling per-process-name history — CPU and RAM and disk IO from
 //!    `/proc`, network from `ss -tnpHi`, GPU load and VRAM from
 //!    `nvidia-smi pmon` — and each popup section names the processes that used
-//!    the most of one metric across the trailing window (default 60 minutes).
+//!    the most of one metric across the trailing window (default 10 minutes).
 //! 3. Rewires the Enter/Space key activation to open the popup and drops the
 //!    left-click `_launchPrimaryAction` call from `_clickManager`.
 //! 4. Updates the accessibility tooltip to describe the new behavior.
@@ -19,7 +19,7 @@
 //!
 //! The window is baked in by `--window-minutes` and can be overridden live by
 //! the `U2TSSM` environment variable (this repository's initials), so
-//! `U2TSSM=60` means "rank by the last 60 minutes".
+//! `U2TSSM=10` means "rank by the last 10 minutes".
 //!
 //! `vfunc_event` is the single toggle owner on purpose. `PanelMenu.Button`
 //! toggles `this.menu` for every `BUTTON_PRESS` before the `button-press-event`
@@ -65,7 +65,7 @@ const POPUP_MENU_IMPORT: &str =
 const CLICK_MANAGER_ANCHOR: &str = "    _clickManager(actor, event) {";
 
 /// Default rolling window, in minutes, baked into a fresh patch.
-pub const DEFAULT_WINDOW_MINUTES: u32 = 60;
+pub const DEFAULT_WINDOW_MINUTES: u32 = 10;
 
 /// Largest window the injected JavaScript accepts, mirrored by the `U2TSSM`
 /// bounds check inside [`METHODS_TEMPLATE`] so both reject the same values.
