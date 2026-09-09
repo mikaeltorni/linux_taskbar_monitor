@@ -74,7 +74,7 @@ resource_monitor_refresh_interval_file() {
 # The popup ranks processes by what they used over a trailing window rather
 # than by an instantaneous reading. U2TSSM is this repository's name condensed
 # to its initials (Ubuntu 2404 Taskbar System Status Monitor), so
-# `U2TSSM=60 bash install.sh` means "rank by the last 60 minutes". The value is
+# `U2TSSM=10 bash install.sh` means "rank by the last 10 minutes". The value is
 # baked into extension.js by the patcher and re-read live from the environment
 # by the extension itself, so both paths honour the same variable.
 
@@ -84,18 +84,18 @@ resource_monitor_top_window_file() {
 }
 
 # resource_monitor_top_window_minutes - Print the configured window in minutes.
-# Prefers a persisted file when present; otherwise honors U2TSSM (default 60).
-# Invalid values fall back to 60 so installation stays inside the 1..1440 range
+# Prefers a persisted file when present; otherwise honors U2TSSM (default 10).
+# Invalid values fall back to 10 so installation stays inside the 1..1440 range
 # the injected JavaScript accepts.
 resource_monitor_top_window_minutes() {
-  local value="${U2TSSM:-60}" file
+  local value="${U2TSSM:-10}" file
   file="$(resource_monitor_top_window_file)"
   if [ -f "$file" ]; then
     value="$(tr -d '[:space:]' < "$file")"
   fi
   if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 1440 )); then
-    msg "Invalid top-users window '$value'; using 60 minutes." >&2
-    value=60
+    msg "Invalid top-users window '$value'; using 10 minutes." >&2
+    value=10
   fi
   printf '%s\n' "$value"
 }

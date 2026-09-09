@@ -202,7 +202,7 @@ runs before component selection on fresh installs). Optional default-on componen
 | `rm_per_disk` | Per-disk display | on |
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |
-| `rm_process_popup` | Top-users popup (left-click) | on, 60 min |
+| `rm_process_popup` | Top-users popup (left-click) | on, 10 min |
 | `window_rules` | App window-rules (Wayland install; X11 skip marker) | off |
 
 ## Troubleshooting
@@ -239,24 +239,31 @@ Shell.
 
 ### Top-users window
 
-Left-click opens a popup that ranks the top process users of every panel
-metric — CPU, RAM, disk IO, network, GPU and VRAM — over a rolling window
-rather than by an instantaneous reading, so a process that hammered the disk
-five minutes ago still shows. The default window is the past 60 minutes.
+Left-click opens a popup listing the top process users of every panel
+metric — CPU, RAM, disk IO, network, GPU and VRAM. The default window is the
+past 10 minutes.
 
 Every row has two columns:
 
 | Column | Meaning |
 |---|---|
-| `now` | Live reading, refreshed at the panel's own refresh-time setting for as long as the popup stays open |
-| `avg` | Mean over the rolling window — the value the rows are ranked by |
+| `now` | Live reading, refreshed at the panel's own refresh-time setting for as long as the popup stays open — the value the rows are ranked by |
+| `avg` | That process's mean over the rolling window |
 
-Ranking stays on the average so rows hold still while `now` ticks underneath
-them. The live sampler only exists between opening and closing the popup, only
-reads the processes actually on screen, and deliberately does not feed the
-rolling averages — otherwise leaving the popup open would bias every average
-towards that period. `now` for GPU, VRAM and network refreshes as fast as
-`nvidia-smi` and `ss` return, which may be slower than the panel's rate.
+Rows are ranked by `now`, so each section names the processes using the metric
+at this moment, including one that just started and has no history yet. A
+process that goes idle drops off its section, and `avg` reports what the
+processes currently listed have been averaging. Because the ranking changes on
+every tick, the rows are fixed slots whose text is rewritten in place — the
+popup never rebuilds menu items under the pointer.
+
+The live sampler only exists between opening and closing the popup, and
+deliberately does not feed the rolling averages — otherwise leaving the popup
+open would bias every average towards that period. It sweeps every process
+(~10 ms for ~700, handed out in ~2 ms slices between frames) because a
+newcomer has no history to be found by. `now` for GPU, VRAM and network
+refreshes as fast as `nvidia-smi` and `ss` return, which may be slower than
+the panel's rate.
 
 `U2TSSM` is this repository's name condensed to its initials (**U**buntu
 **2**404 **T**askbar **S**ystem **S**tatus **M**onitor) and carries the

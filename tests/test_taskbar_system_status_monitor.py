@@ -519,9 +519,9 @@ def test_top_users_window_is_a_persisted_configurable_component():
     installer = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
     components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
 
-    # The env var seeds a clean install and defaults to a 60 minute window.
-    assert 'U2TSSM="${U2TSSM:-60}"' in installer
-    assert 'value="${U2TSSM:-60}"' in core
+    # The env var seeds a clean install and defaults to a 10 minute window.
+    assert 'U2TSSM="${U2TSSM:-10}"' in installer
+    assert 'value="${U2TSSM:-10}"' in core
 
     # A persisted file outranks the env var so re-running install.sh without
     # re-exporting U2TSSM keeps the window the user configured.
