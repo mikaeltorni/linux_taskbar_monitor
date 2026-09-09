@@ -31,7 +31,9 @@ gsettings set org.gnome.shell.extensions.resource-monitor netunitmeasure "'m'"
 ### Re-apply all patches without sudo
 
 ```bash
-# Disable the extension first so changes take effect on reload
+# Disable the extension first to stop callbacks while patching. Disabling and
+# re-enabling alone does not reload edited extension source; follow the
+# `linux-configuration` skill for the required session-specific reload.
 gnome-extensions disable Resource_Monitor@Ory0n
 
 # Build the helper CLI if needed, then run each patcher
@@ -53,7 +55,7 @@ EXT=~/.local/share/gnome-shell/extensions/Resource_Monitor@Ory0n
 ./dist/rm-monitor patch-stable-width --mode stable "$EXT/panel/containers.js"
 ./dist/rm-monitor configure-resource-monitor --disk-space-gb --schema-dir "$EXT/schemas"
 
-# Re-enable the extension
+# Re-enable the extension state after patching
 gnome-extensions enable Resource_Monitor@Ory0n
 ```
 
