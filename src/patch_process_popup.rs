@@ -85,9 +85,13 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
     // Each row carries two columns. "now" is the live reading, refreshed on
     // the panel's own refresh-time setting for as long as the menu stays
     // open, and answers "what is this using right now?". "avg" is the
-    // trailing-window mean the rows are still ranked by, and answers "what
-    // has been eating this all hour?". Ranking by the average keeps the row
-    // order stable while the live column ticks underneath it.
+    // trailing-window mean, and answers "what has been eating this lately?".
+    //
+    // Rows are ranked by "now", so each section always names the processes
+    // currently using the metric — including one that just started and has no
+    // history yet. Because that ranking changes on every tick, the rows are
+    // fixed slots whose text is rewritten in place rather than menu items
+    // rebuilt underneath the pointer.
     //
     // PanelMenu.Button.vfunc_event toggles this.menu on every BUTTON_PRESS,
     // and it runs before the button-press-event handler (_clickManager). With
@@ -176,10 +180,10 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       this._topGpuFeedPending = false;
       this._topNetFeedPending = false;
       this._topLiveTimer = null;
-      this._topLiveRows = [];
-      this._topLiveNames = new Set();
+      this._topLiveSections = [];
       this._topLiveProc = new Map();
       this._topLiveExtra = new Map();
+      this._topAverages = new Map();
       this._topLivePrev = new Map();
       this._topLiveCpuPrev = 0;
       this._topLiveAt = 0;
@@ -365,40 +369,58 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       return pids;
     }
 
-    _topSampleProcesses() {
+    // One walker serves both cadences: the 10 s sweep that feeds the rolling
+    // buckets and the live sweep behind the "now" column. `live` only picks
+    // which delta state the sweep advances — each keeps its own previous
+    // reading and its own timestamps, so neither distorts the other's
+    // interval, and neither can be ranked from the other's numbers.
+    _topBeginWalk(live) {
       if (this._topWalk) {
         // The previous sweep has not finished. Skipping keeps one consistent
         // set of deltas instead of interleaving two walks over the same state.
-        return;
+        return false;
       }
-
-      const now = GLib.get_monotonic_time() / 1000000;
-      const elapsed =
-        this._topLastSampleAt > 0 ? now - this._topLastSampleAt : 0;
-      this._topLastSampleAt = now;
-
-      const cpuTotal = this._topReadCpuTotalJiffies();
-      const cpuDelta = cpuTotal - this._topCpuTotalPrev;
-      this._topCpuTotalPrev = cpuTotal;
 
       const pids = this._topListPids();
       if (pids.length === 0) {
-        return;
+        return false;
+      }
+
+      const now = GLib.get_monotonic_time() / 1000000;
+      const since = live ? this._topLiveAt : this._topLastSampleAt;
+      const elapsed = since > 0 ? now - since : 0;
+      const cpuTotal = this._topReadCpuTotalJiffies();
+      const cpuPrev = live ? this._topLiveCpuPrev : this._topCpuTotalPrev;
+
+      if (live) {
+        this._topLiveAt = now;
+        this._topLiveCpuPrev = cpuTotal;
+      } else {
+        this._topLastSampleAt = now;
+        this._topCpuTotalPrev = cpuTotal;
       }
 
       this._topWalk = {
+        live,
         pids,
         index: 0,
         elapsed,
-        cpuDelta,
-        previous: this._topProcPrev,
+        cpuDelta: cpuTotal - cpuPrev,
+        previous: live ? this._topLivePrev : this._topProcPrev,
         current: new Map(),
         names: new Map(),
+        totals: new Map(),
       };
       this._topWalkSource = GLib.idle_add(
         GLib.PRIORITY_LOW,
         this._topWalkStep.bind(this)
       );
+
+      return true;
+    }
+
+    _topSampleProcesses() {
+      this._topBeginWalk(false);
     }
 
     _topWalkStep() {
@@ -428,13 +450,27 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         return GLib.SOURCE_CONTINUE;
       }
 
-      this._topProcPrev = walk.current;
       this._topProcNames = walk.names;
 
-      // Only count a sample once deltas exist, so the very first sweep does
-      // not dilute every average by one empty slot.
-      if (this._topCurrentBucket && walk.previous.size > 0) {
-        this._topCurrentBucket.samples += 1;
+      if (walk.live) {
+        this._topLivePrev = walk.current;
+        this._topLiveProc = walk.totals;
+        this._topRenderLiveValues();
+      } else {
+        this._topProcPrev = walk.current;
+
+        // Only count a sample once deltas exist, so the very first sweep does
+        // not dilute every average by one empty slot.
+        if (this._topCurrentBucket && walk.previous.size > 0) {
+          this._topCurrentBucket.samples += 1;
+        }
+
+        // Keep the "avg" column moving while the menu stays open. Aggregating
+        // costs a pass over every bucket, so it is done on the 10 s sweep that
+        // can actually change the answer, never on a live tick.
+        if (this.menu && this.menu.isOpen) {
+          this._topAverages = this._topAggregate().totals;
+        }
       }
 
       this._topWalk = null;
@@ -475,35 +511,53 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       walk.current.set(key, { jiffies, io });
       walk.names.set(pid, name);
 
+      // A live sweep ranks the popup; a bucket sweep feeds the averages. Same
+      // arithmetic either way, so the destination is the only thing that
+      // changes here.
+      const record = (metric, value) => {
+        if (!walk.live) {
+          this._topAddSample(name, metric, value);
+          return;
+        }
+
+        let entry = walk.totals.get(name);
+        if (!entry) {
+          entry = { cpu: 0, ram: 0, disk: 0 };
+          walk.totals.set(name, entry);
+        }
+        entry[metric] += value;
+      };
+
+      // /proc counts RSS in pages; 4 KiB is the page size on every platform
+      // this extension supports (x86_64 / aarch64).
+      const ram =
+        this._topMemTotalKb > 0 && Number.isFinite(rssPages)
+          ? (100 * rssPages * 4) / this._topMemTotalKb
+          : null;
+
+      // RAM is a level, not a delta, so a live sweep can rank it from its very
+      // first reading. The bucket sweep still waits for deltas: adding a RAM
+      // sample to a bucket whose sample count has not advanced would inflate
+      // that minute's average.
+      if (walk.live && ram !== null) {
+        record("ram", ram);
+      }
+
       const before = walk.previous.get(key);
       if (before === undefined) {
         return;
       }
 
       if (walk.cpuDelta > 0 && Number.isFinite(jiffies)) {
-        this._topAddSample(
-          name,
-          "cpu",
-          (100 * (jiffies - before.jiffies)) / walk.cpuDelta
-        );
+        record("cpu", (100 * (jiffies - before.jiffies)) / walk.cpuDelta);
       }
 
-      if (this._topMemTotalKb > 0 && Number.isFinite(rssPages)) {
-        // /proc counts RSS in pages; 4 KiB is the page size on every platform
-        // this extension supports (x86_64 / aarch64).
-        this._topAddSample(
-          name,
-          "ram",
-          (100 * rssPages * 4) / this._topMemTotalKb
-        );
+      if (!walk.live && ram !== null) {
+        record("ram", ram);
       }
 
       if (walk.elapsed > 0 && io >= 0 && before.io >= 0) {
-        this._topAddSample(
-          name,
-          "disk",
-          Math.max(0, io - before.io) / walk.elapsed
-        );
+        record("disk", Math.max(0, io - before.io) / walk.elapsed);
       }
     }
 
@@ -809,85 +863,14 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       }
     }
 
+    // Rank the popup from a full sweep, not from the rows already on screen:
+    // a process that starts hammering the disk now has no history to be found
+    // by, so a filtered read could never surface it. Measured at ~10 ms for
+    // ~700 processes, and the walker hands that out in ~2 ms slices between
+    // frames, so the cost stays invisible — and it is only paid while the
+    // popup is open.
     _topSampleLive() {
-      const wanted = this._topLiveNames;
-      if (!wanted || wanted.size === 0) {
-        return;
-      }
-
-      const now = GLib.get_monotonic_time() / 1000000;
-      const elapsed = this._topLiveAt > 0 ? now - this._topLiveAt : 0;
-      this._topLiveAt = now;
-
-      const cpuTotal = this._topReadCpuTotalJiffies();
-      const cpuDelta = cpuTotal - this._topLiveCpuPrev;
-      this._topLiveCpuPrev = cpuTotal;
-
-      const previous = this._topLivePrev;
-      const current = new Map();
-      const totals = new Map();
-
-      // Only the handful of processes the popup is actually showing, reached
-      // through the pid→name map the last full sweep already built. A fresh
-      // ~1600-file /proc walk twice a second would cost far more than these
-      // rows are worth, and a process too new to be in that map has no
-      // history to be ranked by yet either.
-      for (const [pid, name] of this._topProcNames ?? new Map()) {
-        if (!wanted.has(name)) {
-          continue;
-        }
-
-        const stat = this._topReadTextFile(`/proc/${pid}/stat`);
-        if (stat === null) {
-          continue;
-        }
-
-        const closed = stat.lastIndexOf(")");
-        if (closed < 0) {
-          continue;
-        }
-
-        const fields = stat.slice(closed + 2).split(" ");
-        if (fields.length < 22) {
-          continue;
-        }
-
-        const jiffies =
-          Number.parseInt(fields[11], 10) + Number.parseInt(fields[12], 10);
-        const rssPages = Number.parseInt(fields[21], 10);
-        const io = this._topReadProcIoBytes(pid);
-        const key = `${pid}:${fields[19]}`;
-
-        current.set(key, { jiffies, io });
-
-        let entry = totals.get(name);
-        if (!entry) {
-          entry = { cpu: 0, ram: 0, disk: 0 };
-          totals.set(name, entry);
-        }
-
-        // RAM is a level, not a delta: it reads correctly on the very first
-        // tick, while CPU and disk need a previous sample to compare against.
-        if (this._topMemTotalKb > 0 && Number.isFinite(rssPages)) {
-          entry.ram += (100 * rssPages * 4) / this._topMemTotalKb;
-        }
-
-        const before = previous.get(key);
-        if (before === undefined) {
-          continue;
-        }
-
-        if (cpuDelta > 0 && Number.isFinite(jiffies)) {
-          entry.cpu += (100 * (jiffies - before.jiffies)) / cpuDelta;
-        }
-
-        if (elapsed > 0 && io >= 0 && before.io >= 0) {
-          entry.disk += Math.max(0, io - before.io) / elapsed;
-        }
-      }
-
-      this._topLivePrev = current;
-      this._topLiveProc = totals;
+      this._topBeginWalk(true);
     }
 
     // Current reading for one process name, merging the /proc-derived metrics
@@ -985,6 +968,12 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       return `${value.toFixed(0)} MB`;
     }
 
+    // Rows per section. The popup re-ranks on every tick, so this is also
+    // how many fixed slots each section builds once at open time.
+    _topRowCount() {
+      return 5;
+    }
+
     _topSections() {
       return [
         {
@@ -1028,36 +1017,92 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       ).padStart(11)}`;
     }
 
-    // Repaint the "now" column in place. Rebuilding the menu at the panel's
-    // refresh rate would fight the pointer and reset scroll on every tick, so
-    // the rows built at open time are kept and only their text is rewritten.
+    // Names with a current reading for this metric, heaviest user first.
+    _topRankLive(metric) {
+      const names = new Set();
+      for (const store of [this._topLiveProc, this._topLiveExtra]) {
+        for (const [name, entry] of store ?? new Map()) {
+          if (metric in entry) {
+            names.add(name);
+          }
+        }
+      }
+
+      const ranked = [];
+      for (const name of names) {
+        const value = this._topLiveValue(name, metric);
+        if (value > 0) {
+          ranked.push([name, value]);
+        }
+      }
+
+      return ranked.sort((a, b) => b[1] - a[1]).slice(0, this._topRowCount());
+    }
+
+    // Ranking for one section. CPU and disk are deltas, so the first sweep
+    // after opening has nothing to compare against yet; the rolling averages
+    // stand in for that one tick rather than showing an empty section.
+    _topRank(metric) {
+      const live = this._topRankLive(metric);
+      if (live.length > 0) {
+        return live.map((pair) => pair[0]);
+      }
+
+      return [...(this._topAverages ?? new Map()).entries()]
+        .map((pair) => [pair[0], pair[1][metric]])
+        .filter((pair) => pair[1] > 0)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, this._topRowCount())
+        .map((pair) => pair[0]);
+    }
+
+    // Re-rank by the live reading and write the result into a fixed set of
+    // rows. Rebuilding the menu at the panel's refresh rate would fight the
+    // pointer and reset scroll on every tick, so the rows are permanent slots
+    // and reordering costs nothing but a set_text.
     _topRenderLiveValues() {
-      for (const row of this._topLiveRows ?? []) {
-        if (!row.item || !row.item.label) {
-          continue;
+      const averages = this._topAverages ?? new Map();
+
+      for (const section of this._topLiveSections ?? []) {
+        const names = this._topRank(section.metric);
+
+        for (let i = 0; i < section.slots.length; i++) {
+          const item = section.slots[i];
+          const name = names[i];
+          if (name === undefined) {
+            item.visible = false;
+            continue;
+          }
+
+          // Just the process name — no PID, no command line, no arguments.
+          const label = name.length > 18 ? `${name.slice(0, 17)}…` : name;
+          item.label.set_text(
+            this._topRowText(
+              label,
+              this._topLiveValue(name, section.metric),
+              averages.get(name)?.[section.metric] ?? 0,
+              section.format
+            )
+          );
+          item.visible = true;
         }
 
-        row.item.label.set_text(
-          this._topRowText(
-            row.label,
-            this._topLiveValue(row.name, row.metric),
-            row.average,
-            row.format
-          )
-        );
+        section.empty.visible = names.length === 0;
       }
     }
 
     _refreshProcessMenu() {
       this.menu.removeAll();
-      this._topLiveRows = [];
-      this._topLiveNames = new Set();
+      this._topLiveSections = [];
       // Values from a previous opening are stale by an unknown amount; the
       // first live ticks refill this within a refresh or two.
       this._topLiveProc = new Map();
 
       const minutes = this._topUsersWindowMinutes();
       const { totals, samples } = this._topAggregate();
+      // The "avg" column reads from here for the life of this opening; the
+      // 10 s sweep refreshes it, so a live tick never re-aggregates.
+      this._topAverages = totals;
       const collected = Math.min(
         minutes,
         Math.round((samples * this._topSampleSeconds()) / 60)
@@ -1085,49 +1130,32 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
           new PopupMenu.PopupSeparatorMenuItem(section.label)
         );
 
-        const rows = [...totals.entries()]
-          .map((pair) => [pair[0], pair[1][section.metric]])
-          .filter((pair) => pair[1] > 0)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5);
-
-        if (rows.length === 0) {
-          const empty = new PopupMenu.PopupMenuItem(_("No data yet."), {
-            reactive: false,
-          });
-          empty.label.set_style("font-family: monospace;");
-          this.menu.addMenuItem(empty);
-          continue;
-        }
-
-        for (const [name, value] of rows) {
-          // Just the process name — no PID, no command line, no arguments.
-          const label = name.length > 18 ? `${name.slice(0, 17)}…` : name;
-          const item = new PopupMenu.PopupMenuItem(
-            this._topRowText(
-              label,
-              this._topLiveValue(name, section.metric),
-              value,
-              section.format
-            ),
-            { reactive: false }
-          );
+        // Build the slots empty and let the renderer fill them. Ranking lives
+        // in exactly one place that way, so the first paint and every later
+        // tick can never disagree about the order.
+        const slots = [];
+        for (let i = 0; i < this._topRowCount(); i++) {
+          const item = new PopupMenu.PopupMenuItem("", { reactive: false });
           item.label.set_style("font-family: monospace;");
           this.menu.addMenuItem(item);
-
-          // Everything the live repaint needs, so a tick never re-derives the
-          // ranking: the row order stays put while only "now" moves.
-          this._topLiveNames.add(name);
-          this._topLiveRows.push({
-            item,
-            label,
-            name,
-            metric: section.metric,
-            format: section.format,
-            average: value,
-          });
+          slots.push(item);
         }
+
+        const empty = new PopupMenu.PopupMenuItem(_("No data yet."), {
+          reactive: false,
+        });
+        empty.label.set_style("font-family: monospace;");
+        this.menu.addMenuItem(empty);
+
+        this._topLiveSections.push({
+          metric: section.metric,
+          format: section.format,
+          slots,
+          empty,
+        });
       }
+
+      this._topRenderLiveValues();
     }
 
 "##;
@@ -1495,7 +1523,8 @@ mod tests {
             METHODS_TEMPLATE.contains("if (this._destroyed || !this.menu || !this.menu.isOpen) {")
         );
         // Repaint the existing rows; never rebuild the menu under the pointer.
-        assert!(METHODS_TEMPLATE.contains("row.item.label.set_text("));
+        assert!(METHODS_TEMPLATE.contains("item.label.set_text("));
+        assert!(!METHODS_TEMPLATE.contains("this.menu.removeAll();\n      this._topRender"));
     }
 
     #[test]
@@ -1522,17 +1551,31 @@ mod tests {
     }
 
     #[test]
-    fn live_sampling_only_reads_the_processes_on_show() {
-        // A full ~1600-file /proc walk at the panel's refresh rate would cost
-        // far more than these rows are worth, so the live pass filters the
-        // last sweep's pid→name map down to the names actually displayed.
-        assert!(METHODS_TEMPLATE
-            .contains("for (const [pid, name] of this._topProcNames ?? new Map()) {"));
-        assert!(METHODS_TEMPLATE.contains("if (!wanted.has(name)) {"));
-        assert!(METHODS_TEMPLATE.contains("this._topLiveNames.add(name);"));
+    fn live_sampling_sweeps_every_process() {
+        // Ranking by the current reading only works if the sweep behind it can
+        // see a process that has no history yet, so the live pass must reuse
+        // the full walker rather than filter down to the rows already shown.
+        assert!(METHODS_TEMPLATE.contains("this._topBeginWalk(true);"));
+        assert!(METHODS_TEMPLATE.contains("this._topBeginWalk(false);"));
+        assert!(!METHODS_TEMPLATE.contains("wanted.has(name)"));
         // It keeps delta state of its own rather than disturbing the sampler's.
-        assert!(METHODS_TEMPLATE.contains("this._topLivePrev = current;"));
-        assert!(METHODS_TEMPLATE.contains("this._topLiveProc = totals;"));
+        assert!(METHODS_TEMPLATE.contains("this._topLivePrev = walk.current;"));
+        assert!(METHODS_TEMPLATE.contains("this._topLiveProc = walk.totals;"));
+        assert!(METHODS_TEMPLATE.contains("this._topProcPrev = walk.current;"));
+    }
+
+    #[test]
+    fn rows_are_ranked_by_the_live_reading() {
+        // The whole point of the change: order follows "now", not "avg".
+        assert!(METHODS_TEMPLATE.contains("_topRankLive(metric) {"));
+        assert!(METHODS_TEMPLATE.contains("const value = this._topLiveValue(name, metric);"));
+        assert!(METHODS_TEMPLATE.contains("return ranked.sort((a, b) => b[1] - a[1])"));
+        // Re-ranking must not rebuild the menu under the pointer: the rows are
+        // fixed slots the renderer rewrites.
+        assert!(METHODS_TEMPLATE.contains("slots.push(item);"));
+        assert!(METHODS_TEMPLATE.contains("item.visible = false;"));
+        // One ranking path serves the first paint and every later tick.
+        assert!(METHODS_TEMPLATE.contains("      this._topRenderLiveValues();\n    }"));
     }
 
     #[test]
