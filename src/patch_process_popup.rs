@@ -80,9 +80,14 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
     // Left-click opens this menu instead of launching the configured action.
     // A background sampler keeps a per-process-name history of CPU, RAM, disk
     // IO, network IO, GPU and VRAM use, and each section lists the processes
-    // that consumed the most of one metric across the trailing window. The
-    // rows therefore answer "what has been eating this all hour?" rather than
-    // "what happens to be spiking the millisecond I clicked?".
+    // that consumed the most of one metric across the trailing window.
+    //
+    // Each row carries two columns. "now" is the live reading, refreshed on
+    // the panel's own refresh-time setting for as long as the menu stays
+    // open, and answers "what is this using right now?". "avg" is the
+    // trailing-window mean the rows are still ranked by, and answers "what
+    // has been eating this all hour?". Ranking by the average keeps the row
+    // order stable while the live column ticks underneath it.
     //
     // PanelMenu.Button.vfunc_event toggles this.menu on every BUTTON_PRESS,
     // and it runs before the button-press-event handler (_clickManager). With
@@ -111,11 +116,13 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
 
       if (this.menu.isOpen) {
         this.menu.close();
+        this._topLiveStop();
         return;
       }
 
       this._refreshProcessMenu();
       this.menu.open();
+      this._topLiveStart();
     }
 
     // ── Rolling window configuration ─────────────────────────────────────
@@ -166,6 +173,16 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       this._topLastSampleAt = 0;
       this._topGpuBusy = false;
       this._topNetBusy = false;
+      this._topGpuFeedPending = false;
+      this._topNetFeedPending = false;
+      this._topLiveTimer = null;
+      this._topLiveRows = [];
+      this._topLiveNames = new Set();
+      this._topLiveProc = new Map();
+      this._topLiveExtra = new Map();
+      this._topLivePrev = new Map();
+      this._topLiveCpuPrev = 0;
+      this._topLiveAt = 0;
       this._topMemTotalKb = this._topReadMemTotalKb();
       this._topGpuProgram = GLib.find_program_in_path("nvidia-smi");
       this._topNetProgram = GLib.find_program_in_path("ss");
@@ -179,6 +196,8 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
     }
 
     _topUsersStop() {
+      this._topLiveStop();
+
       if (this._topSampleTimer) {
         GLib.Source.remove(this._topSampleTimer);
         this._topSampleTimer = null;
@@ -526,24 +545,38 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       });
     }
 
-    _topSampleGpu() {
+    // `feed` marks a run whose reading belongs in the rolling buckets. The
+    // live column spawns extra runs with feed=false: those refresh the "now"
+    // column only, because contributing them would silently weight the
+    // averages towards whenever the popup happened to be open. A feeding run
+    // that arrives while a live run is still in flight is not dropped — the
+    // request is held and handed to the next run to complete, so the bucket
+    // cadence survives having the popup open.
+    _topSampleGpu(feed = true) {
+      if (feed) {
+        this._topGpuFeedPending = true;
+      }
+
       if (this._topGpuBusy || !this._topGpuProgram) {
         return;
       }
 
+      const feeding = this._topGpuFeedPending === true;
+      this._topGpuFeedPending = false;
       this._topGpuBusy = true;
       this._topSpawnAsync(
         [this._topGpuProgram, "pmon", "-c", "1", "-s", "um"],
         (stdout) => {
           this._topGpuBusy = false;
           if (stdout !== null) {
-            this._topRecordGpuSample(stdout);
+            this._topRecordGpuSample(stdout, feeding);
           }
         }
       );
     }
 
-    _topRecordGpuSample(stdout) {
+    _topRecordGpuSample(stdout, feeding = true) {
+      const live = new Map();
       // `nvidia-smi pmon` column sets differ between driver releases, so the
       // header row — not a fixed offset — decides where pid / sm / fb live.
       let columns = null;
@@ -576,31 +609,52 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         const sm = Number.parseFloat(fields[columns.sm]);
         const fb = Number.parseFloat(fields[columns.fb]);
 
-        if (Number.isFinite(sm)) {
-          this._topAddSample(name, "gpu", sm);
-        }
+        for (const [metric, value] of [
+          ["gpu", sm],
+          ["vram", fb],
+        ]) {
+          if (!Number.isFinite(value)) {
+            continue;
+          }
 
-        if (Number.isFinite(fb)) {
-          this._topAddSample(name, "vram", fb);
+          if (feeding) {
+            this._topAddSample(name, metric, value);
+          }
+
+          let seen = live.get(name);
+          if (!seen) {
+            seen = { gpu: 0, vram: 0 };
+            live.set(name, seen);
+          }
+          seen[metric] += value;
         }
       }
+
+      this._topLiveMerge(live, ["gpu", "vram"]);
     }
 
-    _topSampleNetwork() {
+    // See _topSampleGpu for what `feed` means.
+    _topSampleNetwork(feed = true) {
+      if (feed) {
+        this._topNetFeedPending = true;
+      }
+
       if (this._topNetBusy || !this._topNetProgram) {
         return;
       }
 
+      const feeding = this._topNetFeedPending === true;
+      this._topNetFeedPending = false;
       this._topNetBusy = true;
       this._topSpawnAsync([this._topNetProgram, "-tnpHi"], (stdout) => {
         this._topNetBusy = false;
         if (stdout !== null) {
-          this._topRecordNetworkSample(stdout);
+          this._topRecordNetworkSample(stdout, feeding);
         }
       });
     }
 
-    _topRecordNetworkSample(stdout) {
+    _topRecordNetworkSample(stdout, feeding = true) {
       // `ss -i` prints one socket line naming its owning process, followed by
       // an indented stats line carrying that socket's cumulative byte
       // counters. Only TCP sockets report bytes, hence the -t query.
@@ -637,18 +691,220 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         this._topNetSampledAt > 0 ? now - this._topNetSampledAt : 0;
       this._topNetSampledAt = now;
 
+      const live = new Map();
+
       if (elapsed > 0) {
         for (const [name, bytes] of cumulative) {
           const before = this._topNetPrev.get(name);
           // Closing sockets shrink the sum; a drop means "nothing measurable
           // this round", not a negative rate.
           if (before !== undefined && bytes > before) {
-            this._topAddSample(name, "net", (bytes - before) / elapsed);
+            const rate = (bytes - before) / elapsed;
+            if (feeding) {
+              this._topAddSample(name, "net", rate);
+            }
+            live.set(name, { net: rate });
           }
         }
       }
 
+      this._topLiveMerge(live, ["net"]);
       this._topNetPrev = cumulative;
+    }
+
+    // ── Live ("now") sampling, only while the menu is open ───────────────
+    // The live column has to tick at the panel's rate, which is far faster
+    // than the 10 s bucket sampler. Rather than speed that sampler up — which
+    // would distort every rolling average — this keeps its own delta state
+    // and writes to its own store, and it only exists between menu open and
+    // menu close.
+    _topLiveIntervalMs() {
+      // The panel's own refresh-time setting, so the two update together.
+      const seconds = Number.isFinite(this._refreshTime) ? this._refreshTime : 1;
+      return Math.max(100, Math.round(seconds * 1000));
+    }
+
+    _topLiveStart() {
+      if (this._topLiveTimer) {
+        return;
+      }
+
+      // Deltas from before the popup was opened would span the whole idle
+      // gap, so the first tick after opening only establishes a baseline.
+      this._topLivePrev = new Map();
+      this._topLiveCpuPrev = this._topReadCpuTotalJiffies();
+      this._topLiveAt = 0;
+
+      this._topLiveTimer = GLib.timeout_add(
+        GLib.PRIORITY_DEFAULT_IDLE,
+        this._topLiveIntervalMs(),
+        this._topLiveTick.bind(this)
+      );
+    }
+
+    _topLiveStop() {
+      if (this._topLiveTimer) {
+        GLib.Source.remove(this._topLiveTimer);
+        this._topLiveTimer = null;
+      }
+    }
+
+    _topLiveTick() {
+      // Closing the menu from anywhere — Escape, a click elsewhere, another
+      // panel button — does not route through _toggleProcessMenu, so the
+      // timer also retires itself as soon as the menu is gone.
+      if (this._destroyed || !this.menu || !this.menu.isOpen) {
+        this._topLiveTimer = null;
+        return GLib.SOURCE_REMOVE;
+      }
+
+      try {
+        this._topSampleLive();
+        // These cost a subprocess and cannot answer at the panel's rate; the
+        // busy guards throttle them to however fast the tool actually
+        // returns, and feed=false keeps them out of the buckets.
+        this._topSampleGpu(false);
+        this._topSampleNetwork(false);
+        this._topRenderLiveValues();
+      } catch (error) {
+        this._logger.error(
+          `[Resource_Monitor] Top-users live sampling failed: ${error}`
+        );
+      }
+
+      return GLib.SOURCE_CONTINUE;
+    }
+
+    // Replace one metric group in the live snapshot. Names missing from the
+    // new reading have stopped using that resource, so they drop to zero
+    // instead of keeping the last value they were seen with.
+    _topLiveMerge(values, keys) {
+      const store = this._topLiveExtra;
+      if (!store) {
+        return;
+      }
+
+      for (const [name, entry] of store) {
+        if (!values.has(name)) {
+          for (const key of keys) {
+            entry[key] = 0;
+          }
+        }
+      }
+
+      for (const [name, sample] of values) {
+        let entry = store.get(name);
+        if (!entry) {
+          // Same heap bound as the buckets.
+          if (store.size >= 256) {
+            continue;
+          }
+          entry = { net: 0, gpu: 0, vram: 0 };
+          store.set(name, entry);
+        }
+
+        for (const key of keys) {
+          entry[key] = sample[key] ?? 0;
+        }
+      }
+    }
+
+    _topSampleLive() {
+      const wanted = this._topLiveNames;
+      if (!wanted || wanted.size === 0) {
+        return;
+      }
+
+      const now = GLib.get_monotonic_time() / 1000000;
+      const elapsed = this._topLiveAt > 0 ? now - this._topLiveAt : 0;
+      this._topLiveAt = now;
+
+      const cpuTotal = this._topReadCpuTotalJiffies();
+      const cpuDelta = cpuTotal - this._topLiveCpuPrev;
+      this._topLiveCpuPrev = cpuTotal;
+
+      const previous = this._topLivePrev;
+      const current = new Map();
+      const totals = new Map();
+
+      // Only the handful of processes the popup is actually showing, reached
+      // through the pid→name map the last full sweep already built. A fresh
+      // ~1600-file /proc walk twice a second would cost far more than these
+      // rows are worth, and a process too new to be in that map has no
+      // history to be ranked by yet either.
+      for (const [pid, name] of this._topProcNames ?? new Map()) {
+        if (!wanted.has(name)) {
+          continue;
+        }
+
+        const stat = this._topReadTextFile(`/proc/${pid}/stat`);
+        if (stat === null) {
+          continue;
+        }
+
+        const closed = stat.lastIndexOf(")");
+        if (closed < 0) {
+          continue;
+        }
+
+        const fields = stat.slice(closed + 2).split(" ");
+        if (fields.length < 22) {
+          continue;
+        }
+
+        const jiffies =
+          Number.parseInt(fields[11], 10) + Number.parseInt(fields[12], 10);
+        const rssPages = Number.parseInt(fields[21], 10);
+        const io = this._topReadProcIoBytes(pid);
+        const key = `${pid}:${fields[19]}`;
+
+        current.set(key, { jiffies, io });
+
+        let entry = totals.get(name);
+        if (!entry) {
+          entry = { cpu: 0, ram: 0, disk: 0 };
+          totals.set(name, entry);
+        }
+
+        // RAM is a level, not a delta: it reads correctly on the very first
+        // tick, while CPU and disk need a previous sample to compare against.
+        if (this._topMemTotalKb > 0 && Number.isFinite(rssPages)) {
+          entry.ram += (100 * rssPages * 4) / this._topMemTotalKb;
+        }
+
+        const before = previous.get(key);
+        if (before === undefined) {
+          continue;
+        }
+
+        if (cpuDelta > 0 && Number.isFinite(jiffies)) {
+          entry.cpu += (100 * (jiffies - before.jiffies)) / cpuDelta;
+        }
+
+        if (elapsed > 0 && io >= 0 && before.io >= 0) {
+          entry.disk += Math.max(0, io - before.io) / elapsed;
+        }
+      }
+
+      this._topLivePrev = current;
+      this._topLiveProc = totals;
+    }
+
+    // Current reading for one process name, merging the /proc-derived metrics
+    // with the subprocess-derived ones. Absent means "not using it now" — 0,
+    // not the trailing average.
+    _topLiveValue(name, metric) {
+      const proc = this._topLiveProc?.get(name);
+      if (proc && metric in proc) {
+        return proc[metric];
+      }
+
+      const extra = this._topLiveExtra?.get(name);
+      if (extra && metric in extra) {
+        return extra[metric];
+      }
+
+      return 0;
     }
 
     // ── Aggregation and rendering ────────────────────────────────────────
@@ -764,8 +1020,41 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       ];
     }
 
+    // One place decides the column widths, so the live repaint can never
+    // drift out of alignment with the row the initial render produced.
+    _topRowText(label, current, average, format) {
+      return `${label.padEnd(19)}${format(current).padStart(11)}${format(
+        average
+      ).padStart(11)}`;
+    }
+
+    // Repaint the "now" column in place. Rebuilding the menu at the panel's
+    // refresh rate would fight the pointer and reset scroll on every tick, so
+    // the rows built at open time are kept and only their text is rewritten.
+    _topRenderLiveValues() {
+      for (const row of this._topLiveRows ?? []) {
+        if (!row.item || !row.item.label) {
+          continue;
+        }
+
+        row.item.label.set_text(
+          this._topRowText(
+            row.label,
+            this._topLiveValue(row.name, row.metric),
+            row.average,
+            row.format
+          )
+        );
+      }
+    }
+
     _refreshProcessMenu() {
       this.menu.removeAll();
+      this._topLiveRows = [];
+      this._topLiveNames = new Set();
+      // Values from a previous opening are stale by an unknown amount; the
+      // first live ticks refill this within a refresh or two.
+      this._topLiveProc = new Map();
 
       const minutes = this._topUsersWindowMinutes();
       const { totals, samples } = this._topAggregate();
@@ -783,6 +1072,13 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       const header = new PopupMenu.PopupMenuItem(title, { reactive: false });
       header.label.set_style("font-weight: bold;");
       this.menu.addMenuItem(header);
+
+      const columns = new PopupMenu.PopupMenuItem(
+        `${"".padEnd(19)}${_("now").padStart(11)}${_("avg").padStart(11)}`,
+        { reactive: false }
+      );
+      columns.label.set_style("font-family: monospace; font-weight: bold;");
+      this.menu.addMenuItem(columns);
 
       for (const section of this._topSections()) {
         this.menu.addMenuItem(
@@ -808,11 +1104,28 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
           // Just the process name — no PID, no command line, no arguments.
           const label = name.length > 18 ? `${name.slice(0, 17)}…` : name;
           const item = new PopupMenu.PopupMenuItem(
-            `${label.padEnd(19)}${section.format(value).padStart(11)}`,
+            this._topRowText(
+              label,
+              this._topLiveValue(name, section.metric),
+              value,
+              section.format
+            ),
             { reactive: false }
           );
           item.label.set_style("font-family: monospace;");
           this.menu.addMenuItem(item);
+
+          // Everything the live repaint needs, so a tick never re-derives the
+          // ranking: the row order stays put while only "now" moves.
+          this._topLiveNames.add(name);
+          this._topLiveRows.push({
+            item,
+            label,
+            name,
+            metric: section.metric,
+            format: section.format,
+            average: value,
+          });
         }
       }
     }
@@ -1151,6 +1464,87 @@ mod tests {
         assert!(METHODS_TEMPLATE.contains(r#"_("Network")"#));
         // Disk rows are IO rate, not capacity: no free/total-space maths here.
         assert!(!METHODS_TEMPLATE.contains("availableBytes"));
+    }
+
+    #[test]
+    fn every_row_carries_a_live_column_beside_the_average() {
+        // One formatter owns both columns, so an in-place live repaint cannot
+        // drift out of alignment with the row the initial render produced.
+        assert!(METHODS_TEMPLATE.contains("_topRowText(label, current, average, format) {"));
+        assert!(METHODS_TEMPLATE
+            .contains(r#"${label.padEnd(19)}${format(current).padStart(11)}${format("#));
+        // The header names the two columns.
+        assert!(METHODS_TEMPLATE.contains(r#"_("now").padStart(11)}${_("avg").padStart(11)}"#));
+        // Rows stay ranked by the average, so their order holds still while
+        // the live column ticks underneath.
+        assert!(METHODS_TEMPLATE.contains(".sort((a, b) => b[1] - a[1])"));
+    }
+
+    #[test]
+    fn live_column_follows_the_panel_refresh_time() {
+        // "Same rate as the bar" means the panel's own refresh-time setting.
+        assert!(
+            METHODS_TEMPLATE.contains("Number.isFinite(this._refreshTime) ? this._refreshTime : 1")
+        );
+        assert!(METHODS_TEMPLATE.contains("this._topLiveIntervalMs(),"));
+        // Started on open and stopped on close, on destroy, and by the tick
+        // itself when the menu closed without going through the toggle.
+        assert!(METHODS_TEMPLATE.contains("this._topLiveStart();"));
+        assert!(METHODS_TEMPLATE.contains("this._topLiveStop();"));
+        assert!(
+            METHODS_TEMPLATE.contains("if (this._destroyed || !this.menu || !this.menu.isOpen) {")
+        );
+        // Repaint the existing rows; never rebuild the menu under the pointer.
+        assert!(METHODS_TEMPLATE.contains("row.item.label.set_text("));
+    }
+
+    #[test]
+    fn live_sampling_never_feeds_the_rolling_averages() {
+        // Contributing the extra live runs would weight every average towards
+        // whenever the popup happened to be open.
+        assert!(METHODS_TEMPLATE.contains("this._topSampleGpu(false);"));
+        assert!(METHODS_TEMPLATE.contains("this._topSampleNetwork(false);"));
+        // The 10 s bucket tick keeps the feeding default.
+        assert!(METHODS_TEMPLATE
+            .contains("        this._topSampleGpu();\n        this._topSampleNetwork();"));
+        // A bucket sample requested while a live run is in flight is handed to
+        // the next run to complete instead of being dropped.
+        for pending in ["_topGpuFeedPending", "_topNetFeedPending"] {
+            assert!(
+                METHODS_TEMPLATE.contains(&format!("this.{pending} = true;")),
+                "{pending} is never requested"
+            );
+            assert!(
+                METHODS_TEMPLATE.contains(&format!("this.{pending} = false;")),
+                "{pending} is never consumed"
+            );
+        }
+    }
+
+    #[test]
+    fn live_sampling_only_reads_the_processes_on_show() {
+        // A full ~1600-file /proc walk at the panel's refresh rate would cost
+        // far more than these rows are worth, so the live pass filters the
+        // last sweep's pid→name map down to the names actually displayed.
+        assert!(METHODS_TEMPLATE
+            .contains("for (const [pid, name] of this._topProcNames ?? new Map()) {"));
+        assert!(METHODS_TEMPLATE.contains("if (!wanted.has(name)) {"));
+        assert!(METHODS_TEMPLATE.contains("this._topLiveNames.add(name);"));
+        // It keeps delta state of its own rather than disturbing the sampler's.
+        assert!(METHODS_TEMPLATE.contains("this._topLivePrev = current;"));
+        assert!(METHODS_TEMPLATE.contains("this._topLiveProc = totals;"));
+    }
+
+    #[test]
+    fn live_readings_decay_to_zero_instead_of_sticking() {
+        // A process that stopped using the GPU or network must not keep
+        // showing the last value it was seen with.
+        assert!(METHODS_TEMPLATE.contains("_topLiveMerge(values, keys) {"));
+        assert!(METHODS_TEMPLATE.contains("if (!values.has(name)) {"));
+        assert!(METHODS_TEMPLATE.contains(r#"this._topLiveMerge(live, ["gpu", "vram"]);"#));
+        assert!(METHODS_TEMPLATE.contains(r#"this._topLiveMerge(live, ["net"]);"#));
+        // The live store is bounded exactly like the buckets are.
+        assert!(METHODS_TEMPLATE.contains("if (store.size >= 256) {"));
     }
 
     #[test]

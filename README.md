@@ -244,6 +244,20 @@ metric — CPU, RAM, disk IO, network, GPU and VRAM — over a rolling window
 rather than by an instantaneous reading, so a process that hammered the disk
 five minutes ago still shows. The default window is the past 60 minutes.
 
+Every row has two columns:
+
+| Column | Meaning |
+|---|---|
+| `now` | Live reading, refreshed at the panel's own refresh-time setting for as long as the popup stays open |
+| `avg` | Mean over the rolling window — the value the rows are ranked by |
+
+Ranking stays on the average so rows hold still while `now` ticks underneath
+them. The live sampler only exists between opening and closing the popup, only
+reads the processes actually on screen, and deliberately does not feed the
+rolling averages — otherwise leaving the popup open would bias every average
+towards that period. `now` for GPU, VRAM and network refreshes as fast as
+`nvidia-smi` and `ss` return, which may be slower than the panel's rate.
+
 `U2TSSM` is this repository's name condensed to its initials (**U**buntu
 **2**404 **T**askbar **S**ystem **S**tatus **M**onitor) and carries the
 window in minutes (1–1440):
