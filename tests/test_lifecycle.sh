@@ -40,7 +40,8 @@ detect_rm_process_popup && fail "detect_rm_process_popup should reject clean ext
 detect_window_rules && fail "detect_window_rules should reject missing app-rules@local"
 
 # --- Present state: patch markers injected ---------------------------------
-printf '_gradientGetUsageColor\nProcess popup: total CPU/RAM aggregated per process name\n' >"$EXT_DIR/extension.js"
+POPUP_MARKER='Process popup: top resource users per metric over a rolling window'
+printf '_gradientGetUsageColor\n%s\nconst patchedMinutes = 60;\n' "$POPUP_MARKER" >"$EXT_DIR/extension.js"
 printf 'function getDiskUsagePercentStyle() {}\n' >"$EXT_DIR/services/refreshers.js"
 # Unpatched containers.js still has bracket labels; vram detect must stay false.
 printf 'const separatorStart = _createBracketLabel("[", [\n' >"$EXT_DIR/panel/containers.js"
@@ -48,7 +49,15 @@ printf '// clean ethernet wiring\n' >"$EXT_DIR/panel/mainGui.js"
 detect_rm_gradient_colors || fail "detect_rm_gradient_colors should accept a patched extension.js"
 detect_rm_per_disk || fail "detect_rm_per_disk should accept a patched refreshers.js"
 detect_rm_vram && fail "detect_rm_vram should reject unpatched bracket labels"
-detect_rm_process_popup || fail "detect_rm_process_popup should accept the process-popup marker"
+detect_rm_process_popup && fail "detect_rm_process_popup should reject a marker without the persisted window"
+mkdir -p "$(dirname "$(resource_monitor_top_window_file)")"
+printf '60\n' >"$(resource_monitor_top_window_file)"
+detect_rm_process_popup || fail "detect_rm_process_popup should accept marker plus matching baked window"
+# Reconfiguring the window must show as "not installed" until extension.js is
+# re-patched, otherwise --reconfigure would silently skip the rewrite.
+printf '90\n' >"$(resource_monitor_top_window_file)"
+detect_rm_process_popup && fail "detect_rm_process_popup should reject a window that no longer matches the patched source"
+printf '60\n' >"$(resource_monitor_top_window_file)"
 detect_rm_hide_eth_icon && fail "detect_rm_hide_eth_icon should reject unpatched mainGui.js"
 
 # --- VRAM / eth-icon patched state ----------------------------------------

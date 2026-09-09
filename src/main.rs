@@ -116,8 +116,12 @@ enum Command {
         main_gui: PathBuf,
     },
 
-    /// Make left-click open a per-process CPU/RAM popup.
+    /// Make left-click open a popup listing the top process users of each metric.
     PatchProcessPopup {
+        /// Trailing window, in minutes, the popup ranks processes over.
+        /// Overridden live by the `U2TSSM` environment variable.
+        #[arg(long, value_name = "MINUTES", default_value_t = patch_process_popup::DEFAULT_WINDOW_MINUTES)]
+        window_minutes: u32,
         /// Path to the extension's extension.js.
         extension: PathBuf,
     },
@@ -165,7 +169,10 @@ fn main() -> ExitCode {
         Command::PatchColors { extension } => patch_colors::run(&extension),
         Command::PatchDisk { containers } => patch_disk::run(&containers),
         Command::PatchEthIcon { main_gui } => patch_eth_icon::run(&main_gui),
-        Command::PatchProcessPopup { extension } => patch_process_popup::run(&extension),
+        Command::PatchProcessPopup {
+            window_minutes,
+            extension,
+        } => patch_process_popup::run(&extension, window_minutes),
         Command::PatchStableWidth { mode, containers } => {
             patch_stable_width::run(&mode, &containers)
         }
@@ -226,6 +233,13 @@ mod tests {
             vec!["rm-monitor", "patch-disk", "containers.js"],
             vec!["rm-monitor", "patch-eth-icon", "mainGui.js"],
             vec!["rm-monitor", "patch-process-popup", "extension.js"],
+            vec![
+                "rm-monitor",
+                "patch-process-popup",
+                "--window-minutes",
+                "120",
+                "extension.js",
+            ],
             vec!["rm-monitor", "patch-stable-width", "containers.js"],
             vec![
                 "rm-monitor",
@@ -248,6 +262,19 @@ mod tests {
             .expect("parse");
         match cli.command {
             Command::PatchStableWidth { mode, .. } => assert_eq!(mode, "stable"),
+            _ => panic!("unexpected subcommand"),
+        }
+    }
+
+    #[test]
+    fn process_popup_window_defaults_to_one_hour() {
+        let cli = Cli::try_parse_from(["rm-monitor", "patch-process-popup", "extension.js"])
+            .expect("parse");
+        match cli.command {
+            Command::PatchProcessPopup { window_minutes, .. } => {
+                assert_eq!(window_minutes, 60);
+                assert_eq!(window_minutes, patch_process_popup::DEFAULT_WINDOW_MINUTES);
+            }
             _ => panic!("unexpected subcommand"),
         }
     }
