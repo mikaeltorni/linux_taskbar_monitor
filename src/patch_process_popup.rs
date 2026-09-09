@@ -19,7 +19,9 @@
 //!
 //! The window is baked in by `--window-minutes` and can be overridden live by
 //! the `U2TSSM` environment variable (this repository's initials), so
-//! `U2TSSM=10` means "rank by the last 10 minutes".
+//! `U2TSSM=10` means "rank by the last 10 minutes". The open popup's own
+//! live-column tick rate is a separate setting — 1000 ms by default, overridden
+//! by `U2TSSM_LIVE_MS` — and never changes how fast the panel bar refreshes.
 //!
 //! `vfunc_event` is the single toggle owner on purpose. `PanelMenu.Button`
 //! toggles `this.menu` for every `BUTTON_PRESS` before the `button-press-event`
@@ -767,15 +769,25 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
     }
 
     // ── Live ("now") sampling, only while the menu is open ───────────────
-    // The live column has to tick at the panel's rate, which is far faster
-    // than the 10 s bucket sampler. Rather than speed that sampler up — which
-    // would distort every rolling average — this keeps its own delta state
-    // and writes to its own store, and it only exists between menu open and
-    // menu close.
+    // The live column has to tick far faster than the 10 s bucket sampler.
+    // Rather than speed that sampler up — which would distort every rolling
+    // average — this keeps its own delta state and writes to its own store,
+    // and it only exists between menu open and menu close.
     _topLiveIntervalMs() {
-      // The panel's own refresh-time setting, so the two update together.
-      const seconds = Number.isFinite(this._refreshTime) ? this._refreshTime : 1;
-      return Math.max(100, Math.round(seconds * 1000));
+      // The popup has its own cadence, deliberately independent of the panel's
+      // refresh-time setting: the bar can flick at 250 ms because it shows a
+      // couple of numbers in place, while a whole re-ranked table that fast is
+      // unreadable. U2TSSM_LIVE_MS overrides the default in milliseconds
+      // (100–60000) and is read whenever the popup opens, so exporting it into
+      // the session retunes the live column without re-patching.
+      const raw = GLib.getenv("U2TSSM_LIVE_MS");
+      const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+
+      if (Number.isFinite(parsed) && parsed >= 100 && parsed <= 60000) {
+        return parsed;
+      }
+
+      return 1000;
     }
 
     _topLiveStart() {
@@ -1509,11 +1521,15 @@ mod tests {
     }
 
     #[test]
-    fn live_column_follows_the_panel_refresh_time() {
-        // "Same rate as the bar" means the panel's own refresh-time setting.
-        assert!(
-            METHODS_TEMPLATE.contains("Number.isFinite(this._refreshTime) ? this._refreshTime : 1")
-        );
+    fn live_column_has_its_own_refresh_interval() {
+        // The popup paces itself; it must not read the panel's refresh-time.
+        assert!(!METHODS_TEMPLATE.contains("this._refreshTime"));
+        // U2TSSM_LIVE_MS is read live, inside the documented bounds, and falls
+        // back to the default this module documents.
+        assert!(METHODS_TEMPLATE.contains(r#"GLib.getenv("U2TSSM_LIVE_MS")"#));
+        assert!(METHODS_TEMPLATE
+            .contains("if (Number.isFinite(parsed) && parsed >= 100 && parsed <= 60000) {"));
+        assert!(METHODS_TEMPLATE.contains("      return 1000;\n"));
         assert!(METHODS_TEMPLATE.contains("this._topLiveIntervalMs(),"));
         // Started on open and stopped on close, on destroy, and by the tick
         // itself when the menu closed without going through the toggle.

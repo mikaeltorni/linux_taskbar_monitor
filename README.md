@@ -247,7 +247,7 @@ Every row has two columns:
 
 | Column | Meaning |
 |---|---|
-| `now` | Live reading, refreshed at the panel's own refresh-time setting for as long as the popup stays open — the value the rows are ranked by |
+| `now` | Live reading, refreshed every second for as long as the popup stays open — the value the rows are ranked by |
 | `avg` | That process's mean over the rolling window |
 
 Rows are ranked by `now`, so each section names the processes using the metric
@@ -263,7 +263,14 @@ open would bias every average towards that period. It sweeps every process
 (~10 ms for ~700, handed out in ~2 ms slices between frames) because a
 newcomer has no history to be found by. `now` for GPU, VRAM and network
 refreshes as fast as `nvidia-smi` and `ss` return, which may be slower than
-the panel's rate.
+the live tick.
+
+The popup ticks at its own rate, on purpose: the bar shows two numbers in
+place and can flick along at its `refreshtime`, while a whole re-ranked table
+at that speed is unreadable. `U2TSSM_LIVE_MS` sets the popup's live-column
+interval in milliseconds (100–60000, default 1000). Like `U2TSSM` it is read
+live — exporting it into the desktop session retunes the next popup without
+re-patching — and it never touches how fast the bar itself refreshes.
 
 `U2TSSM` is this repository's name condensed to its initials (**U**buntu
 **2**404 **T**askbar **S**ystem **S**tatus **M**onitor) and carries the
