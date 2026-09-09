@@ -46,7 +46,7 @@ ISC_COMPONENTS=(
   "rm_per_disk|Resource Monitor per-disk display|on|patch_resource_monitor_per_disk|detect_rm_per_disk|uninstall_rm_per_disk"
   "rm_panel_spacing|Resource Monitor panel spacing|on|apply_resource_monitor_spacing_mode|detect_rm_panel_spacing|uninstall_rm_panel_spacing|||configure_resource_monitor_spacing|resource_monitor_spacing_status"
   "rm_hide_eth_icon|Resource Monitor hide ethernet icon|on|patch_resource_monitor_eth_icon|detect_rm_hide_eth_icon|uninstall_rm_hide_eth_icon"
-  "rm_process_popup|Resource Monitor per-process CPU popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup|uninstall_rm_process_popup"
+  "rm_process_popup|Resource Monitor top-users popup (left-click)|on|patch_resource_monitor_process_popup|detect_rm_process_popup|uninstall_rm_process_popup|||configure_resource_monitor_top_window|resource_monitor_top_window_status"
   "window_rules|App window-rules extension (Wayland)|off|configure_window_rules_extension|detect_window_rules|uninstall_window_rules"
 )
 # Note: this repo owns only the Resource Monitor system-status extension and its

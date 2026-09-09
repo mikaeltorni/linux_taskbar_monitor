@@ -70,6 +70,76 @@ resource_monitor_refresh_interval_file() {
   printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/refresh-interval-ms"
 }
 
+# ── Top-users rolling window (left-click popup) ─────────────────────────────
+# The popup ranks processes by what they used over a trailing window rather
+# than by an instantaneous reading. U2TSSM is this repository's name condensed
+# to its initials (Ubuntu 2404 Taskbar System Status Monitor), so
+# `U2TSSM=60 bash install.sh` means "rank by the last 60 minutes". The value is
+# baked into extension.js by the patcher and re-read live from the environment
+# by the extension itself, so both paths honour the same variable.
+
+# resource_monitor_top_window_file - Print the persisted window-minutes file.
+resource_monitor_top_window_file() {
+  printf '%s\n' "$TARGET_HOME/.config/taskbar-system-status-monitor/top-users-window-minutes"
+}
+
+# resource_monitor_top_window_minutes - Print the configured window in minutes.
+# Prefers a persisted file when present; otherwise honors U2TSSM (default 60).
+# Invalid values fall back to 60 so installation stays inside the 1..1440 range
+# the injected JavaScript accepts.
+resource_monitor_top_window_minutes() {
+  local value="${U2TSSM:-60}" file
+  file="$(resource_monitor_top_window_file)"
+  if [ -f "$file" ]; then
+    value="$(tr -d '[:space:]' < "$file")"
+  fi
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 1440 )); then
+    msg "Invalid top-users window '$value'; using 60 minutes." >&2
+    value=60
+  fi
+  printf '%s\n' "$value"
+}
+
+# persist_resource_monitor_top_window_minutes VALUE - Validate and save the
+# window for future standalone and master installer runs.
+persist_resource_monitor_top_window_minutes() {
+  local value="$1" file dir
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 1440 )); then
+    msg "Top-users window must be a whole number of minutes from 1 to 1440." >&2
+    return 2
+  fi
+  file="$(resource_monitor_top_window_file)"
+  dir="$(dirname "$file")"
+  run_as_target mkdir -p "$dir"
+  printf '%s\n' "$value" | run_as_target tee "$file" >/dev/null
+  msg "Saved top-users window: ${value} min."
+}
+
+# configure_resource_monitor_top_window - Open a typeable field prefilled with
+# the current window. Re-prompts until an integer from 1 through 1440 is
+# entered, persists it, and re-patches the extension when it is installed.
+configure_resource_monitor_top_window() {
+  local current value
+  current="$(resource_monitor_top_window_minutes)"
+  while true; do
+    value=""
+    read -r -e -i "$current" -p "Top-users window in minutes (1-1440): " value </dev/tty || return 1
+    if persist_resource_monitor_top_window_minutes "$value"; then
+      if [ -f "$(resource_monitor_ext_dir)/extension.js" ]; then
+        patch_resource_monitor_process_popup || return 1
+      else
+        msg "Resource Monitor is not installed yet; saved window will apply during installation." >&2
+      fi
+      return 0
+    fi
+  done
+}
+
+# resource_monitor_top_window_status - Print the menu-friendly current window.
+resource_monitor_top_window_status() {
+  printf '%s min\n' "$(resource_monitor_top_window_minutes)"
+}
+
 # ── Panel spacing mode (stable vs compact) ──────────────────────────────────
 # "stable" reserves a tight per-value width so the taskbar does not shift as a
 # reading changes digit count. "compact" drops those widths for a narrower
@@ -501,17 +571,25 @@ patch_resource_monitor_eth_icon() {
   _isc_mark_installed "rm_hide_eth_icon" || true
 }
 
-# patch_resource_monitor_process_popup - Left-click shows a popup menu with
-# total CPU%/RAM% aggregated per process name instead of launching the
-# configured task manager (gnome-system-monitor). No upstream GSetting offers
-# this, so the source patch rewires _clickManager to an in-panel PopupMenu.
+# patch_resource_monitor_process_popup - Left-click shows a popup listing the
+# top process users of every panel metric (CPU, RAM, disk IO, network, GPU and
+# VRAM) over a rolling window, instead of launching the configured task manager
+# (gnome-system-monitor). No upstream GSetting offers this, so the source patch
+# rewires the click handling to an in-panel PopupMenu and injects the sampler
+# that feeds it. The window is a repository-owned configurable (U2TSSM).
 patch_resource_monitor_process_popup() {
-  msg "Applying Resource Monitor process-popup (left-click) patch"
+  local window
+  window="$(resource_monitor_top_window_minutes)"
+  msg "Applying Resource Monitor top-users popup (left-click) patch over ${window} min"
   ensure_rm_monitor_bin || { msg "rm-monitor unavailable; skipping process-popup patch"; return 1; }
-  if ! rm_monitor patch-process-popup "$(resource_monitor_ext_dir)/extension.js"; then
+  if ! rm_monitor patch-process-popup --window-minutes "$window" \
+      "$(resource_monitor_ext_dir)/extension.js"; then
     msg "ERROR: patch-process-popup failed" >&2
     return 1
   fi
+  # Persist so detect/uninstall have a component-owned signal and later runs
+  # keep the same window without re-passing U2TSSM.
+  persist_resource_monitor_top_window_minutes "$window" || return 1
   _isc_mark_installed "rm_process_popup" || true
 }
 

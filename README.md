@@ -108,7 +108,7 @@ bash scripts/build_rm_monitor.sh
 | `patch-disk` | Free space + live IO activity % |
 | `patch-colors` | 256-step gradient indicator colors |
 | `patch-eth-icon` | Hide ethernet icon, keep Mbps |
-| `patch-process-popup` | Left-click per-process CPU/RAM popup |
+| `patch-process-popup` | Left-click top-users popup; `--window-minutes N` |
 | `patch-stable-width` | `--mode stable\|compact` reserved widths |
 
 `configure-resource-monitor` flags:
@@ -202,7 +202,7 @@ runs before component selection on fresh installs). Optional default-on componen
 | `rm_per_disk` | Per-disk display | on |
 | `rm_panel_spacing` | Panel spacing (stable/compact) | on, stable |
 | `rm_hide_eth_icon` | Hide ethernet icon (keep Mbps) | on |
-| `rm_process_popup` | Per-process CPU popup (left-click) | on |
+| `rm_process_popup` | Top-users popup (left-click) | on, 60 min |
 | `window_rules` | App window-rules (Wayland install; X11 skip marker) | off |
 
 ## Troubleshooting
@@ -236,6 +236,44 @@ If left-click opens the popup once and then stops responding, the installed
 out as soon as the menu had rows. Re-run `bash install.sh` (or
 `./dist/rm-monitor patch-process-popup "$EXT/extension.js"`) and reload the
 Shell.
+
+### Top-users window
+
+Left-click opens a popup that ranks the top process users of every panel
+metric — CPU, RAM, disk IO, network, GPU and VRAM — over a rolling window
+rather than by an instantaneous reading, so a process that hammered the disk
+five minutes ago still shows. The default window is the past 60 minutes.
+
+Every row has two columns:
+
+| Column | Meaning |
+|---|---|
+| `now` | Live reading, refreshed at the panel's own refresh-time setting for as long as the popup stays open |
+| `avg` | Mean over the rolling window — the value the rows are ranked by |
+
+Ranking stays on the average so rows hold still while `now` ticks underneath
+them. The live sampler only exists between opening and closing the popup, only
+reads the processes actually on screen, and deliberately does not feed the
+rolling averages — otherwise leaving the popup open would bias every average
+towards that period. `now` for GPU, VRAM and network refreshes as fast as
+`nvidia-smi` and `ss` return, which may be slower than the panel's rate.
+
+`U2TSSM` is this repository's name condensed to its initials (**U**buntu
+**2**404 **T**askbar **S**ystem **S**tatus **M**onitor) and carries the
+window in minutes (1–1440):
+
+```sh
+U2TSSM=120 bash install.sh          # seed a clean install with 2 hours
+bash install.sh --configure-component rm_process_popup   # typeable prompt
+```
+
+The selection is persisted to
+`~/.config/taskbar-system-status-monitor/top-users-window-minutes`, so later
+runs keep it without re-passing the variable. The value is baked into
+`extension.js` and also re-read live from the environment, so exporting
+`U2TSSM` into the desktop session changes the window without re-patching.
+Sampling is bounded: the popup keeps per-minute buckets, so a long window
+costs memory proportional to the window, not to uptime.
 
 ## Extended Features
 

@@ -94,13 +94,19 @@ detect_rm_hide_eth_icon() {
   local js; js="$(_rm_main_gui_js)"
   [ -f "$js" ] && grep -q "Ethernet icon removed: value/unit kept, icon omitted" "$js"
 }
-# detect_rm_process_popup: the process-popup patcher injects marker-guarded
-# _toggleProcessMenu/_refreshProcessMenu methods ("Process popup: total CPU/RAM
-# aggregated per process name"). Its presence in extension.js is the
-# deterministic live signal.
+# detect_rm_process_popup: the popup patcher injects a marker-guarded block
+# ("Process popup: top resource users per metric over a rolling window") whose
+# sampler carries the configured window as a baked-in constant. Both must match
+# the configuration, so a reconfigured window shows as "not installed" until
+# the patcher has rewritten extension.js.
 detect_rm_process_popup() {
-  local js; js="$(_rm_extension_js)"
-  [ -f "$js" ] && grep -q "Process popup: total CPU/RAM aggregated per process name" "$js"
+  local js window
+  js="$(_rm_extension_js)"
+  [ -f "$js" ] || return 1
+  grep -q "Process popup: top resource users per metric over a rolling window" "$js" || return 1
+  [ -f "$(resource_monitor_top_window_file)" ] || return 1
+  window="$(resource_monitor_top_window_minutes)" || return 1
+  grep -q "const patchedMinutes = ${window};" "$js"
 }
 detect_window_rules() {
   # Require a real extension tree (metadata.json), not an empty leftover dir.

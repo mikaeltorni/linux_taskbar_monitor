@@ -511,3 +511,56 @@ def test_panel_spacing_manifest_section_is_empty():
         "resource_monitor_spacing_status"
     ) in row
     assert "|configurable|" not in row
+
+
+def test_top_users_window_is_a_persisted_configurable_component():
+    """U2TSSM seeds the window, the repo persists it, and the component exposes it."""
+    core = (ROOT_DIR / "lib" / "gnome_extensions.sh").read_text(encoding="utf-8")
+    installer = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+    components = (ROOT_DIR / "installer" / "components.sh").read_text(encoding="utf-8")
+
+    # The env var seeds a clean install and defaults to a 60 minute window.
+    assert 'U2TSSM="${U2TSSM:-60}"' in installer
+    assert 'value="${U2TSSM:-60}"' in core
+
+    # A persisted file outranks the env var so re-running install.sh without
+    # re-exporting U2TSSM keeps the window the user configured.
+    assert "top-users-window-minutes" in core
+    assert "resource_monitor_top_window_file" in core
+    for fn in (
+        "resource_monitor_top_window_minutes",
+        "persist_resource_monitor_top_window_minutes",
+        "configure_resource_monitor_top_window",
+        "resource_monitor_top_window_status",
+    ):
+        assert f"{fn}()" in core, f"{fn} must be defined"
+
+    # Out-of-range values must not reach the injected JavaScript, which only
+    # accepts 1..1440 minutes.
+    assert "value < 1 || value > 1440" in core
+
+    # The patcher receives the resolved window rather than the raw env var.
+    assert 'rm_monitor patch-process-popup --window-minutes "$window"' in core
+
+    # The component row wires the configure/status pair, making the window
+    # reachable from --configure-component and the interactive menu.
+    row = next(
+        line for line in components.splitlines() if line.strip().startswith('"rm_process_popup|')
+    )
+    assert "configure_resource_monitor_top_window" in row
+    assert "resource_monitor_top_window_status" in row
+
+
+def test_top_users_popup_covers_every_panel_metric():
+    """The popup ranks users of each metric the panel shows, not just CPU and RAM."""
+    popup = (ROOT_DIR / "src" / "patch_process_popup.rs").read_text(encoding="utf-8")
+
+    # One section per panel metric, each naming the top processes for it.
+    for label in ("CPU", "RAM", "Disk", "Network", "GPU", "VRAM"):
+        assert label in popup, f"popup must have a {label} section"
+
+    # The window is injected, not hard-coded, and the extension re-reads it from
+    # the environment so exporting U2TSSM changes the window without a repatch.
+    assert "WINDOW_PLACEHOLDER" in popup
+    assert "U2TSSM" in popup
+    assert "MAX_WINDOW_MINUTES" in popup
