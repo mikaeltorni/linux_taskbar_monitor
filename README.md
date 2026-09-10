@@ -257,6 +257,13 @@ processes currently listed have been averaging. Because the ranking changes on
 every tick, the rows are fixed slots whose text is rewritten in place — the
 popup never rebuilds menu items under the pointer.
 
+Each section is five rows tall and stays that tall. Anything with a reading
+above zero is listed, down to the smallest byte, but the spare rows of a quiet
+metric are left blank rather than removed: unplug the ethernet cable and the
+Network section holds its space instead of collapsing and dragging every
+section below it up the screen. A section with nothing running at all says
+`No activity.` in its first row.
+
 The live sampler only exists between opening and closing the popup, and
 deliberately does not feed the rolling averages — otherwise leaving the popup
 open would bias every average towards that period. It sweeps every process
