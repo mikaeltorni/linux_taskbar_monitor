@@ -983,10 +983,33 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
       return `${value.toFixed(0)} MB`;
     }
 
-    // Rows per section. The popup re-ranks on every tick, so this is also
-    // how many fixed slots each section builds once at open time.
-    _topRowCount() {
-      return 5;
+    // Rows per section — the section's height, since the slots are built
+    // once at open time and never hidden. U2TSSM_ROWS sets it for every
+    // section; U2TSSM_ROWS_CPU and its siblings (_RAM, _DISK, _NET, _GPU,
+    // _VRAM) override that global value for one metric, so a machine that
+    // cares about network but not VRAM can say so. Both are read whenever
+    // the popup opens, like U2TSSM_LIVE_MS, so exporting them into the
+    // session retunes the popup without re-patching.
+    _topRowCount(metric) {
+      const name = String(metric ?? "").toUpperCase();
+      const perMetric =
+        name === "" ? null : this._topEnvRowCount(`U2TSSM_ROWS_${name}`);
+
+      return perMetric ?? this._topEnvRowCount("U2TSSM_ROWS") ?? 5;
+    }
+
+    // One row-count variable, parsed and bounds-checked (1–20). null means
+    // "unusable, fall back": an unset, empty or nonsense value must never
+    // become a section with no rows in it.
+    _topEnvRowCount(variable) {
+      const raw = GLib.getenv(variable);
+      const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+
+      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {
+        return parsed;
+      }
+
+      return null;
     }
 
     _topSections() {
@@ -1051,7 +1074,9 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         }
       }
 
-      return ranked.sort((a, b) => b[1] - a[1]).slice(0, this._topRowCount());
+      return ranked
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, this._topRowCount(metric));
     }
 
     // Ranking for one section. CPU and disk are deltas, so the first sweep
@@ -1067,7 +1092,7 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         .map((pair) => [pair[0], pair[1][metric]])
         .filter((pair) => pair[1] > 0)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, this._topRowCount())
+        .slice(0, this._topRowCount(metric))
         .map((pair) => pair[0]);
     }
 
@@ -1163,7 +1188,7 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         // full count whether or not there is anything to put in it, so its
         // height is decided here, once, and never changes while it is open.
         const slots = [];
-        for (let i = 0; i < this._topRowCount(); i++) {
+        for (let i = 0; i < this._topRowCount(section.metric); i++) {
           const item = new PopupMenu.PopupMenuItem(" ", { reactive: false });
           item.label.set_style("font-family: monospace;");
           this.menu.addMenuItem(item);
@@ -1595,12 +1620,34 @@ mod tests {
         // The whole point of the change: order follows "now", not "avg".
         assert!(METHODS_TEMPLATE.contains("_topRankLive(metric) {"));
         assert!(METHODS_TEMPLATE.contains("const value = this._topLiveValue(name, metric);"));
-        assert!(METHODS_TEMPLATE.contains("return ranked.sort((a, b) => b[1] - a[1])"));
+        assert!(METHODS_TEMPLATE.contains("return ranked\n        .sort((a, b) => b[1] - a[1])"));
         // Re-ranking must not rebuild the menu under the pointer: the rows are
         // fixed slots the renderer rewrites.
         assert!(METHODS_TEMPLATE.contains("slots.push(item);"));
         // One ranking path serves the first paint and every later tick.
         assert!(METHODS_TEMPLATE.contains("      this._topRenderLiveValues();\n    }"));
+    }
+
+    #[test]
+    fn row_count_is_configurable_globally_and_per_metric() {
+        // The per-metric variable wins over the global one, and both are read
+        // from the environment on open like U2TSSM_LIVE_MS.
+        assert!(METHODS_TEMPLATE.contains("_topRowCount(metric) {"));
+        assert!(METHODS_TEMPLATE.contains("this._topEnvRowCount(`U2TSSM_ROWS_${name}`)"));
+        assert!(METHODS_TEMPLATE
+            .contains(r#"return perMetric ?? this._topEnvRowCount("U2TSSM_ROWS") ?? 5;"#));
+        assert!(METHODS_TEMPLATE.contains("const raw = GLib.getenv(variable);"));
+        // Out-of-range and unparsable values fall back instead of emptying a
+        // section, and the bound keeps the popup off the screen edge.
+        assert!(METHODS_TEMPLATE
+            .contains("if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {"));
+        // Ranking and slot building must ask about the same metric, or a
+        // section would rank more processes than it has rows.
+        assert!(METHODS_TEMPLATE.contains(".slice(0, this._topRowCount(metric));"));
+        assert!(METHODS_TEMPLATE.contains(".slice(0, this._topRowCount(metric))\n"));
+        assert!(METHODS_TEMPLATE
+            .contains("for (let i = 0; i < this._topRowCount(section.metric); i++) {"));
+        assert!(!METHODS_TEMPLATE.contains("_topRowCount()"));
     }
 
     #[test]

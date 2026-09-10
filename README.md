@@ -257,12 +257,33 @@ processes currently listed have been averaging. Because the ranking changes on
 every tick, the rows are fixed slots whose text is rewritten in place — the
 popup never rebuilds menu items under the pointer.
 
-Each section is five rows tall and stays that tall. Anything with a reading
-above zero is listed, down to the smallest byte, but the spare rows of a quiet
-metric are left blank rather than removed: unplug the ethernet cable and the
-Network section holds its space instead of collapsing and dragging every
-section below it up the screen. A section with nothing running at all says
-`No activity.` in its first row.
+Each section is five rows tall by default and stays that tall. Anything with a
+reading above zero is listed, down to the smallest byte, but the spare rows of
+a quiet metric are left blank rather than removed: unplug the ethernet cable
+and the Network section holds its space instead of collapsing and dragging
+every section below it up the screen. A section with nothing running at all
+says `No activity.` in its first row.
+
+`U2TSSM_ROWS` changes how many rows every section gets (1–20), and a
+per-metric variable overrides it for one section:
+
+| Variable | Section |
+|---|---|
+| `U2TSSM_ROWS` | all sections, unless overridden below |
+| `U2TSSM_ROWS_CPU` | CPU |
+| `U2TSSM_ROWS_RAM` | RAM |
+| `U2TSSM_ROWS_DISK` | Disk usage |
+| `U2TSSM_ROWS_NET` | Network |
+| `U2TSSM_ROWS_GPU` | GPU usage |
+| `U2TSSM_ROWS_VRAM` | GPU VRAM |
+
+Setting `U2TSSM_ROWS=10 U2TSSM_ROWS_VRAM=2` gives every section ten rows and
+the VRAM section two.
+
+Like `U2TSSM_LIVE_MS` these are read whenever the popup opens, so exporting
+them into the desktop session retunes the next popup without re-patching. An
+unset, empty, unparsable or out-of-range value falls back to the global value
+and then to 5, so a typo can never produce a section with no rows in it.
 
 The live sampler only exists between opening and closing the popup, and
 deliberately does not feed the rolling averages — otherwise leaving the popup
