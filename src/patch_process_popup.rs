@@ -93,7 +93,10 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
     // currently using the metric — including one that just started and has no
     // history yet. Because that ranking changes on every tick, the rows are
     // fixed slots whose text is rewritten in place rather than menu items
-    // rebuilt underneath the pointer.
+    // rebuilt underneath the pointer. A section keeps every slot it was built
+    // with even when nothing is using the metric, so an idle GPU or an
+    // unplugged cable leaves a gap instead of collapsing the popup and moving
+    // everything below it.
     //
     // PanelMenu.Button.vfunc_event toggles this.menu on every BUTTON_PRESS,
     // and it runs before the button-press-event handler (_clickManager). With
@@ -1068,8 +1071,19 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         .map((pair) => pair[0]);
     }
 
+    // Text for a slot with no process to show. A section that ranked nothing
+    // at all says so in its first row; every other spare row is blank. The
+    // space itself matters: a zero-width label would let the row collapse.
+    _topPlaceholderRowText(index, ranked) {
+      if (index === 0 && ranked === 0) {
+        return _("No activity.");
+      }
+
+      return " ";
+    }
+
     // Re-rank by the live reading and write the result into a fixed set of
-    // rows. Rebuilding the menu at the panel's refresh rate would fight the
+    // rows. Rebuilding the menu at the popup's refresh rate would fight the
     // pointer and reset scroll on every tick, so the rows are permanent slots
     // and reordering costs nothing but a set_text.
     _topRenderLiveValues() {
@@ -1081,8 +1095,12 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
         for (let i = 0; i < section.slots.length; i++) {
           const item = section.slots[i];
           const name = names[i];
+          // Spare rows are written, never hidden. Hiding them would resize
+          // the popup on every tick — unplug the ethernet cable and the whole
+          // Network section would collapse, shoving every section below it
+          // up the screen. The slot count is what the section is tall.
           if (name === undefined) {
-            item.visible = false;
+            item.label.set_text(this._topPlaceholderRowText(i, names.length));
             continue;
           }
 
@@ -1096,10 +1114,7 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
               section.format
             )
           );
-          item.visible = true;
         }
-
-        section.empty.visible = names.length === 0;
       }
     }
 
@@ -1144,26 +1159,21 @@ const METHODS_TEMPLATE: &str = r##"    // ── Process popup: top resource use
 
         // Build the slots empty and let the renderer fill them. Ranking lives
         // in exactly one place that way, so the first paint and every later
-        // tick can never disagree about the order.
+        // tick can never disagree about the order. Every section gets the
+        // full count whether or not there is anything to put in it, so its
+        // height is decided here, once, and never changes while it is open.
         const slots = [];
         for (let i = 0; i < this._topRowCount(); i++) {
-          const item = new PopupMenu.PopupMenuItem("", { reactive: false });
+          const item = new PopupMenu.PopupMenuItem(" ", { reactive: false });
           item.label.set_style("font-family: monospace;");
           this.menu.addMenuItem(item);
           slots.push(item);
         }
 
-        const empty = new PopupMenu.PopupMenuItem(_("No data yet."), {
-          reactive: false,
-        });
-        empty.label.set_style("font-family: monospace;");
-        this.menu.addMenuItem(empty);
-
         this._topLiveSections.push({
           metric: section.metric,
           format: section.format,
           slots,
-          empty,
         });
       }
 
@@ -1589,9 +1599,28 @@ mod tests {
         // Re-ranking must not rebuild the menu under the pointer: the rows are
         // fixed slots the renderer rewrites.
         assert!(METHODS_TEMPLATE.contains("slots.push(item);"));
-        assert!(METHODS_TEMPLATE.contains("item.visible = false;"));
         // One ranking path serves the first paint and every later tick.
         assert!(METHODS_TEMPLATE.contains("      this._topRenderLiveValues();\n    }"));
+    }
+
+    #[test]
+    fn sections_keep_their_height_when_nothing_is_active() {
+        // Spare rows are written, never hidden — hiding them is what made the
+        // popup jump vertically when a metric went quiet.
+        assert!(!METHODS_TEMPLATE.contains("visible = false"));
+        assert!(!METHODS_TEMPLATE.contains("visible = true"));
+        assert!(METHODS_TEMPLATE
+            .contains("item.label.set_text(this._topPlaceholderRowText(i, names.length));"));
+        // A blank spare row still has to occupy a line.
+        assert!(METHODS_TEMPLATE.contains("      return \" \";\n"));
+        assert!(
+            METHODS_TEMPLATE.contains(r#"new PopupMenu.PopupMenuItem(" ", { reactive: false })"#)
+        );
+        // A section that ranked nothing says so in its own first row instead
+        // of through an extra item that appears and disappears.
+        assert!(METHODS_TEMPLATE.contains("if (index === 0 && ranked === 0) {"));
+        assert!(!METHODS_TEMPLATE.contains("No data yet."));
+        assert!(!METHODS_TEMPLATE.contains("section.empty"));
     }
 
     #[test]
