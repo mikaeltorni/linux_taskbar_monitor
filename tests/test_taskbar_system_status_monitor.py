@@ -40,7 +40,7 @@ def test_core_fails_when_metadata_pin_fails():
     assert "Ubuntu 24.04 LTS" in readme
     assert "Not guaranteed elsewhere" in readme
     assert "GNOME Shell 46" in readme
-    # Machine id stays historical until the GitHub rename + orchestrator update.
+    # Installer identity matches the repository and orchestrator slug.
     components = (ROOT_DIR / "installer" / "components.sh").read_text(
         encoding="utf-8"
     )
