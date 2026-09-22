@@ -16,7 +16,7 @@
 # renamed to linux_taskbar_monitor and the master orchestrator is updated in the
 # same change. ISC_REPO_LABEL is the user-facing display name.
 
-ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"
+ISC_REPO_NAME="linux_taskbar_monitor"
 ISC_REPO_LABEL="Linux Taskbar Monitor"
 
 # Fail hard before the first optional component when the session bus cannot be

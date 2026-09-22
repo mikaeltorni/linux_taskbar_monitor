@@ -28,7 +28,7 @@ to force the full framework, or to a missing path to force the fallback.
 
 > **Rename note:** the intended GitHub repository name is `linux_taskbar_monitor`.
 > Until that rename lands, clones and orchestrator entries may still use the
-> historical directory name `ubuntu_2404_taskbar_system_status_monitor`. Machine
+> historical directory name `linux_taskbar_monitor`. Machine
 > identifiers (`ISC_REPO_NAME`, `installation_configs` `repo` field) stay on the
 > historical name until the GitHub rename and orchestrator update happen together.
 

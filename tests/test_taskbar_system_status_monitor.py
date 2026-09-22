@@ -44,7 +44,7 @@ def test_core_fails_when_metadata_pin_fails():
     components = (ROOT_DIR / "installer" / "components.sh").read_text(
         encoding="utf-8"
     )
-    assert 'ISC_REPO_NAME="ubuntu_2404_taskbar_system_status_monitor"' in components
+    assert 'ISC_REPO_NAME="linux_taskbar_monitor"' in components
     assert 'ISC_REPO_LABEL="Linux Taskbar Monitor"' in components
 
 

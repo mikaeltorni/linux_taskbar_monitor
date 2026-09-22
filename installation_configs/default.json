@@ -64,7 +64,7 @@
       "workspace": 0
     }
   },
-  "repo": "ubuntu_2404_taskbar_system_status_monitor",
+  "repo": "linux_taskbar_monitor",
   "schema_version": 1,
   "scope": "standalone"
 }
