@@ -26,11 +26,10 @@ supports `--default` / `--all` / `--select` / `--list-components` / `--detect` /
 `--reconfigure` / `--uninstall`. Set `ISC_FUNCTIONS_DIR` to an explicit checkout
 to force the full framework, or to a missing path to force the fallback.
 
-> **Rename note:** the intended GitHub repository name is `linux_taskbar_monitor`.
-> Until that rename lands, clones and orchestrator entries may still use the
-> historical directory name `linux_taskbar_monitor`. Machine
-> identifiers (`ISC_REPO_NAME`, `installation_configs` `repo` field) stay on the
-> historical name until the GitHub rename and orchestrator update happen together.
+> **Repository identity:** the GitHub repository, local checkout, installer
+> `ISC_REPO_NAME`, installation-config `repo` field, and master orchestrator
+> entry all use `linux_taskbar_monitor`. Existing clones can update their
+> `origin` URL to `https://github.com/mikaeltorni/linux_taskbar_monitor.git`.
 
 ## What it installs
 

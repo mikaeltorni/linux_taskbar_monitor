@@ -12,9 +12,8 @@
 # Field 6 is an optional menu section heading — never a keyword like
 # "configurable". Field 10 may be "select_configure" for configure-on-select.
 #
-# ISC_REPO_NAME stays on the historical GitHub slug until the repository is
-# renamed to linux_taskbar_monitor and the master orchestrator is updated in the
-# same change. ISC_REPO_LABEL is the user-facing display name.
+# ISC_REPO_NAME matches the GitHub/orchestrator slug; ISC_REPO_LABEL is the
+# user-facing display name.
 
 ISC_REPO_NAME="linux_taskbar_monitor"
 ISC_REPO_LABEL="Linux Taskbar Monitor"
