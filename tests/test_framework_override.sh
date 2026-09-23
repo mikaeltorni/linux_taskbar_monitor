@@ -6,7 +6,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scratch="$(mktemp -d)"
 trap 'rm -rf -- "$scratch"' EXIT
-mkdir -p "$scratch/bin" "$scratch/home"
+mkdir -p "$scratch/bin" "$scratch/home" "$scratch/isolated-repo"
+# A live checkout may have the shared framework as its sibling, whereas a
+# worktree does not. Copy only the installer files needed by read-only commands
+# so the absent-sibling cases mean the same thing in both locations.
+cp -a "$repo_root/install.sh" "$repo_root/lib" "$repo_root/installer" \
+  "$scratch/isolated-repo/"
+test_install="$scratch/isolated-repo/install.sh"
 
 cat >"$scratch/bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -19,8 +25,9 @@ output="$(
   HOME="$scratch/home" \
     PATH="$scratch/bin:$PATH" \
     ISC_FUNCTIONS_DIR="$scratch/missing-framework" \
+    ISC_FUNCTIONS_REF= \
     FRAMEWORK_CURL_MARKER="$scratch/curl-called" \
-    bash "$repo_root/install.sh" --list-components 2>"$scratch/fallback-stderr"
+    bash "$test_install" --list-components 2>"$scratch/fallback-stderr"
 )"
 
 if [ -e "$scratch/curl-called" ]; then
@@ -35,8 +42,10 @@ fi
 output="$(
   HOME="$scratch/home" \
     PATH="$scratch/bin:$PATH" \
+    ISC_FUNCTIONS_DIR= \
+    ISC_FUNCTIONS_REF= \
     FRAMEWORK_CURL_MARKER="$scratch/curl-called" \
-    bash "$repo_root/install.sh" --list-components 2>"$scratch/fallback-stderr"
+    bash "$test_install" --list-components 2>"$scratch/fallback-stderr"
 )"
 
 if [ -e "$scratch/curl-called" ]; then
@@ -53,9 +62,10 @@ fi
 output="$(
   HOME="$scratch/home" \
     PATH="$scratch/bin:$PATH" \
+    ISC_FUNCTIONS_DIR= \
     ISC_FUNCTIONS_REF=master \
     FRAMEWORK_CURL_MARKER="$scratch/curl-called" \
-    bash "$repo_root/install.sh" --list-components 2>"$scratch/fallback-stderr"
+    bash "$test_install" --list-components 2>"$scratch/fallback-stderr"
 )"
 if [ ! -e "$scratch/curl-called" ]; then
   printf 'explicit ISC_FUNCTIONS_REF did not attempt a framework download\n' >&2
