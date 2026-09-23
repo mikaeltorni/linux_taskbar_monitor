@@ -190,10 +190,10 @@ source "$SCRIPT_DIR/lib/lifecycle.sh"
 # ── Component selection runtime and manifest ─────────────────────────────────
 # The manifest maps each component id to a configure_*/install_* function from
 # the lib files sourced above.
-# Prefer the shared linux_installation_scripts_functions framework (sibling
-# checkout or on-demand download). When that framework is unreachable — private
-# GitHub raw URLs, offline host, missing sibling — load the built-in fallback so
-# this repository remains a working standalone installer for core +
+# Prefer the shared linux_installation_scripts_functions framework from a local
+# checkout. An explicit ISC_FUNCTIONS_REF opts into an on-demand download when
+# no checkout is found. Otherwise load the built-in fallback so this repository
+# remains a working standalone installer for core +
 # list/detect/default/select/uninstall/reconfigure.
 ISC_FRAMEWORK_ACTIVE=0
 if [ -n "${ISC_FUNCTIONS_DIR:-}" ]; then
@@ -218,8 +218,11 @@ for __isc_d in "${__isc_search_paths[@]}"; do
   fi
 done
 unset __isc_search_paths
-if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ]; then
-  __isc_ref="${ISC_FUNCTIONS_REF:-master}"
+# An explicit directory is exclusive. Never fetch and source remote framework
+# code on the default path; only an explicitly supplied ref opts into that.
+if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ] && [ -z "${ISC_FUNCTIONS_DIR:-}" ] \
+   && [ -n "${ISC_FUNCTIONS_REF:-}" ]; then
+  __isc_ref="$ISC_FUNCTIONS_REF"
   __isc_url="https://raw.githubusercontent.com/mikaeltorni/linux_installation_scripts_functions/${__isc_ref}/component_loader.sh"
   if need_cmd curl && __isc_body="$(curl -fsSL "$__isc_url" 2>/dev/null)" \
      && [ -n "$__isc_body" ]; then
