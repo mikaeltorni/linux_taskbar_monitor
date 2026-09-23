@@ -3,7 +3,7 @@
 #
 # Preference order:
 #   1. Local cargo/rustc (PATH or ~/.cargo/bin) — always run incremental
-#      `cargo build --release` then install into dist/rm-monitor. Cargo's own
+#      `cargo build --release --locked` then install into dist/rm-monitor. Cargo's own
 #      fingerprinting decides whether work is needed; never reuse a dist binary
 #      that can be older-by-content than sources.
 #   2. Existing fresh dist/rm-monitor only when cargo is unavailable and sources
@@ -102,7 +102,7 @@ build_with_cargo() {
   log "Building with local cargo…"
   (
     cd "$REPO_ROOT"
-    cargo build --release --bin rm-monitor
+    cargo build --release --locked --bin rm-monitor
   )
   mkdir -p "$DIST_DIR"
   install -m 0755 "$TARGET_BIN" "$DIST_BIN"
@@ -136,7 +136,7 @@ build_with_container() {
     -v "$REPO_ROOT:/src:rw" \
     -w /src \
     "$RUST_IMAGE" \
-    cargo build --release --bin rm-monitor
+    cargo build --release --locked --bin rm-monitor
   install -m 0755 "$TARGET_BIN" "$DIST_BIN"
 }
 

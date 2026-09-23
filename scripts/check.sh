@@ -3,11 +3,12 @@
 #
 # Steps (in order, each must pass before the next runs):
 #   1. cargo fmt --all -- --check   (formatting)
-#   2. cargo clippy --all-targets -- -D warnings   (lint)
-#   3. cargo test   (Rust unit/integration tests)
+#   2. cargo clippy --locked --all-targets -- -D warnings   (lint)
+#   3. cargo test --locked   (Rust unit/integration tests)
 #   4. bash -n on every shell script (install.sh, scripts/, lib/, tests/)
 #   5. python3 -m pytest tests -q   (Python installer/detect tests)
 #   6. bash tests/test_lifecycle.sh   (component detect lifecycle regressions)
+#   7. bash tests/test_framework_override.sh (explicit framework override)
 #
 # Usage:
 #   bash scripts/check.sh
@@ -55,13 +56,13 @@ run_cargo_fmt_check() {
 }
 
 run_cargo_clippy() {
-  log "cargo clippy --all-targets -- -D warnings"
-  (cd "$REPO_ROOT" && cargo clippy --all-targets -- -D warnings)
+  log "cargo clippy --locked --all-targets -- -D warnings"
+  (cd "$REPO_ROOT" && cargo clippy --locked --all-targets -- -D warnings)
 }
 
 run_cargo_test() {
-  log "cargo test"
-  (cd "$REPO_ROOT" && cargo test)
+  log "cargo test --locked"
+  (cd "$REPO_ROOT" && cargo test --locked)
 }
 
 run_shell_syntax_checks() {
@@ -91,6 +92,11 @@ run_lifecycle_test() {
   bash "$REPO_ROOT/tests/test_lifecycle.sh"
 }
 
+run_framework_override_test() {
+  log "bash tests/test_framework_override.sh"
+  bash "$REPO_ROOT/tests/test_framework_override.sh"
+}
+
 main() {
   ensure_cargo_on_path || {
     log "cargo not found (install rustup or apt install cargo)"
@@ -103,6 +109,7 @@ main() {
   run_shell_syntax_checks
   run_pytest
   run_lifecycle_test
+  run_framework_override_test
 
   log "All checks passed."
 }

@@ -19,12 +19,13 @@ Shell APIs differ.
 This repository is **fully standalone**: `bash install.sh` is enough. Soft
 loading of
 [`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions)
-(sibling checkout or on-demand download) powers the interactive component menu
-and config export. When that framework is unreachable (private raw URL, offline
-host, or no sibling), the installer loads a built-in fallback that still
+from a local checkout powers the interactive component menu and config export.
+Without that checkout, the installer uses a built-in fallback that still
 supports `--default` / `--all` / `--select` / `--list-components` / `--detect` /
 `--reconfigure` / `--uninstall`. Set `ISC_FUNCTIONS_DIR` to an explicit checkout
 to force the full framework, or to a missing path to force the fallback.
+Set `ISC_FUNCTIONS_REF` only when you explicitly want to download and run the
+shared framework from that Git ref.
 
 > **Repository identity:** the GitHub repository, local checkout, installer
 > `ISC_REPO_NAME`, installation-config `repo` field, and master orchestrator
@@ -39,6 +40,11 @@ enables configurable 100–2000 ms refreshes (500 ms by default). Optional
 default-on components then patch GPU VRAM display, per-disk rows, gradient
 colors, ethernet icon hide, process popup, and panel spacing — unless you
 deselect them.
+
+Resource Monitor is developed by [0ry0n](https://github.com/0ry0n/Resource_Monitor)
+under GPL-3.0. The installer downloads and patches that extension; the
+installed extension remains subject to its upstream license. This repository's
+MIT license covers the files distributed here.
 
 ## Technology Stack
 
@@ -57,6 +63,8 @@ sudo bash install.sh            # also apt-installs missing packages (e.g. cargo
 
 The installer builds `dist/rm-monitor` on demand (local cargo, apt `cargo`, or
 container), downloads Resource Monitor, applies patches, and writes GSettings.
+The tracked Rust dependencies support the Ubuntu 24.04 `cargo`/`rustc` 1.75
+packages; builds use `Cargo.lock` without changing dependency versions.
 Core install requires a running `gnome-shell` whose version can be parsed: that
 value is pinned into `metadata.json` (version `9999`) so extensions.gnome.org
 cannot overwrite local patches on reload. Extract, refresh patch, and metadata
@@ -65,8 +73,9 @@ after those steps succeed, so a patch/pin failure leaves a previous install
 intact. Later GSettings/enable failures can still leave a freshly published
 tree that needs a re-run.
 
-After installation, log out and back in before testing GNOME Shell extension
-changes (on X11, agents may use the sanctioned in-place Shell reload instead).
+After installation on X11, press Alt+F2, type `r`, and press Enter to load the
+edited extension code in place. On Wayland, log out and back in before testing
+the extension changes.
 
 ## Development Workflow
 
@@ -137,7 +146,7 @@ Environment overrides (used when no persisted file exists yet):
 | `RESOURCE_MONITOR_REFRESH_INTERVAL_MS` | 100–2000 (default 500; file wins if present) |
 | `RM_MONITOR_RUST_IMAGE` | Container image for builds (default `rust:1-bookworm`) |
 | `ISC_FUNCTIONS_DIR` | Explicit framework checkout (exclusive when set; missing path forces built-in fallback) |
-| `ISC_FUNCTIONS_REF` | Git ref for the on-demand framework download (default `master`) |
+| `ISC_FUNCTIONS_REF` | Explicit Git ref that opts into downloading and running the shared framework when no local checkout exists |
 
 Persisted under `~/.config/taskbar-system-status-monitor/` once chosen in the
 installer menu (`refresh-interval-ms`, `panel-spacing-mode`).
@@ -225,9 +234,9 @@ If enable fails with “refusing to rewrite list”, the user session D-Bus is n
 reachable from the installer (common over SSH without the session bus). Run the
 installer from the logged-in desktop session instead.
 
-If GNOME Shell does not show the updated indicator immediately, log out and
-back in. Do not reload GNOME Shell extensions from an active Wayland session
-via destructive shortcuts.
+If GNOME Shell does not show the updated indicator immediately, use the X11
+Alt+F2 `r` reload or, on Wayland, log out and back in. Do not reload GNOME
+Shell extensions from an active Wayland session via destructive shortcuts.
 
 If left-click opens the popup once and then stops responding, the installed
 `extension.js` predates the `vfunc_event` toggle fix: `PanelMenu.Button` and
