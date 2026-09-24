@@ -19,6 +19,7 @@ throughput, and GPU/VRAM in a compact GNOME panel strip.
 - [Component selection](#component-selection)
 - [Troubleshooting](#troubleshooting)
   - [Top-users window](#top-users-window)
+- [FAQ](#faq)
 - [Extended features](#extended-features)
 - [Disclaimer](#disclaimer)
 
@@ -342,6 +343,39 @@ runs keep it without re-passing the variable. The value is baked into
 `U2TSSM` into the desktop session changes the window without re-patching.
 Sampling is bounded: the popup keeps per-minute buckets, so a long window
 costs memory proportional to the window, not to uptime.
+
+## FAQ
+
+### Do I need sudo to install it?
+
+No. Run `bash install.sh` for the user-level setup. Without root, the installer
+reports any missing system packages it could not install; run
+`sudo bash install.sh` only if you want it to install those packages through
+apt.
+
+### Which Ubuntu and GNOME Shell versions are tested?
+
+Ubuntu 24.04 LTS with GNOME Shell 46 is the tested platform. Other Ubuntu
+versions, distributions, and GNOME Shell major versions are best-effort.
+
+### How do I list the available components?
+
+Run `bash install.sh --list-components`. It prints each component ID, label,
+and default selection without starting an installation.
+
+### How do I install only selected components?
+
+Pass comma-separated IDs from `--list-components`, for example
+`bash install.sh --select rm_vram,rm_process_popup`. A fresh install still
+installs the mandatory Resource Monitor core before applying the selected
+components.
+
+### What does `--reconfigure` do?
+
+It idempotently reapplies configuration for the selected component IDs without
+wiping the installed extension tree. For example,
+`bash install.sh --reconfigure rm_refresh_interval,rm_vram` re-applies those
+components' settings and patches.
 
 ## Extended Features
 
