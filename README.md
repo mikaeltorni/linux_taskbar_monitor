@@ -5,7 +5,7 @@ GNOME Shell 46. It patches the GNOME Shell **Resource Monitor** extension to
 show CPU and RAM usage, `/home` free space and disk activity, ethernet
 throughput, and GPU/VRAM in a compact GNOME panel strip.
 
-<img width="805" height="50" alt="image" src="https://github.com/user-attachments/assets/980a757e-333b-420c-9379-ab38b7c7d082" />
+<img width="805" height="50" alt="GNOME top panel displaying compact Resource Monitor system metrics" src="https://github.com/user-attachments/assets/980a757e-333b-420c-9379-ab38b7c7d082" />
 
 ## Contents
 
@@ -38,8 +38,7 @@ first, and expect patch or schema mismatches if upstream Resource Monitor or
 Shell APIs differ.
 
 This repository is **fully standalone**: `bash install.sh` is enough. Soft
-loading of
-[`linux_installation_scripts_functions`](https://github.com/mikaeltorni/linux_installation_scripts_functions)
+loading of the optional `linux_installation_scripts_functions` helper framework
 from a local checkout powers the interactive component menu and config export.
 Without that checkout, the installer uses a built-in fallback that still
 supports `--default` / `--all` / `--select` / `--list-components` / `--detect` /
