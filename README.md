@@ -1,5 +1,9 @@
 # Linux Taskbar Monitor: GNOME System Status for Ubuntu
 
+[![Last commit](https://img.shields.io/github/last-commit/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/commits/master)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/graphs/commit-activity)
+[![Issues](https://img.shields.io/github/issues/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/issues)
+
 Linux Taskbar Monitor is a standalone Ubuntu 24.04 taskbar system monitor for
 GNOME Shell 46. It patches the GNOME Shell **Resource Monitor** extension to
 show CPU and RAM usage, `/home` free space and disk activity, ethernet
