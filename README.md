@@ -84,6 +84,8 @@ sudo bash install.sh            # also apt-installs missing packages (e.g. cargo
 
 The installer builds `dist/rm-monitor` on demand (local cargo, apt `cargo`, or
 container), downloads Resource Monitor, applies patches, and writes GSettings.
+Without the shared component framework, its standalone path still applies all
+default-on components. A sudo install stages patches for the desktop user.
 The tracked Rust dependencies support the Ubuntu 24.04 `cargo`/`rustc` 1.75
 packages; builds use `Cargo.lock` without changing dependency versions.
 Core install requires a running `gnome-shell` whose version can be parsed: that

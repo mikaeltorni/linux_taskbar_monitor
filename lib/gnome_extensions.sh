@@ -393,7 +393,9 @@ install_resource_monitor_core() {
   local ext_id="$RESOURCE_MONITOR_EXTENSION_ID"
   local ext_dir="$TARGET_HOME/.local/share/gnome-shell/extensions/$ext_id"
   local tmpdir zip_file staging gpu_devices
-  tmpdir="$(mktemp -d)"
+  # The patch helper runs as the desktop user even when the installer has sudo.
+  # Give that user traversal rights to the private staging directory.
+  tmpdir="$(run_as_target mktemp -d)"
   zip_file="$tmpdir/resource-monitor.zip"
   staging="$tmpdir/staging"
   # Drop the staging tree on any early return so a failed patch cannot linger.
