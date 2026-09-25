@@ -48,6 +48,7 @@ _sc_default_ids() {
     IFS='|' read -r id label def _ <<<"$entry"
     [[ "$def" == "on" ]] && printf '%s\n' "$id"
   done
+  return 0
 }
 
 # _sc_is_installed ID — Prefer detect_fn; else receipt under XDG state.

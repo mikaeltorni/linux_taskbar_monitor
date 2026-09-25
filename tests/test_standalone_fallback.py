@@ -154,3 +154,26 @@ def test_fallback_preflight_aborts_not_continues():
     assert "ERROR: preflight" in fallback
     assert "reported a problem (continuing)" not in fallback
     assert "refusing to clear receipt" in fallback
+
+
+def test_default_components_run_with_errexit_and_last_component_off():
+    """A trailing default-off row must not abort selection under installer flags."""
+    script = f'''set -euo pipefail
+msg() {{ :; }}
+ISC_REPO_NAME=fixture
+ISC_COMPONENTS=(
+  'first|First|on|install_first'
+  'second|Second|on|install_second'
+  'optional|Optional|off|install_optional'
+)
+install_first() {{ printf 'first\\n'; }}
+install_second() {{ printf 'second\\n'; }}
+install_optional() {{ printf 'optional\\n'; }}
+source "{ROOT / 'lib' / 'standalone_component_fallback.sh'}"
+component_main --default
+'''
+    completed = subprocess.run(
+        ["bash", "-c", script], text=True, capture_output=True, check=False
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.splitlines() == ["first", "second"]
