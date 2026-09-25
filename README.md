@@ -5,6 +5,8 @@ GNOME Shell 46. It patches the GNOME Shell **Resource Monitor** extension to
 show CPU and RAM usage, `/home` free space and disk activity, ethernet
 throughput, and GPU/VRAM in a compact GNOME panel strip.
 
+<img width="805" height="50" alt="image" src="https://github.com/user-attachments/assets/980a757e-333b-420c-9379-ab38b7c7d082" />
+
 ## Contents
 
 - [Supported platforms](#supported-platforms)
