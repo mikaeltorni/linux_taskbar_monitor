@@ -27,6 +27,7 @@ set -euo pipefail
 TARGET_USER="${SUDO_USER:-$USER}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export ISC_FUNCTIONS_DIR="${ISC_FUNCTIONS_DIR:-$SCRIPT_DIR/.installer-support}"
 RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")"
 DISPLAY_VAL="${DISPLAY:-:0}"
 USER_BUS="unix:path=${RUNTIME_DIR}/bus"
