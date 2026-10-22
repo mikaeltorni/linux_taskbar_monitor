@@ -1,3 +1,5 @@
+> Part of [mt_stack](https://github.com/mikaeltorni/mt_stack), a Linux setup stack of independently installable projects.
+
 # Linux Taskbar Monitor: GNOME System Status for Ubuntu
 
 [![Last commit](https://img.shields.io/github/last-commit/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/commits/master)
