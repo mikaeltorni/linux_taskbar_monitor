@@ -412,3 +412,24 @@ tested Ubuntu 24.04 LTS / GNOME Shell 46 combination above.
 
 This notice is intended to clarify the nature of the project and does not
 impose additional restrictions beyond the MIT License.
+
+## Independent public setup entrypoint
+
+This project's root `install.sh` is also used by the public `mt_stack` hub from
+a separate checkout. The installer carries its required MIT menu/runtime support
+in `.installer-support/`, so a standalone install needs no private framework
+repository, private credentials, populated framework cache or hub checkout.
+Keep that directory with the source when installing from an archive.
+
+```bash
+bash install.sh --list-components
+bash install.sh --export-selection
+bash install.sh
+```
+
+The existing component interface and options documented above remain available;
+`ISC_FUNCTIONS_DIR` is an explicit support override. Run
+`python3 tests/check_standalone_public.py` to check discovery and selection JSON
+with downloads blocked. Runtime extension source is unchanged by this installer
+support migration. These owner fixes are committed locally and must be explicitly
+published before a fresh public clone can use them.
