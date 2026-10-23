@@ -297,6 +297,19 @@ _validate_select_ids() {
   done
 }
 
+# Parse the complete single-action operand shape before any core work. The
+# component runtime receives these unchanged arguments after this boundary.
+case "${1:-}" in
+  --select|--reconfigure|--uninstall|--configure-component) expected_arguments=2 ;;
+  "") expected_arguments=0 ;;
+  *) expected_arguments=1 ;;
+esac
+if (( $# != expected_arguments )); then
+  msg "ERROR: invalid argument count; use one action with its documented operands (--help)." >&2
+  exit 1
+fi
+unset expected_arguments
+
 case "${1:-}" in
   --list-components|--list-configurable-components|--list-select-configure-components|--list-component-config-values|--configure-component|--configure-component=*|--export-selection|--detect|--help|-h|--uninstall|--uninstall=*|--reconfigure|--reconfigure=*)
     component_main "$@"
