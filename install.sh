@@ -246,14 +246,14 @@ if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ]; then
 fi
 source "$SCRIPT_DIR/installer/components.sh"
 
-# Build prerequisites and install the core after accepting an interactive selection.
+# Build prerequisites and install an absent core after accepting a selection.
 # Parameters: none.
-# Returns: the prerequisite or core installation status.
+# Returns: the prerequisite or core installation status; existing core files are preserved.
 install_selected_monitor() {
   printf 'parameters=none\n' >&2
   local status=0
   ensure_rm_monitor_tools || status=$?
-  if [[ "$status" == 0 ]]; then
+  if [[ "$status" == 0 && ! -f "$TARGET_HOME/.local/share/gnome-shell/extensions/$RESOURCE_MONITOR_EXTENSION_ID/metadata.json" ]]; then
     install_resource_monitor_core || status=$?
   fi
   printf '%s\n' "$status" >&2
