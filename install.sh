@@ -27,7 +27,7 @@ set -euo pipefail
 TARGET_USER="${SUDO_USER:-$USER}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export ISC_FUNCTIONS_DIR="${ISC_FUNCTIONS_DIR:-$SCRIPT_DIR/.installer-support}"
+export ISC_FUNCTIONS_DIR="${ISC_FUNCTIONS_DIR:-}"
 RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")"
 DISPLAY_VAL="${DISPLAY:-:0}"
 USER_BUS="unix:path=${RUNTIME_DIR}/bus"
@@ -191,8 +191,8 @@ source "$SCRIPT_DIR/lib/lifecycle.sh"
 # ── Component selection runtime and manifest ─────────────────────────────────
 # The manifest maps each component id to a configure_*/install_* function from
 # the lib files sourced above.
-# Prefer the shared linux_installation_scripts_functions framework from a local
-# checkout. An explicit ISC_FUNCTIONS_REF opts into an on-demand download when
+# Prefer the bundled public support, then any local framework checkout.
+# An explicit ISC_FUNCTIONS_REF opts into an on-demand download when
 # no checkout is found. Otherwise load the built-in fallback so this repository
 # remains a working standalone installer for core +
 # list/detect/default/select/uninstall/reconfigure.
@@ -203,6 +203,7 @@ if [ -n "${ISC_FUNCTIONS_DIR:-}" ]; then
   __isc_search_paths=("$ISC_FUNCTIONS_DIR")
 else
   __isc_search_paths=(
+    "$SCRIPT_DIR/.installer-support"
     "$SCRIPT_DIR/../linux_installation_scripts_functions"
     "$HOME/projects/linux_installation_scripts_functions"
   )
