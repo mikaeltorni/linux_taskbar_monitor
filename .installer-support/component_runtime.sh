@@ -787,18 +787,16 @@ isc_route_readonly_args() {
   return 1
 }
 
-# Main entry point for a component-based installer.
-#
-# Arguments:
-#   $@ - command-line arguments (see usage).
-#
-# Returns:
-#   The exit status of the selected operation.
+# Route component queries, selection and the interactive menu.
+# Parameters: $@ - raw installer action and component arguments.
+# Returns: zero for success or cancellation, nonzero for invalid input or a failed action.
 component_main() {
+  printf 'arguments=%s\n' "$*" >&2
+  local component_status
   if [[ -z "${ISC_COMPONENTS:-}" ]]; then
     isc_log_error "ISC_COMPONENTS manifest is not defined"
     msg "ERROR: ISC_COMPONENTS manifest is not defined."
-    return 2
+    printf '2\n' >&2; return 2
   fi
 
   isc_log_info "component_main invoked for '${ISC_REPO_NAME:-installer}' with args: $*"
@@ -810,13 +808,13 @@ component_main() {
       continue
     fi
     case "$1" in
-      --list-components) _isc_list_components; return 0 ;;
-      --list-configurable-components) _isc_list_configurable_components; return 0 ;;
-      --list-select-configure-components) _isc_list_select_configure_components; return 0 ;;
-      --list-component-config-values) _isc_list_component_config_values; return 0 ;;
-      --configure-component) _isc_configure_component "${2:-}"; return $? ;;
-      --configure-component=*) _isc_configure_component "${1#*=}"; return $? ;;
-      --detect)          _isc_detect_all; return 0 ;;
+      --list-components) _isc_list_components; printf '0\n' >&2; return 0 ;;
+      --list-configurable-components) _isc_list_configurable_components; printf '0\n' >&2; return 0 ;;
+      --list-select-configure-components) _isc_list_select_configure_components; printf '0\n' >&2; return 0 ;;
+      --list-component-config-values) _isc_list_component_config_values; printf '0\n' >&2; return 0 ;;
+      --configure-component) _isc_configure_component "${2:-}"; component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
+      --configure-component=*) _isc_configure_component "${1#*=}"; component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
+      --detect)          _isc_detect_all; printf '0\n' >&2; return 0 ;;
       --export-selection)
         local bootstrap_mode="manifest"
         [[ "${ISC_CONFIG_EXPLICIT:-0}" == "1" ]] && bootstrap_mode="config_export"
@@ -825,7 +823,7 @@ component_main() {
           isc_bootstrap_selection "$bootstrap_mode"
           isc_config_export_json "standalone" "${ISC_REPO_NAME:-repo}" "/dev/stdout"
         fi
-        return 0
+        printf '0\n' >&2; return 0
         ;;
       --config)
         ISC_CONFIG_NAME="${2:-default.json}"
@@ -847,7 +845,7 @@ component_main() {
       --uninstall)       mode="uninstall"; select_ids="${2:-}"; shift ;;
       --uninstall=*)     mode="uninstall"; select_ids="${1#*=}" ;;
       --auth)            INSTALLER_AUTH=1; export INSTALLER_AUTH ;;
-      --help|-h)         _isc_usage; return 0 ;;
+      --help|-h)         _isc_usage; printf '0\n' >&2; return 0 ;;
       -*)
         # An unrecognized option is fatal: silently ignoring it would drop the
         # user's intent (e.g. a mistyped '--slect kitty') and fall through to
@@ -856,7 +854,7 @@ component_main() {
         isc_log_error "unknown option: $1"
         msg "ERROR: unknown option: $1"
         _isc_usage
-        return 2
+        printf '2\n' >&2; return 2
         ;;
       *)                 isc_log_warn "ignoring unknown argument: $1"
                          msg "WARN: ignoring unknown argument: $1" ;;
@@ -866,10 +864,10 @@ component_main() {
   isc_log_debug "resolved mode='${mode:-interactive}' select_ids='${select_ids}'"
 
   case "$mode" in
-    default)   _isc_run_selected "$(_isc_default_ids)"; return $? ;;
-    all)       _isc_run_selected "$(_isc_all_ids)";     return $? ;;
-    select)    _isc_run_selected "$select_ids" strict;  return $? ;;
-    uninstall) _isc_uninstall_selected "$select_ids";   return $? ;;
+    default)   _isc_run_selected "$(_isc_default_ids)"; component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
+    all)       _isc_run_selected "$(_isc_all_ids)";     component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
+    select)    _isc_run_selected "$select_ids" strict;  component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
+    uninstall) _isc_uninstall_selected "$select_ids";   component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status" ;;
     "")
       # No mode requested. Use the interactive submenu on a real terminal,
       # otherwise apply the active installation config (default.json when unset).
@@ -894,11 +892,12 @@ component_main() {
             fi
           }
           CM_CONFIGURE_CALLBACK=_isc_menu_configure_callback
-          cm_single_submenu "$repo"; rc=$?
+          rc=0
+          cm_single_submenu "$repo" || rc=$?
           if (( rc != 0 )); then
             isc_log_info "selection cancelled — nothing changed"
             msg "Selection cancelled — nothing changed."
-            return 0
+            printf '0\n' >&2; return 0
           fi
         fi
         if _isc_load_config_module; then
@@ -926,8 +925,8 @@ component_main() {
           # than a repo that was never installed at all.
           _isc_run_selected "" || apply_rc=$?
         fi
-        (( apply_rc != 0 || uninstall_rc != 0 )) && return 1
-        return 0
+        (( apply_rc != 0 || uninstall_rc != 0 )) && { printf '1\n' >&2; return 1; }
+        printf '0\n' >&2; return 0
       else
         isc_log_info "no TTY — applying installation config selection"
         local repo="${ISC_REPO_NAME:-repo}" id apply_ids="" uninstall_ids=""
@@ -939,18 +938,19 @@ component_main() {
           fi
         done
         if [[ -n "${uninstall_ids// /}" ]]; then
-          _isc_uninstall_selected "${uninstall_ids% }" || return $?
+          _isc_uninstall_selected "${uninstall_ids% }" || { component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status"; }
         fi
         if [[ -n "${apply_ids// /}" ]]; then
-          _isc_run_selected "${apply_ids% }"; return $?
+          _isc_run_selected "${apply_ids% }"; component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status"
         fi
         if [[ -n "${uninstall_ids// /}" ]]; then
           msg "[$ISC_REPO_NAME] No components selected — nothing to do."
-          return 0
+          printf '0\n' >&2; return 0
         fi
         # Blank config selection: still install the core (see the TTY branch).
-        _isc_run_selected ""; return $?
+        _isc_run_selected ""; component_status=$?; printf '%s\n' "$component_status" >&2; return "$component_status"
       fi
       ;;
   esac
+  printf '0\n' >&2
 }

@@ -246,6 +246,20 @@ if [ "$ISC_FRAMEWORK_ACTIVE" -eq 0 ]; then
 fi
 source "$SCRIPT_DIR/installer/components.sh"
 
+# Build prerequisites and install the core after accepting an interactive selection.
+# Parameters: none.
+# Returns: the prerequisite or core installation status.
+install_selected_monitor() {
+  printf 'parameters=none\n' >&2
+  local status=0
+  ensure_rm_monitor_tools || status=$?
+  if [[ "$status" == 0 ]]; then
+    install_resource_monitor_core || status=$?
+  fi
+  printf '%s\n' "$status" >&2
+  return "$status"
+}
+
 # ── Main installer logic ─────────────────────────────────────────────────────
 # Readonly / uninstall / reconfigure must not wipe the installed extension.
 # Listing/help print only their own output (the master installer parses
@@ -310,6 +324,14 @@ case "${1:-}" in
     exit 1
     ;;
 esac
+
+# On a real terminal the bundled menu must decide before any core deployment.
+# Explicit batch modes retain the existing standalone fallback path below.
+if [[ $# == 0 && -t 0 && -t 1 && "$ISC_FRAMEWORK_ACTIVE" == 1 ]]; then
+  ISC_CORE=install_selected_monitor
+  component_main "$@"
+  exit $?
+fi
 
 msg "=== Linux Taskbar Monitor & GNOME Extensions Setup ==="
 # Build the Rust helper CLI before any patch/config step. Listing/detect modes
