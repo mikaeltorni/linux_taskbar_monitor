@@ -435,3 +435,21 @@ The existing component interface and options documented above remain available;
 with downloads blocked. Runtime extension source is unchanged by this installer
 support migration. These owner fixes are committed locally and must be explicitly
 published before a fresh public clone can use them.
+
+## Ubuntu VM installer verification
+
+VM verification on Ubuntu 24.04.5 / GNOME 46 X11 covered repeated standalone
+and hub installation, live CPU/RAM/disk metrics and the process popup. Cancelling
+the component menu leaves the installation unchanged. Accepting an unchanged
+menu preserves existing optional patches; selecting a component reapplies it.
+Fresh interactive installation creates the core after menu acceptance. Explicit
+batch installation retains its documented core replacement behavior.
+Selection export preserves earlier redirected output.
+
+```bash
+bash scripts/check.sh
+python3 tests/check_export_stream.py
+python3 tests/check_menu_cancel.py
+# In a disposable VM after installing the default monitor components:
+MT_STACK_VM_TEST=1 python3 tests/check_vm_menu_preserves.py
+```
