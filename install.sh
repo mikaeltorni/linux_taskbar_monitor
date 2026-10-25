@@ -297,6 +297,14 @@ _validate_select_ids() {
   done
 }
 
+# The bundled or explicitly selected framework owns complete argument parsing.
+# Its core hook runs only after an accepted installation selection.
+if [[ "$ISC_FRAMEWORK_ACTIVE" == 1 ]]; then
+  ISC_CORE=install_selected_monitor
+  component_main "$@"
+  exit $?
+fi
+
 # Parse the complete single-action operand shape before any core work. The
 # component runtime receives these unchanged arguments after this boundary.
 case "${1:-}" in
@@ -306,7 +314,7 @@ case "${1:-}" in
 esac
 if (( $# != expected_arguments )); then
   msg "ERROR: invalid argument count; use one action with its documented operands (--help)." >&2
-  exit 1
+  exit 2
 fi
 unset expected_arguments
 
