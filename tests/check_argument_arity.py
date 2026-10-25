@@ -31,8 +31,8 @@ with tempfile.TemporaryDirectory() as directory:
     for arguments in invalid:
         result = subprocess.run(['bash', str(root/'install.sh'), *arguments], env=env,
                                 text=True, capture_output=True, timeout=15)
-        assert result.returncode != 0, (arguments, result.stdout, result.stderr)
+        assert result.returncode == 2, (arguments, result.stdout, result.stderr)
         assert not effects.exists(), (arguments, effects.read_text(), result.stdout, result.stderr)
-        assert 'argument count' in result.stdout+result.stderr, (arguments, result.stdout, result.stderr)
+        assert 'ERROR:' in result.stdout+result.stderr, (arguments, result.stdout, result.stderr)
         assert not (home/'.local/share/gnome-shell/extensions').exists(), arguments
 print('PASS: malformed monitor action operands fail before helper, network or desktop effects')
