@@ -1,17 +1,28 @@
-> Part of [mt_stack](https://github.com/mikaeltorni/mt_stack), a Linux setup stack of independently installable projects.
-
-# Linux Taskbar Monitor: GNOME System Status for Ubuntu
+# Linux Taskbar Monitor — Ubuntu GNOME System Monitor
 
 [![Last commit](https://img.shields.io/github/last-commit/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/commits/master)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/graphs/commit-activity)
 [![Issues](https://img.shields.io/github/issues/mikaeltorni/linux_taskbar_monitor)](https://github.com/mikaeltorni/linux_taskbar_monitor/issues)
 
-Linux Taskbar Monitor is a standalone Ubuntu 24.04 taskbar system monitor for
-GNOME Shell 46. It patches the GNOME Shell **Resource Monitor** extension to
-show CPU and RAM usage, `/home` free space and disk activity, ethernet
-throughput, and GPU/VRAM in a compact GNOME panel strip.
+Linux Taskbar Monitor is an Ubuntu GNOME system monitor installer that adds CPU, memory, disk, network, and GPU metrics to the GNOME panel.
+
+The installer patches **Resource Monitor** for Ubuntu 24.04 and GNOME Shell 46.
+Its compact panel shows CPU and RAM usage, `/home` free space and disk activity,
+Ethernet throughput, and GPU/VRAM.
 
 <img width="805" height="50" alt="GNOME top panel displaying compact Resource Monitor system metrics" src="https://github.com/user-attachments/assets/980a757e-333b-420c-9379-ab38b7c7d082" />
+
+## Ubuntu GNOME system monitor quickstart
+
+List the installer's configurable components from the checkout:
+
+```bash
+bash install.sh --list-components
+```
+
+The list includes refresh interval, VRAM, per-disk metrics, panel spacing,
+and the process popup. See [Installation](#installation) to apply the patches
+in a GNOME desktop session.
 
 ## Contents
 
@@ -71,6 +82,9 @@ Resource Monitor is developed by [0ry0n](https://github.com/0ry0n/Resource_Monit
 under GPL-3.0. The installer downloads and patches that extension; the
 installed extension remains subject to its upstream license. This repository's
 MIT license covers the files distributed here.
+
+[Linux Taskbar Window Count](https://github.com/mikaeltorni/linux_taskbar_window_count)
+adds per-app window badges to the dock and can run alongside these panel metrics.
 
 ## Technology Stack
 
